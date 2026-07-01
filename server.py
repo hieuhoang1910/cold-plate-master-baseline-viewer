@@ -63,6 +63,33 @@ from cold_plate_v6.system_resistance import junction_to_coolant      # noqa: E40
 # Vendored data snapshot (synced from the master baseline; parity test guards it).
 PARAMS_JSON = DATA / "master_design_parameters.json"
 RESULTS_JSON = DATA / "master_baseline_results.json"
+CASES_JSON = DATA / "baseline_cases.json"
+
+# v6 die-coverage footprint — the design the app actually targets.
+# Physical envelope is 28 mm wide x 35 mm long. In the solver axes the fins run
+# parallel to the 28 mm side (short water path), so core_width = 35 mm is the
+# transverse axis that sets fin count and core_length = 28 mm is the flow path.
+# Source: 02_Code/cold_plate_v6/master_constants.py section 13 + sensitivity.py.
+# (The master-baseline record stays at 28x31 for traceability + the parity test;
+# the app applies die-coverage on top.)
+DIE_COVERAGE_STACK = {
+    "die_width_mm": 24.0,
+    "die_length_mm": 31.0,
+    "core_width_mm": 35.0,   # transverse (fin count) = physical 35 mm length
+    "core_length_mm": 28.0,  # flow path = physical 28 mm width
+    "core_height_mm": 5.5,
+    "base_thickness_mm": 0.7,
+    "k_solid_W_mK": 340.0,
+    "tim_areal_Kcm2_W": 0.05,
+}
+DIE_COVERAGE_ARCH = {
+    "name": "center_feed_bidirectional",
+    "n_parallel_paths": 2,
+    "path_length_mm": 14.0,   # core_length / 2 = 28 / 2
+    "header_K_total": 1.5,
+    "flow_uniformity": 1.0,
+}
+PHYSICAL_FOOTPRINT = {"width_mm": 28.0, "length_mm": 35.0}
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -110,15 +137,26 @@ def _linspace(lo: float, hi: float, n: int):
 # Business logic (pure functions — tested directly by test_api_parity.py)
 # ---------------------------------------------------------------------------
 def catalog_payload() -> dict:
-    """Master parameter registry + candidates + geometry inputs + gate limits.
+    """Parameter registry + candidates + geometry inputs + gate limits.
 
-    `cases` and `basis` carry the *input* geometry (the results JSON has only
-    outputs) so the 3D viewer can reconstruct each design's implicit body.
+    Candidates are (re)computed at the v6 die-coverage footprint so the whole app
+    is consistent with the design it targets. `cases` and `basis` carry the input
+    geometry (the results JSON has only outputs) so the 3D viewer can reconstruct
+    each design's implicit body.
     """
     params = json.loads(PARAMS_JSON.read_text(encoding="utf-8"))
-    candidates = json.loads(RESULTS_JSON.read_text(encoding="utf-8"))
-    cases_cfg = json.loads((DATA / "baseline_cases.json").read_text(encoding="utf-8"))
-    op = mbc.OperatingPoint()
+    cases_cfg = json.loads(CASES_JSON.read_text(encoding="utf-8"))
+    cases = cases_cfg.get("cases", [])
+
+    stack = mbc.StackBasis(**_filtered(DIE_COVERAGE_STACK, _STACK_FIELDS))
+    arch = mbc.FlowArchitecture(**_filtered(DIE_COVERAGE_ARCH, _ARCH_FIELDS))
+    op = mbc.OperatingPoint(**_filtered(cases_cfg.get("operating"), _OP_FIELDS))
+
+    candidates = []
+    for c in cases:
+        case = mbc.GeometryCase(**_filtered(c, _CASE_FIELDS))
+        candidates.append(_sanitize(asdict(mbc.evaluate_case(case, stack, op, arch))))
+
     gates = {
         "limit_R_jc_K_W": op.limit_R_jc_K_W,
         "limit_deltaP_Pa": op.limit_deltaP_Pa,
@@ -127,12 +165,13 @@ def catalog_payload() -> dict:
     return {
         "design_parameters": params,
         "candidates": candidates,
-        "cases": cases_cfg.get("cases", []),
+        "cases": cases,
         "basis": {
-            "stack": cases_cfg.get("stack", {}),
+            "stack": DIE_COVERAGE_STACK,
             "operating": cases_cfg.get("operating", {}),
-            "architecture": cases_cfg.get("architecture", {}),
+            "architecture": DIE_COVERAGE_ARCH,
         },
+        "physical_footprint": PHYSICAL_FOOTPRINT,
         "gates": gates,
     }
 

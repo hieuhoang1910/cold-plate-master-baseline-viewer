@@ -335,7 +335,7 @@ export function SdfViewer({
       <div className="vo-info">
         <span className="vo-title">{designId}</span>
         <span className="vo-dims">
-          {family} · {g.coreWidth}×{g.coreLength}×{fmt(zMax, 1)} mm ·{' '}
+          {family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) ·{' '}
           {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm
           {g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}
         </span>
