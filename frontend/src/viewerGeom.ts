@@ -19,6 +19,9 @@ export interface ViewerGeom {
   unitCell: number
   wallThickness: number
   voidFraction: number
+  tpmsType: string
+  layout: string
+  grading: number
 }
 
 export const FIN_FAMILIES = ['wavy_fin', 'straight_fin']
@@ -56,5 +59,8 @@ export function geomFromCase(c: DesignCase, basis: Basis): ViewerGeom | null {
     unitCell: c.unit_cell_mm ?? 2.5,
     wallThickness: c.wall_thickness_mm ?? 0.12,
     voidFraction: c.void_fraction ?? 0.55,
+    tpmsType: c.tpms_type ?? 'gyroid',
+    layout: c.tpms_layout ?? 'rectangular',
+    grading: c.cell_grading ?? 0,
   }
 }

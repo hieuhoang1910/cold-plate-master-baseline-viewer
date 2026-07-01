@@ -1,5 +1,5 @@
 import { fmt, pct } from '../format'
-import { ROUTES, derived, familyPatch, isGyroid, routeFloor } from '../design'
+import { ROUTES, TPMS_LAYOUTS, TPMS_TYPES, derived, familyPatch, isGyroid, routeFloor } from '../design'
 import type { Basis, DesignState } from '../types'
 
 function Slider({
@@ -76,6 +76,22 @@ export function DesignControls({
 
       {gyroid ? (
         <>
+          <div className="ds-selects">
+            <label>
+              TPMS type
+              <select value={design.tpms_type} onChange={(e) => onPatch({ tpms_type: e.target.value })}>
+                {TPMS_TYPES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+              </select>
+            </label>
+            <label>
+              Layout
+              <select value={design.tpms_layout} onChange={(e) => onPatch({ tpms_layout: e.target.value })}>
+                {TPMS_LAYOUTS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <Slider label="Cell grading (jet-adaptive)" unit="" min={0} max={1.0} step={0.05} digits={2}
+            value={design.cell_grading} onChange={(v) => onPatch({ cell_grading: v })} />
           <Slider label="Unit cell" unit="mm" min={1.0} max={4.0} step={0.1} digits={2}
             value={design.unit_cell_mm} onChange={(v) => onPatch({ unit_cell_mm: v })} />
           <Slider label="Wall thickness" unit="mm" min={fl.t} max={0.3} step={0.01} digits={2}
@@ -89,8 +105,9 @@ export function DesignControls({
           <Slider label="Flow rate" unit="L/min" min={1.0} max={4.0} step={0.05} digits={2}
             value={design.flow_lpm} onChange={(v) => onPatch({ flow_lpm: v })} />
           <div className="ds-note muted">
-            Screening: cell / wall drive the 3-D view; R_jc comes from void, SA/V &amp; D_h
-            (nTop-measured + CFD placeholders until validated).
+            <b>Geometry screening.</b> TPMS type, layout &amp; grading drive the 3-D view only —
+            there is no per-type analytical model yet. R_jc shown is the generic-surface placeholder
+            from void, SA/V &amp; D_h (needs nTop-measured area + CFD to validate).
           </div>
         </>
       ) : (

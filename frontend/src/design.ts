@@ -43,9 +43,23 @@ export function initDesign(c: DesignCase, basis: Basis): DesignState {
     hydraulic_diameter_mm: c.hydraulic_diameter_mm ?? 0.25,
     heat_transfer_multiplier: 0.85,
     pressure_loss_multiplier: 2.0,
+    tpms_type: c.tpms_type ?? 'gyroid',
+    tpms_layout: c.tpms_layout ?? 'rectangular',
+    cell_grading: c.cell_grading ?? 0,
     flow_lpm: Number(basis.operating.flow_lpm ?? 2.65),
   }
 }
+
+export const TPMS_TYPES = [
+  { key: 'gyroid', label: 'Gyroid' },
+  { key: 'diamond', label: 'Diamond (Schwarz D)' },
+  { key: 'schwarz_p', label: 'Schwarz P' },
+  { key: 'lidinoid', label: 'Lidinoid' },
+]
+export const TPMS_LAYOUTS = [
+  { key: 'rectangular', label: 'Rectangular' },
+  { key: 'cylinder', label: 'Circular (cylinder)' },
+]
 
 /** Patch applied when the family dropdown changes (keeps other fields intact). */
 export function familyPatch(newFamily: string, design: DesignState): Partial<DesignState> {

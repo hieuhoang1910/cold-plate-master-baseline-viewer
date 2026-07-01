@@ -24,6 +24,9 @@ uniform mat4 uInvViewProj;
 uniform float uW, uL, uH, uBase, uT, uGap, uMargin, uAmp, uLambda, uRib, uHasRib;
 uniform float uFamily;   // 0 = fin field, 1 = gyroid/TPMS
 uniform float uUnitCell, uWall;
+uniform float uTpms;     // 0 gyroid · 1 diamond · 2 schwarz-P · 3 lidinoid
+uniform float uLayout;   // 0 rectangular · 1 cylinder
+uniform float uGrade;    // radial cell grading (0 = uniform)
 uniform vec3 uCut;       // plane position per axis (mm)
 uniform vec3 uCutSign;   // +1 removes the +side, -1 removes the -side
 uniform vec3 uCutOn;     // 1 = plane enabled, 0 = off
@@ -33,6 +36,23 @@ const float PI = 3.14159265359;
 float sdBox(vec3 p, vec3 b) {
   vec3 q = abs(p) - b;
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float sdCylinder(vec3 p, float h, float r) {
+  vec2 d = vec2(length(p.xy) - r, abs(p.z) - h);
+  return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+
+// TPMS level-set fields (period set by k = 2*pi/cell)
+float tpmsField(vec3 p, float k, float ty) {
+  float x = k * p.x, y = k * p.y, z = k * p.z;
+  if (ty < 0.5) return cos(x) * sin(y) + cos(y) * sin(z) + cos(z) * sin(x);      // gyroid
+  if (ty < 1.5) return sin(x) * sin(y) * sin(z) + sin(x) * cos(y) * cos(z)
+                     + cos(x) * sin(y) * cos(z) + cos(x) * cos(y) * sin(z);       // Schwarz diamond
+  if (ty < 2.5) return cos(x) + cos(y) + cos(z);                                  // Schwarz P
+  return sin(2.0 * x) * cos(y) * sin(z) + sin(2.0 * y) * cos(z) * sin(x)          // lidinoid (approx)
+       + sin(2.0 * z) * cos(x) * sin(y)
+       - cos(2.0 * x) * cos(2.0 * y) - cos(2.0 * y) * cos(2.0 * z) - cos(2.0 * z) * cos(2.0 * x) + 0.3;
 }
 
 float mapScene(vec3 p) {
@@ -58,14 +78,20 @@ float mapScene(vec3 p) {
       core = min(core, rib);
     }
   } else {
-    // --- gyroid / TPMS shell ---
-    float c = max(uUnitCell, 0.3);
+    // --- TPMS lattice shell (geometry screening) ---
+    float R = 0.5 * min(uW, uL);
+    float rr = length(p.xy);
+    // radially graded cell — denser at the center (jet-adaptive) when uGrade > 0
+    float cLocal = uUnitCell * (1.0 + uGrade * clamp(rr / max(R, 1e-3), 0.0, 1.5));
+    float c = max(cLocal, 0.3);
     float k = 2.0 * PI / c;
-    float f = cos(k * p.x) * sin(k * p.y) + cos(k * p.y) * sin(k * p.z) + cos(k * p.z) * sin(k * p.x);
+    float f = tpmsField(p, k, uTpms);
     float iso = clamp(uWall * PI / c, 0.06, 1.2);
-    float shell = (abs(f) - iso) * (c / (2.0 * PI)) * 0.7;   // approx SDF of the level-set shell
-    float boxg = sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uL * 0.5, uH * 0.5));
-    core = max(shell, boxg);
+    float shell = (abs(f) - iso) * (c / (2.0 * PI)) * 0.5;   // approx SDF (0.5 = safety for grading/type)
+    float clip = (uLayout < 0.5)
+      ? sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uL * 0.5, uH * 0.5))
+      : sdCylinder(p - vec3(0.0, 0.0, zc), uH * 0.5, R);
+    core = max(shell, clip);
   }
 
   float solid = min(base, core);
@@ -127,6 +153,8 @@ void main() {
 }
 `
 
+const TPMS_IDX: Record<string, number> = { gyroid: 0, diamond: 1, schwarz_p: 2, lidinoid: 3 }
+
 interface Cut { on: boolean; pos: number; flip: boolean }
 interface Cuts { x: Cut; y: Cut; z: Cut }
 
@@ -151,6 +179,9 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
       uFamily: { value: g.family === 'gyroid_tpms' ? 1 : 0 },
       uUnitCell: { value: g.unitCell },
       uWall: { value: g.wallThickness },
+      uTpms: { value: TPMS_IDX[g.tpmsType] ?? 0 },
+      uLayout: { value: g.layout === 'cylinder' ? 1 : 0 },
+      uGrade: { value: g.grading },
       uCut: { value: new THREE.Vector3(cuts.x.pos, cuts.y.pos, cuts.z.pos) },
       uCutSign: { value: new THREE.Vector3(1, 1, 1) },
       uCutOn: { value: new THREE.Vector3(0, 0, 0) },
@@ -175,6 +206,9 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
     u.uFamily.value = g.family === 'gyroid_tpms' ? 1 : 0
     u.uUnitCell.value = g.unitCell
     u.uWall.value = g.wallThickness
+    u.uTpms.value = TPMS_IDX[g.tpmsType] ?? 0
+    u.uLayout.value = g.layout === 'cylinder' ? 1 : 0
+    u.uGrade.value = g.grading
   }, [g])
 
   useEffect(() => {
@@ -364,7 +398,7 @@ export function SdfViewer({
         </div>
         <div className="vo-dims">
           {g.family === 'gyroid_tpms'
-            ? <>{family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · cell {fmt(g.unitCell, 2)} mm · wall {fmt(g.wallThickness, 2)} mm · void {fmt(g.voidFraction * 100, 0)}%</>
+            ? <>{g.tpmsType}{g.layout === 'cylinder' ? ' · circular' : ''}{g.grading > 0 ? ' · graded' : ''} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · cell {fmt(g.unitCell, 2)} mm · wall {fmt(g.wallThickness, 2)} mm · void {fmt(g.voidFraction * 100, 0)}% · geometry screening</>
             : <>{family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) · {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm{g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}</>}
         </div>
       </div>

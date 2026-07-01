@@ -52,6 +52,9 @@ export interface DesignCase {
   hydraulic_diameter_mm?: number
   unit_cell_mm?: number
   wall_thickness_mm?: number
+  tpms_type?: string
+  tpms_layout?: string
+  cell_grading?: number
   notes?: string
 }
 
@@ -122,6 +125,10 @@ export interface DesignState {
   hydraulic_diameter_mm: number
   heat_transfer_multiplier: number
   pressure_loss_multiplier: number
+  // TPMS geometry-screening variants (viewer-only; no analytical model yet)
+  tpms_type: string        // gyroid | diamond | schwarz_p | lidinoid
+  tpms_layout: string      // rectangular | cylinder
+  cell_grading: number     // 0 = uniform, >0 = radially graded (jet-adaptive)
   // operating
   flow_lpm: number
 }
