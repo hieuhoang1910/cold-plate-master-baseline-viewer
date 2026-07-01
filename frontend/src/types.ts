@@ -80,6 +80,28 @@ export interface Catalog {
   gates: Gates
 }
 
+// Optimizer sweep (Phase 5).
+export interface SweepPoint {
+  x: number
+  y: number
+  objective: number | null
+  R_jc_K_W: number | null
+  R_th_conv_K_W: number | null
+  DeltaP_Pa: number | null
+  pump_power_W: number | null
+  kpi_status: string
+  feasible: boolean
+}
+
+export interface SweepResult {
+  x_var: string
+  y_var: string
+  objective: string
+  grid: SweepPoint[]
+  pareto: SweepPoint[]
+  optimum: SweepPoint | null
+}
+
 // Editable live-design parameters (Phase 4 sliders).
 export interface DesignState {
   design_id: string        // source candidate the design was seeded from

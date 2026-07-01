@@ -298,6 +298,7 @@ def sweep_payload(payload: dict) -> dict:
                 "architecture": base.get("architecture"),
                 "relative_roughness": base.get("relative_roughness", 0.03),
             })
+            status = r.get("kpi_status") or ""
             grid.append({
                 "x": xv,
                 "y": yv,
@@ -306,7 +307,8 @@ def sweep_payload(payload: dict) -> dict:
                 "R_th_conv_K_W": r.get("R_th_conv_K_W"),
                 "DeltaP_Pa": r.get("DeltaP_Pa"),
                 "pump_power_W": r.get("pump_power_W"),
-                "kpi_status": r.get("kpi_status"),
+                "kpi_status": status,
+                "feasible": "FAIL" not in status,
             })
 
     # Pareto front (minimise R_jc and pump_power) over finite points.
@@ -323,7 +325,10 @@ def sweep_payload(payload: dict) -> dict:
             pareto.append(c)
     pareto.sort(key=lambda g: g["R_jc_K_W"])
 
-    optimum = min(pts, key=lambda g: g["R_jc_K_W"]) if pts else None
+    # Prefer the best *feasible* point (all gates pass); fall back to best overall.
+    feasible = [g for g in pts if g["feasible"]]
+    opt_pool = feasible or pts
+    optimum = min(opt_pool, key=lambda g: g["R_jc_K_W"]) if opt_pool else None
 
     return {
         "x_var": x_name,

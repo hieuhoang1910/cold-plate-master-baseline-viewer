@@ -1,4 +1,4 @@
-import type { BaselineResult, Catalog } from './types'
+import type { BaselineResult, Catalog, SweepResult } from './types'
 
 // The dev server proxies /api -> the Python API (see vite.config.ts), so a
 // relative base works in dev and in the eventual single-origin production build.
@@ -22,6 +22,14 @@ export const getCatalog = () => jf<Catalog>('/api/catalog')
 // Master engine — arbitrary design (used from Phase 4 sliders onward).
 export const evaluate = (payload: unknown) =>
   jf<BaselineResult>('/api/evaluate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+// 2-variable grid sweep for the optimizer (Phase 5).
+export const sweep = (payload: unknown) =>
+  jf<SweepResult>('/api/sweep', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

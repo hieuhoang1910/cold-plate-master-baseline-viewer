@@ -8,6 +8,7 @@ import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
 import { DesignControls } from './components/DesignControls'
+import { OptimizerPanel } from './components/OptimizerPanel'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
@@ -21,6 +22,7 @@ export default function App() {
   const [design, setDesign] = useState<DesignState | null>(null)
   const [live, setLive] = useState<BaselineResult | null>(null)
   const [evaluating, setEvaluating] = useState(false)
+  const [bottomTab, setBottomTab] = useState<'compare' | 'optimize'>('compare')
 
   useEffect(() => {
     getCatalog()
@@ -153,13 +155,16 @@ export default function App() {
             </div>
           </div>
 
-          {/* BOTTOM: comparison table */}
+          {/* BOTTOM: comparison table / optimizer */}
           <div className="bottom">
-            <CandidateTable
-              candidates={catalog.candidates}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
+            <div className="tabs">
+              <button className={bottomTab === 'compare' ? 'sel' : ''} onClick={() => setBottomTab('compare')}>Comparison</button>
+              <button className={bottomTab === 'optimize' ? 'sel' : ''} onClick={() => setBottomTab('optimize')}>Optimizer</button>
+            </div>
+            {bottomTab === 'compare'
+              ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
+              : <OptimizerPanel design={design} basis={catalog.basis} candidates={catalog.candidates}
+                  current={kpiResult} onLoadOptimum={patchDesign} />}
           </div>
         </>
       )}
