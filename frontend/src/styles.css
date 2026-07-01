@@ -363,6 +363,11 @@ th {
 .about-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); color: #cdd6e4; vertical-align: top; }
 .about-tbl td:first-child { font-family: var(--mono); color: var(--text); white-space: nowrap; }
 .about-foot { color: var(--faint); font-size: 12px; padding-top: 14px; }
+.ref-h { color: var(--text); font-weight: 600; font-size: 12px; margin: 12px 0 4px; }
+.refs { margin: 2px 0 6px; padding-left: 22px; }
+.refs li { color: #cdd6e4; font-size: 12px; line-height: 1.55; margin: 5px 0; }
+.doi { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 11px; }
+.doi:hover { text-decoration: underline; }
 .nomen .grp td {
   color: var(--accent); font-weight: 650; background: var(--surface-2);
   font-family: var(--font); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5px;

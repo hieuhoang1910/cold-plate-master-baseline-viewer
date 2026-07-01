@@ -2,6 +2,14 @@ function Eq({ children }: { children: React.ReactNode }) {
   return <div className="eq">{children}</div>
 }
 
+function Doi({ id }: { id: string }) {
+  return (
+    <a className="doi" href={`https://doi.org/${id}`} target="_blank" rel="noreferrer">
+      doi:{id}
+    </a>
+  )
+}
+
 export function About({ onClose }: { onClose: () => void }) {
   return (
     <div className="about-overlay" onClick={onClose}>
@@ -93,8 +101,10 @@ export function About({ onClose }: { onClose: () => void }) {
             <h3>Heat transfer &amp; fin efficiency</h3>
             <Eq>UA = h · A_wet · η_o · (flow uniformity) · (surface access)</Eq>
             <Eq>h = Nu · k_fluid / D_h &nbsp;·&nbsp; Nu = Shah-London (rect. duct)</Eq>
+            <p className="note">Nu and fRe from Shah &amp; London (1978) [11] / Shah (1975) [12].</p>
             <p>Thin, tall fins conduct heat poorly along their length, so not all their area is useful:</p>
             <Eq>m = √(2h / (k_solid · t)) &nbsp;·&nbsp; η_f = tanh(mH) / (mH) &nbsp;·&nbsp; η_o = 1 − (A_fin/A_wet)(1 − η_f)</Eq>
+            <p className="note">Extended-surface / fin-efficiency theory: Bergman, Incropera et al. (2017) [13].</p>
             <p>
               This is why <b>raw SA/V and effective SA/V differ</b>: effective = raw × η_o × uniformity × access. Push
               fins thinner/taller and raw SA/V keeps climbing, but η_f collapses, so <b>effective SA/V plateaus</b> —
@@ -106,7 +116,7 @@ export function About({ onClose }: { onClose: () => void }) {
             <h3>Wavy fins</h3>
             <p>The sinusoidal planform lengthens the channel and stirs the flow (Dean vortices):</p>
             <Eq>χ = 2π·A / λ &nbsp;·&nbsp; arc length factor = √(1 + χ²/2) &nbsp;·&nbsp; Nu ×= 1 + 0.40·χ^1.5·tanh(Re/300)</Eq>
-            <p>Per the v6 sweep, the wave (A/λ) is the strongest single R_th lever, then the gap b; t=b is a shallow optimum and fin height H is weak.</p>
+            <p>Per the v6 sweep, the wave (A/λ) is the strongest single R_th lever, then the gap b; t=b is a shallow optimum and fin height H is weak. Wavy-channel enhancement &amp; Dean vortices: Sui et al. (2010) [14]; AM wavy-fin cold plates: Zaki et al. (2026) [15].</p>
           </section>
 
           <section>
@@ -125,12 +135,14 @@ export function About({ onClose }: { onClose: () => void }) {
             <h3>Two engines, and how to trust them</h3>
             <ul>
               <li><b>Master engine</b> (family-neutral): compares wavy / straight / pin / gyroid on equal terms — used for the candidate list and sweeps.</li>
-              <li><b>v6 solver</b> (validated depth): the wavy-fin hero with jet impingement, center rib, thermal entry, NTU/effectiveness.</li>
+              <li><b>v6 solver</b> (validated depth): the wavy-fin hero with jet impingement, center rib, thermal entry, NTU/effectiveness. Jet-impingement basis: Zuckerman &amp; Lior (2006) [8], Martin (1977) [9].</li>
             </ul>
             <p className="note">
               These are <b>screening</b> results — a design direction, not frozen CAD. The gyroid row is flagged
-              SCREENING_ONLY (placeholder until nTop-measured area + CFD). No external performance claim until supplier
-              coupon, CFD/CHT on the manifold + center rib + local die temperature, and test close the loop.
+              SCREENING_ONLY (placeholder until nTop-measured area + CFD). TPMS AM heat-sink performance:
+              Chouhan et al. (2025) [1], Renon &amp; Jeanningros (2025) [2]; the viewer's level-set equations:
+              Gandy et al. (1999–2001) [5–7]. No external performance claim until supplier coupon, CFD/CHT on
+              the manifold + center rib + local die temperature, and test close the loop.
             </p>
           </section>
 
@@ -192,6 +204,49 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>A_die / A_funnel</td><td>Die footprint / conduction funnel area = min(die, cooled)</td><td>m²</td></tr>
               </tbody>
             </table>
+          </section>
+
+          <section>
+            <h3>References</h3>
+            <p className="note">
+              Compiled and DOI-checked via a multi-source research pass (verified against Crossref).
+              Recent 2025–26 entries may still receive final volume/page assignments.
+            </p>
+
+            <div className="ref-h">TPMS lattice heat sinks (metal additive manufacturing)</div>
+            <ol className="refs">
+              <li>Chouhan, G., Namdeo, A.K., Guner, A., Essa, K. &amp; Bidare, P. (2025). Heat transfer performance of compact TPMS lattice heat sinks via metal additive manufacturing. <i>Progress in Additive Manufacturing</i> 11(1), 593–610. <Doi id="10.1007/s40964-025-01366-0" /></li>
+              <li>Renon, C. &amp; Jeanningros, X. (2025). A numerical investigation of heat transfer and pressure-drop correlations in Gyroid and Diamond TPMS-based heat-exchanger channels. <i>Int. J. Heat and Mass Transfer</i> 239, 126599. <Doi id="10.1016/j.ijheatmasstransfer.2024.126599" /></li>
+              <li>Smet, V., Gallego-Bordallo, J., Meyers, S., Beevers, E., Blommaert, M. &amp; Van Hooreweder, B. (2025). Homogenized heat-transfer performance of gyroid heat exchangers by LPBF in pure copper, aluminium A205 and reaction-bonded SiC. <i>Applied Thermal Engineering</i> 279, 127655. <Doi id="10.1016/j.applthermaleng.2025.127655" /></li>
+              <li>Saghir, M.Z., Hajialibabaei, M. &amp; Al-Ketan, O. (2025). Optimization of the TPMS heat exchanger toward cooling the heat sink. <i>Processes</i> 13(6), 1786. <Doi id="10.3390/pr13061786" /></li>
+            </ol>
+
+            <div className="ref-h">TPMS mathematical definitions (the level-set equations used in the viewer)</div>
+            <ol className="refs" start={5}>
+              <li>Gandy, P.J.F., Bardhan, S., Mackay, A.L. &amp; Klinowski, J. (2001). Nodal surface approximations to the P, G, D and I-WP triply periodic minimal surfaces. <i>Chemical Physics Letters</i> 336, 187–195. <Doi id="10.1016/S0009-2614(00)01418-4" /></li>
+              <li>Gandy, P.J.F. &amp; Klinowski, J. (2000). Exact computation of the triply periodic G (Gyroid) minimal surface. <i>Chemical Physics Letters</i> 321, 363–371. <Doi id="10.1016/S0009-2614(00)00373-0" /></li>
+              <li>Gandy, P.J.F., Cvijović, D., Mackay, A.L. &amp; Klinowski, J. (1999). Exact computation of the triply periodic D (Diamond) minimal surface. <i>Chemical Physics Letters</i> 314, 543–551. <Doi id="10.1016/S0009-2614(99)01000-3" /></li>
+            </ol>
+
+            <div className="ref-h">Jet impingement</div>
+            <ol className="refs" start={8}>
+              <li>Zuckerman, N. &amp; Lior, N. (2006). Jet impingement heat transfer: physics, correlations, and numerical modeling. <i>Advances in Heat Transfer</i> 39, 565–631. <Doi id="10.1016/S0065-2717(06)39006-5" /></li>
+              <li>Martin, H. (1977). Heat and mass transfer between impinging gas jets and solid surfaces. <i>Advances in Heat Transfer</i> 13, 1–60. <Doi id="10.1016/S0065-2717(08)70221-1" /></li>
+              <li>Uddin, N., Kee, P.T.W. &amp; Weigand, B. (2024). Heat transfer by jet impingement: a review of correlations and high-fidelity simulations. <i>Applied Thermal Engineering</i> 257, 124258. <Doi id="10.1016/j.applthermaleng.2024.124258" /></li>
+            </ol>
+
+            <div className="ref-h">Duct convection &amp; extended-surface (fin) theory — the solver's correlations</div>
+            <ol className="refs" start={11}>
+              <li>Shah, R.K. &amp; London, A.L. (1978). <i>Laminar Flow Forced Convection in Ducts</i> (Supplement 1 to Advances in Heat Transfer). Academic Press. ISBN 978-0-12-020051-1. <span className="muted">Source of the Nu &amp; fRe rectangular-duct correlations.</span></li>
+              <li>Shah, R.K. (1975). Laminar flow friction and forced-convection heat transfer in ducts of arbitrary geometry. <i>Int. J. Heat and Mass Transfer</i> 18(7–8), 849–862. <Doi id="10.1016/0017-9310(75)90176-3" /></li>
+              <li>Bergman, T.L., Lavine, A.S., Incropera, F.P. &amp; DeWitt, D.P. (2017). <i>Fundamentals of Heat and Mass Transfer</i>, 8th ed. Wiley. ISBN 978-1-118-98917-3. <span className="muted">Fin efficiency (Ch. 3), internal-flow convection (Ch. 8).</span></li>
+            </ol>
+
+            <div className="ref-h">Wavy channels &amp; additively-manufactured cold plates</div>
+            <ol className="refs" start={14}>
+              <li>Sui, Y., Teo, C.J., Lee, P.S., Chew, Y.T. &amp; Shu, C. (2010). Fluid flow and heat transfer in wavy microchannels. <i>Int. J. Heat and Mass Transfer</i> 53(13–14), 2760–2772. <Doi id="10.1016/j.ijheatmasstransfer.2010.02.022" /></li>
+              <li>Zaki, O.M., Park, W.Y., Pinkus, I., King, W.P. &amp; Miljkovic, N. (2026). Metal additively-manufactured wavy-fin cold-plate architecture for improved thermal-hydraulic performance. <i>Int. J. Heat and Mass Transfer</i> 256, 128138. <Doi id="10.1016/j.ijheatmasstransfer.2025.128138" /></li>
+            </ol>
           </section>
 
           <p className="about-foot">
