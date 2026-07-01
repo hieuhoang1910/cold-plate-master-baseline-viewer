@@ -22,11 +22,14 @@ varying vec2 vUv;
 
 uniform mat4 uInvViewProj;
 uniform float uW, uL, uH, uBase, uT, uGap, uMargin, uAmp, uLambda, uRib, uHasRib;
-uniform float uFamily;   // 0 = fin field, 1 = gyroid/TPMS
+uniform float uFamily;   // 0 = fin field, 1 = TPMS/lattice
 uniform float uUnitCell, uWall;
-uniform float uTpms;     // 0 gyroid · 1 diamond · 2 schwarz-P · 3 lidinoid
+uniform float uTpms;     // 0 gyroid·1 diamond·2 schwarz-P·3 lidinoid·4 split-P·5 I-WP·6 neovius·7 fischer-koch
 uniform float uLayout;   // 0 rectangular · 1 cylinder
 uniform float uGrade;    // radial cell grading (0 = uniform)
+uniform float uSolid;    // 0 = shelled sheet, 1 = solid/network fill
+uniform float uIsPin;    // 1 = pin-fin array (ignore TPMS field)
+uniform float uPinD, uPinPitch, uPinStagger;
 uniform vec3 uCut;       // plane position per axis (mm)
 uniform vec3 uCutSign;   // +1 removes the +side, -1 removes the -side
 uniform vec3 uCutOn;     // 1 = plane enabled, 0 = off
@@ -43,16 +46,25 @@ float sdCylinder(vec3 p, float h, float r) {
   return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
 
-// TPMS level-set fields (period set by k = 2*pi/cell)
+// TPMS level-set fields (period set by k = 2*pi/cell). Nodal approximations
+// after Gandy et al. (1999-2001) and standard TPMS references.
 float tpmsField(vec3 p, float k, float ty) {
   float x = k * p.x, y = k * p.y, z = k * p.z;
+  float c2x = cos(2.0 * x), c2y = cos(2.0 * y), c2z = cos(2.0 * z);
   if (ty < 0.5) return cos(x) * sin(y) + cos(y) * sin(z) + cos(z) * sin(x);      // gyroid
   if (ty < 1.5) return sin(x) * sin(y) * sin(z) + sin(x) * cos(y) * cos(z)
                      + cos(x) * sin(y) * cos(z) + cos(x) * cos(y) * sin(z);       // Schwarz diamond
   if (ty < 2.5) return cos(x) + cos(y) + cos(z);                                  // Schwarz P
-  return sin(2.0 * x) * cos(y) * sin(z) + sin(2.0 * y) * cos(z) * sin(x)          // lidinoid (approx)
-       + sin(2.0 * z) * cos(x) * sin(y)
-       - cos(2.0 * x) * cos(2.0 * y) - cos(2.0 * y) * cos(2.0 * z) - cos(2.0 * z) * cos(2.0 * x) + 0.3;
+  if (ty < 3.5) return sin(2.0 * x) * cos(y) * sin(z) + sin(2.0 * y) * cos(z) * sin(x)   // lidinoid
+                     + sin(2.0 * z) * cos(x) * sin(y) - c2x * c2y - c2y * c2z - c2z * c2x + 0.3;
+  if (ty < 4.5) return 1.1 * (sin(2.0 * x) * sin(z) * cos(y) + sin(2.0 * y) * sin(x) * cos(z) // split-P
+                     + sin(2.0 * z) * sin(y) * cos(x)) - 0.2 * (c2x * c2y + c2y * c2z + c2z * c2x)
+                     - 0.4 * (c2x + c2y + c2z);
+  if (ty < 5.5) return 2.0 * (cos(x) * cos(y) + cos(y) * cos(z) + cos(z) * cos(x))         // Schoen I-WP
+                     - (c2x + c2y + c2z);
+  if (ty < 6.5) return 3.0 * (cos(x) + cos(y) + cos(z)) + 4.0 * cos(x) * cos(y) * cos(z);  // Neovius
+  return cos(2.0 * x) * sin(y) * cos(z) + cos(2.0 * y) * sin(z) * cos(x)                    // Fischer-Koch S
+       + cos(2.0 * z) * sin(x) * cos(y);
 }
 
 float mapScene(vec3 p) {
@@ -78,20 +90,35 @@ float mapScene(vec3 p) {
       core = min(core, rib);
     }
   } else {
-    // --- TPMS lattice shell (geometry screening) ---
+    // --- TPMS / lattice / pin geometry screening ---
     float R = 0.5 * min(uW, uL);
-    float rr = length(p.xy);
-    // radially graded cell — denser at the center (jet-adaptive) when uGrade > 0
-    float cLocal = uUnitCell * (1.0 + uGrade * clamp(rr / max(R, 1e-3), 0.0, 1.5));
-    float c = max(cLocal, 0.3);
-    float k = 2.0 * PI / c;
-    float f = tpmsField(p, k, uTpms);
-    float iso = clamp(uWall * PI / c, 0.06, 1.2);
-    float shell = (abs(f) - iso) * (c / (2.0 * PI)) * 0.5;   // approx SDF (0.5 = safety for grading/type)
     float clip = (uLayout < 0.5)
       ? sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uL * 0.5, uH * 0.5))
       : sdCylinder(p - vec3(0.0, 0.0, zc), uH * 0.5, R);
-    core = max(shell, clip);
+
+    if (uIsPin > 0.5) {
+      // pin-fin array (finite cylinders on the base)
+      float pp = max(uPinPitch, 0.1);
+      float rowY = floor(p.y / pp + 0.5);
+      float xoff = (uPinStagger > 0.5) ? mod(rowY, 2.0) * 0.5 * pp : 0.0;
+      float qx = mod(p.x + xoff + 0.5 * pp, pp) - 0.5 * pp;
+      float qy = mod(p.y + 0.5 * pp, pp) - 0.5 * pp;
+      float dRad = length(vec2(qx, qy)) - uPinD * 0.5;
+      float dz = abs(p.z - zc) - uH * 0.5;
+      core = max(max(dRad, dz), clip);
+    } else {
+      float rr = length(p.xy);
+      // radially graded cell — denser at the center (jet-adaptive) when uGrade > 0
+      float cLocal = uUnitCell * (1.0 + uGrade * clamp(rr / max(R, 1e-3), 0.0, 1.5));
+      float c = max(cLocal, 0.3);
+      float k = 2.0 * PI / c;
+      float f = tpmsField(p, k, uTpms);
+      float iso = clamp(uWall * PI / c, 0.06, 1.2);
+      float scale = (c / (2.0 * PI)) * 0.5;
+      // sheet = shell around the surface; solid = fill one side of the level set
+      float d = (uSolid < 0.5) ? (abs(f) - iso) * scale : (f - iso) * scale;
+      core = max(d, clip);
+    }
   }
 
   float solid = min(base, core);
@@ -153,7 +180,10 @@ void main() {
 }
 `
 
-const TPMS_IDX: Record<string, number> = { gyroid: 0, diamond: 1, schwarz_p: 2, lidinoid: 3 }
+const TPMS_IDX: Record<string, number> = {
+  gyroid: 0, diamond: 1, schwarz_p: 2, lidinoid: 3,
+  split_p: 4, iwp: 5, neovius: 6, fischer_koch: 7, pin_fins: 0,
+}
 
 interface Cut { on: boolean; pos: number; flip: boolean }
 interface Cuts { x: Cut; y: Cut; z: Cut }
@@ -182,6 +212,11 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
       uTpms: { value: TPMS_IDX[g.tpmsType] ?? 0 },
       uLayout: { value: g.layout === 'cylinder' ? 1 : 0 },
       uGrade: { value: g.grading },
+      uSolid: { value: g.solid ? 1 : 0 },
+      uIsPin: { value: g.isPin ? 1 : 0 },
+      uPinD: { value: g.pinDiameter },
+      uPinPitch: { value: g.pinPitch },
+      uPinStagger: { value: g.pinStagger ? 1 : 0 },
       uCut: { value: new THREE.Vector3(cuts.x.pos, cuts.y.pos, cuts.z.pos) },
       uCutSign: { value: new THREE.Vector3(1, 1, 1) },
       uCutOn: { value: new THREE.Vector3(0, 0, 0) },
@@ -209,6 +244,11 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
     u.uTpms.value = TPMS_IDX[g.tpmsType] ?? 0
     u.uLayout.value = g.layout === 'cylinder' ? 1 : 0
     u.uGrade.value = g.grading
+    u.uSolid.value = g.solid ? 1 : 0
+    u.uIsPin.value = g.isPin ? 1 : 0
+    u.uPinD.value = g.pinDiameter
+    u.uPinPitch.value = g.pinPitch
+    u.uPinStagger.value = g.pinStagger ? 1 : 0
   }, [g])
 
   useEffect(() => {
@@ -398,7 +438,9 @@ export function SdfViewer({
         </div>
         <div className="vo-dims">
           {g.family === 'gyroid_tpms'
-            ? <>{g.tpmsType}{g.layout === 'cylinder' ? ' · circular' : ''}{g.grading > 0 ? ' · graded' : ''} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · cell {fmt(g.unitCell, 2)} mm · wall {fmt(g.wallThickness, 2)} mm · void {fmt(g.voidFraction * 100, 0)}% · geometry screening</>
+            ? (g.isPin
+                ? <>pin fins{g.pinStagger ? ' · staggered' : ' · inline'}{g.layout === 'cylinder' ? ' · circular' : ''} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · Ø{fmt(g.pinDiameter, 2)} mm · pitch {fmt(g.pinPitch, 2)} mm · geometry screening</>
+                : <>{g.tpmsType}{g.solid ? ' · solid' : ' · sheet'}{g.layout === 'cylinder' ? ' · circular' : ''}{g.grading > 0 ? ' · graded' : ''} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · cell {fmt(g.unitCell, 2)} mm · wall {fmt(g.wallThickness, 2)} mm · geometry screening</>)
             : <>{family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) · {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm{g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}</>}
         </div>
       </div>

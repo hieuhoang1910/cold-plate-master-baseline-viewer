@@ -55,6 +55,10 @@ export interface DesignCase {
   tpms_type?: string
   tpms_layout?: string
   cell_grading?: number
+  tpms_solid?: boolean
+  pin_diameter_mm?: number
+  pin_pitch_mm?: number
+  pin_pattern?: string
   notes?: string
 }
 
@@ -125,10 +129,14 @@ export interface DesignState {
   hydraulic_diameter_mm: number
   heat_transfer_multiplier: number
   pressure_loss_multiplier: number
-  // TPMS geometry-screening variants (viewer-only; no analytical model yet)
-  tpms_type: string        // gyroid | diamond | schwarz_p | lidinoid
+  // TPMS / lattice geometry-screening variants (viewer-only; no analytical model yet)
+  tpms_type: string        // gyroid|diamond|schwarz_p|lidinoid|split_p|iwp|neovius|fischer_koch|pin_fins
   tpms_layout: string      // rectangular | cylinder
   cell_grading: number     // 0 = uniform, >0 = radially graded (jet-adaptive)
+  tpms_solid: boolean      // false = shelled sheet, true = solid/network fill
+  pin_diameter_mm: number  // pin-fin structure only
+  pin_pitch_mm: number
+  pin_pattern: string      // inline | staggered
   // operating
   flow_lpm: number
 }

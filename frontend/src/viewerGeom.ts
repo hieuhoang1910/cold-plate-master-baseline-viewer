@@ -22,6 +22,11 @@ export interface ViewerGeom {
   tpmsType: string
   layout: string
   grading: number
+  solid: boolean
+  isPin: boolean
+  pinDiameter: number
+  pinPitch: number
+  pinStagger: boolean
 }
 
 export const FIN_FAMILIES = ['wavy_fin', 'straight_fin']
@@ -62,5 +67,10 @@ export function geomFromCase(c: DesignCase, basis: Basis): ViewerGeom | null {
     tpmsType: c.tpms_type ?? 'gyroid',
     layout: c.tpms_layout ?? 'rectangular',
     grading: c.cell_grading ?? 0,
+    solid: c.tpms_solid ?? false,
+    isPin: (c.tpms_type ?? 'gyroid') === 'pin_fins',
+    pinDiameter: c.pin_diameter_mm ?? 0.8,
+    pinPitch: c.pin_pitch_mm ?? 1.4,
+    pinStagger: (c.pin_pattern ?? 'staggered') === 'staggered',
   }
 }

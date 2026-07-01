@@ -46,6 +46,10 @@ export function initDesign(c: DesignCase, basis: Basis): DesignState {
     tpms_type: c.tpms_type ?? 'gyroid',
     tpms_layout: c.tpms_layout ?? 'rectangular',
     cell_grading: c.cell_grading ?? 0,
+    tpms_solid: c.tpms_solid ?? false,
+    pin_diameter_mm: c.pin_diameter_mm ?? 0.8,
+    pin_pitch_mm: c.pin_pitch_mm ?? 1.4,
+    pin_pattern: c.pin_pattern ?? 'staggered',
     flow_lpm: Number(basis.operating.flow_lpm ?? 2.65),
   }
 }
@@ -55,11 +59,21 @@ export const TPMS_TYPES = [
   { key: 'diamond', label: 'Diamond (Schwarz D)' },
   { key: 'schwarz_p', label: 'Schwarz P' },
   { key: 'lidinoid', label: 'Lidinoid' },
+  { key: 'split_p', label: 'Split-P' },
+  { key: 'iwp', label: 'Schoen I-WP' },
+  { key: 'neovius', label: 'Neovius' },
+  { key: 'fischer_koch', label: 'Fischer-Koch S' },
+  { key: 'pin_fins', label: 'Pin fins' },
 ]
 export const TPMS_LAYOUTS = [
   { key: 'rectangular', label: 'Rectangular' },
   { key: 'cylinder', label: 'Circular (cylinder)' },
 ]
+export const PIN_PATTERNS = [
+  { key: 'inline', label: 'Inline' },
+  { key: 'staggered', label: 'Staggered' },
+]
+export function isPinStructure(tpmsType: string): boolean { return tpmsType === 'pin_fins' }
 
 /** Patch applied when the family dropdown changes (keeps other fields intact). */
 export function familyPatch(newFamily: string, design: DesignState): Partial<DesignState> {
