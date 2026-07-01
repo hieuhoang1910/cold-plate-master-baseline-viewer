@@ -112,17 +112,57 @@ header .api-bad { color: var(--fail); font-size: 12px; }
   border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
 }
 .viewer-wrap canvas { display: block; }
-.viewer-overlay {
-  position: absolute; top: 10px; left: 10px;
-  background: rgba(15,20,25,.72); border: 1px solid var(--line);
-  border-radius: 8px; padding: 10px 12px; font-size: 12px;
-  backdrop-filter: blur(4px); max-width: 80%; pointer-events: auto;
+
+/* Top info strip — never blocks orbiting (pointer-events off) */
+.vo-info {
+  position: absolute; top: 8px; left: 12px; max-width: 56%;
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  pointer-events: none; font-size: 11px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.85);
 }
-.vo-title { font-weight: 650; }
-.vo-dims { color: var(--muted); margin: 3px 0 9px; font-size: 11px; line-height: 1.45; }
-.vo-row { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
-.vo-row input[type=range] { width: 220px; accent-color: var(--accent); }
-.vo-hint { color: var(--muted); font-size: 10px; margin-top: 9px; opacity: .8; }
+.vo-info .vo-title { font-weight: 650; font-size: 12px; }
+.vo-info .vo-dims { color: var(--muted); }
+
+/* Bottom control bar — slim, only where the slider lives */
+/* View preset buttons (top-left, under the info strip) */
+.vo-views {
+  position: absolute; top: 36px; left: 12px;
+  display: flex; gap: 4px; flex-wrap: wrap; max-width: 60%;
+}
+.vo-views button {
+  background: rgba(15,20,25,.6); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; backdrop-filter: blur(4px);
+}
+.vo-views button:hover { border-color: var(--accent); }
+.vo-views button.sel { border-color: var(--accent); color: var(--accent); }
+
+/* Bottom section-plane bar */
+.vo-controls {
+  position: absolute; bottom: 8px; left: 12px; right: 12px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 8px;
+  background: rgba(15,20,25,.55); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px; backdrop-filter: blur(4px);
+  font-size: 11px;
+}
+.vo-cuts-label { color: var(--muted); white-space: nowrap; font-weight: 600; }
+.vo-cut { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 130px; }
+.vo-cut input[type=range] { flex: 1; min-width: 40px; accent-color: var(--accent); }
+.vo-cut input[type=range]:disabled { opacity: .4; }
+.vo-axisbtn {
+  width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--muted); cursor: pointer; font-weight: 700; font-size: 11px;
+}
+.vo-cut.on .vo-axisbtn { border-color: var(--accent); color: var(--accent); background: rgba(63,182,255,.12); }
+.vo-flip {
+  width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text); cursor: pointer;
+}
+.vo-flip:disabled { opacity: .4; cursor: default; }
+.vo-reset {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 11px; white-space: nowrap;
+}
+.vo-reset:hover { border-color: var(--accent); }
 
 /* ---- Center viewer placeholder ---- */
 .center { min-height: 0; }
