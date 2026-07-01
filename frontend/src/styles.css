@@ -138,21 +138,22 @@ header .api-bad { color: var(--fail); font-size: 12px; }
 }
 .viewer-wrap canvas { display: block; }
 
-/* Top info strip — never blocks orbiting (pointer-events off) */
-.vo-info {
-  position: absolute; top: 8px; left: 12px; max-width: 56%;
-  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
-  pointer-events: none; font-size: 11px;
+/* Top-left HUD: title, view buttons, dims stacked so nothing overlaps.
+   Container is click-through; only the buttons capture the mouse. */
+.vo-hud {
+  position: absolute; top: 8px; left: 12px; max-width: 60%;
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
   text-shadow: 0 1px 4px rgba(0,0,0,.85);
 }
-.vo-info .vo-title { font-weight: 650; font-size: 12px; }
-.vo-info .vo-dims { color: var(--muted); }
+.vo-title { font-weight: 650; font-size: 12px; }
+.vo-dims { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 /* Bottom control bar — slim, only where the slider lives */
-/* View preset buttons (top-left, under the info strip) */
+/* View preset buttons (inside the HUD stack) */
 .vo-views {
-  position: absolute; top: 36px; left: 12px;
-  display: flex; gap: 4px; flex-wrap: wrap; max-width: 60%;
+  display: flex; gap: 4px; flex-wrap: wrap;
+  pointer-events: auto;
 }
 .vo-views button {
   background: rgba(15,20,25,.6); color: var(--text); border: 1px solid var(--line);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, GizmoHelper, GizmoViewcube } from '@react-three/drei'
+import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import * as THREE from 'three'
 import { fmt } from '../format'
 import type { ViewerGeom } from '../viewerGeom'
@@ -327,26 +327,25 @@ export function SdfViewer({
           maxDistance={400}
         />
         <ViewController cmd={viewCmd} target={[0, 0, cz]} radius={radius} />
-        <GizmoHelper alignment="top-right" margin={[64, 64]}>
-          <GizmoViewcube />
+        <GizmoHelper alignment="top-right" margin={[56, 56]}>
+          <GizmoViewport axisColors={['#e5534b', '#2ea043', '#3fb6ff']} labelColor="white" />
         </GizmoHelper>
       </Canvas>
 
-      <div className="vo-info">
-        <span className="vo-title">{designId}</span>
-        <span className="vo-dims">
+      <div className="vo-hud">
+        <div className="vo-title">{designId}</div>
+        <div className="vo-views">
+          {VIEW_BUTTONS.map((b) => (
+            <button key={b.key} className={viewCmd.view === b.key ? 'sel' : ''} onClick={() => setView(b.key)}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+        <div className="vo-dims">
           {family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) ·{' '}
           {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm
           {g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}
-        </span>
-      </div>
-
-      <div className="vo-views">
-        {VIEW_BUTTONS.map((b) => (
-          <button key={b.key} className={viewCmd.view === b.key ? 'sel' : ''} onClick={() => setView(b.key)}>
-            {b.label}
-          </button>
-        ))}
+        </div>
       </div>
 
       <div className="vo-controls">
