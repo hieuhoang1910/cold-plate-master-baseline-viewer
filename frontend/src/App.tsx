@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getCatalog } from './api'
+import { evaluate, getCatalog } from './api'
 import { milliKW } from './format'
-import type { Catalog } from './types'
+import { evalPayload, initDesign, isFinFamily } from './design'
+import type { BaselineResult, Catalog, DesignState } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
+import { DesignControls } from './components/DesignControls'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
@@ -15,11 +17,15 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>(HERO_ID)
 
+  // Live editable design (fin families only) + its recomputed result.
+  const [design, setDesign] = useState<DesignState | null>(null)
+  const [live, setLive] = useState<BaselineResult | null>(null)
+  const [evaluating, setEvaluating] = useState(false)
+
   useEffect(() => {
     getCatalog()
       .then((c) => {
         setCatalog(c)
-        // Fall back to the first candidate if the hero id is absent.
         if (!c.candidates.some((x) => x.design_id === HERO_ID)) {
           setSelectedId(c.candidates[0]?.design_id ?? '')
         }
@@ -32,11 +38,46 @@ export default function App() {
     [catalog, selectedId],
   )
 
-  const geom = useMemo(() => {
-    if (!catalog) return null
+  // Seed the editable design when the selected candidate changes (fin families).
+  useEffect(() => {
+    if (!catalog) return
     const c = catalog.cases.find((x) => x.design_id === selectedId)
-    return c ? geomFromCase(c, catalog.basis) : null
+    if (c && isFinFamily(c.family)) {
+      setDesign(initDesign(c, catalog.basis))
+    } else {
+      setDesign(null)
+    }
+    setLive(null)
   }, [catalog, selectedId])
+
+  // Debounced live recompute as the design changes.
+  useEffect(() => {
+    if (!design || !catalog) return
+    const h = setTimeout(() => {
+      setEvaluating(true)
+      evaluate(evalPayload(design, catalog.basis))
+        .then(setLive)
+        .catch(() => {})
+        .finally(() => setEvaluating(false))
+    }, 150)
+    return () => clearTimeout(h)
+  }, [design, catalog])
+
+  const geom = useMemo(
+    () => (design && catalog ? geomFromCase(design, catalog.basis) : null),
+    [design, catalog],
+  )
+
+  const patchDesign = (p: Partial<DesignState>) =>
+    setDesign((d) => (d ? { ...d, ...p } : d))
+  const resetDesign = () => {
+    if (!catalog) return
+    const c = catalog.cases.find((x) => x.design_id === selectedId)
+    if (c && isFinFamily(c.family)) setDesign(initDesign(c, catalog.basis))
+  }
+
+  // KPI panel + viewer follow the live design when editing a fin family.
+  const kpiResult = design ? (live ?? selected) : selected
 
   return (
     <div className="app">
@@ -65,7 +106,7 @@ export default function App() {
       {catalog && (
         <>
           <div className="main">
-            {/* LEFT: candidate selector */}
+            {/* LEFT: candidate selector + live design sliders */}
             <div className="col">
               <div className="card">
                 <h2>Candidates</h2>
@@ -86,23 +127,28 @@ export default function App() {
                     </div>
                   )
                 })}
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                  Sliders to tune geometry arrive in Phase 4.
-                </div>
               </div>
+
+              {design
+                ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
+                    onPatch={patchDesign} onReset={resetDesign} />
+                : <div className="card muted" style={{ fontSize: 12 }}>
+                    Live tuning is available for wavy/straight fin designs. Gyroid/pin sliders
+                    arrive in Phase 6.
+                  </div>}
             </div>
 
             {/* CENTER: implicit-body viewer (fins) or placeholder (gyroid/pin) */}
             <div className="center col">
-              {geom && selected
-                ? <SdfViewer g={geom} designId={selected.design_id} family={selected.family} />
+              {geom && design
+                ? <SdfViewer g={geom} designId={design.design_id} family={design.family} />
                 : <ViewerPlaceholder r={selected} />}
             </div>
 
-            {/* RIGHT: KPI panel */}
+            {/* RIGHT: KPI panel (follows the live design when tuning) */}
             <div className="col">
-              {selected
-                ? <KpiPanel r={selected} gates={catalog.gates} />
+              {kpiResult
+                ? <KpiPanel r={kpiResult} gates={catalog.gates} />
                 : <div className="card muted">Select a candidate.</div>}
             </div>
           </div>

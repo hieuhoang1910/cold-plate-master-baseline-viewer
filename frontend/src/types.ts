@@ -79,3 +79,17 @@ export interface Catalog {
   basis: Basis
   gates: Gates
 }
+
+// Editable live-design parameters (Phase 4 sliders).
+export interface DesignState {
+  design_id: string        // source candidate the design was seeded from
+  family: string
+  process_route: string
+  fin_thickness_mm: number
+  channel_gap_mm: number
+  fin_height_mm: number
+  side_margin_mm: number
+  wave_amplitude_mm: number
+  wavelength_mm: number
+  flow_lpm: number
+}

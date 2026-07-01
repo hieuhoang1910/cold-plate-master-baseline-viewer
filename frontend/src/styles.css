@@ -70,6 +70,31 @@ header .api-bad { color: var(--fail); font-size: 12px; }
 .cand-item .meta { color: var(--muted); font-size: 11px; margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
 .cand-item .rjc { margin-top: 6px; font-size: 12px; }
 
+/* ---- Design controls (live tuning) ---- */
+.ds-live { float: right; font-size: 10px; font-weight: 600; color: var(--accent2); letter-spacing: .04em; }
+.ds-live.busy { color: var(--warn); }
+.ds-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.ds-selects label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+.ds-selects select {
+  background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 6px; padding: 5px 6px; font-size: 12px;
+}
+.ds-selects select:focus { outline: none; border-color: var(--accent); }
+.ds-row { margin-bottom: 9px; }
+.ds-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+.ds-val { font-variant-numeric: tabular-nums; }
+.ds-row input[type=range] { width: 100%; accent-color: var(--accent); }
+.ds-derived {
+  display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--muted);
+  margin: 8px 0 10px; padding-top: 8px; border-top: 1px dashed var(--line);
+}
+.ds-derived b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ds-reset {
+  width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px; cursor: pointer; font-size: 12px;
+}
+.ds-reset:hover { border-color: var(--accent); }
+
 /* ---- Badges ---- */
 .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; display: inline-block; }
 .badge.pass { background: rgba(46,160,67,.18); color: var(--accent2); }

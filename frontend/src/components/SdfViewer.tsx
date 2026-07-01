@@ -313,7 +313,19 @@ export function SdfViewer({
         gl={{ antialias: true }}
       >
         <RayMarcher g={g} cuts={cuts} />
-        <OrbitControls makeDefault target={[0, 0, cz]} enablePan={false} minDistance={8} maxDistance={400} />
+        <OrbitControls
+          makeDefault
+          target={[0, 0, cz]}
+          enablePan
+          screenSpacePanning
+          mouseButtons={{
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.PAN,
+            RIGHT: THREE.MOUSE.PAN,
+          }}
+          minDistance={8}
+          maxDistance={400}
+        />
         <ViewController cmd={viewCmd} target={[0, 0, cz]} radius={radius} />
         <GizmoHelper alignment="top-right" margin={[64, 64]}>
           <GizmoViewcube />
