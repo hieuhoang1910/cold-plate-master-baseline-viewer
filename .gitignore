@@ -12,6 +12,7 @@ node_modules/
 frontend/dist/
 dist/
 build/
+*.tsbuildinfo
 *.local
 npm-debug.log*
 yarn-error.log*

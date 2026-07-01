@@ -6,7 +6,7 @@ implicit-body (SDF) 3D geometry next to their KPIs, with a multi-objective
 the browser never runs a second physics model.
 
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
-- **Status:** Phase 1 — Python API (done). Frontend (React + react-three-fiber) is next.
+- **Status:** Phase 1 (Python API) + Phase 2 (React frontend: candidate table + KPI panel) done. Phase 3 = the 3D implicit-body viewer.
 
 ## Layout
 
@@ -41,6 +41,25 @@ Endpoints (see spec §12):
 | POST | `/api/evaluate` | master `evaluate_case()` for arbitrary parameters (all families) |
 | POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
 | POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
+
+## Run the frontend (Phase 2)
+
+Needs Node.js (LTS). Two processes during development — the API and the Vite dev
+server (which proxies `/api` to the API, so there are no CORS issues):
+
+```bash
+# terminal 1 — the API
+python server.py
+
+# terminal 2 — the frontend
+cd frontend
+npm install        # first time only
+npm run dev        # http://localhost:5173
+```
+
+Open http://localhost:5173. Build a production bundle with `npm run build` (output
+in `frontend/dist/`; a later phase serves it from the Python app for single-origin
+deploy).
 
 ## Test (acceptance gate)
 
