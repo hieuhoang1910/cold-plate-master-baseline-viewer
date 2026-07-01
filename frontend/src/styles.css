@@ -106,6 +106,24 @@ header .api-bad { color: var(--fail); font-size: 12px; }
 }
 .warn-box ul { margin: 6px 0 0 16px; padding: 0; }
 
+/* ---- Center 3D viewer ---- */
+.viewer-wrap {
+  position: relative; flex: 1; min-height: 0;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.viewer-wrap canvas { display: block; }
+.viewer-overlay {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(15,20,25,.72); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 12px;
+  backdrop-filter: blur(4px); max-width: 80%; pointer-events: auto;
+}
+.vo-title { font-weight: 650; }
+.vo-dims { color: var(--muted); margin: 3px 0 9px; font-size: 11px; line-height: 1.45; }
+.vo-row { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.vo-row input[type=range] { width: 220px; accent-color: var(--accent); }
+.vo-hint { color: var(--muted); font-size: 10px; margin-top: 9px; opacity: .8; }
+
 /* ---- Center viewer placeholder ---- */
 .center { min-height: 0; }
 .viewer-ph {

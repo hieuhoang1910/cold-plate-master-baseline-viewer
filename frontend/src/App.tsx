@@ -5,6 +5,8 @@ import type { Catalog } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
+import { SdfViewer } from './components/SdfViewer'
+import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
 
@@ -29,6 +31,12 @@ export default function App() {
     () => catalog?.candidates.find((c) => c.design_id === selectedId) ?? null,
     [catalog, selectedId],
   )
+
+  const geom = useMemo(() => {
+    if (!catalog) return null
+    const c = catalog.cases.find((x) => x.design_id === selectedId)
+    return c ? geomFromCase(c, catalog.basis) : null
+  }, [catalog, selectedId])
 
   return (
     <div className="app">
@@ -84,9 +92,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* CENTER: viewer placeholder */}
+            {/* CENTER: implicit-body viewer (fins) or placeholder (gyroid/pin) */}
             <div className="center col">
-              <ViewerPlaceholder r={selected} />
+              {geom && selected
+                ? <SdfViewer g={geom} designId={selected.design_id} family={selected.family} />
+                : <ViewerPlaceholder r={selected} />}
             </div>
 
             {/* RIGHT: KPI panel */}

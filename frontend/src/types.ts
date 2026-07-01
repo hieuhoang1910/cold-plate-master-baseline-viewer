@@ -35,8 +35,47 @@ export interface Gates {
   limit_pump_W: number
 }
 
+// Input geometry for one design (from baseline_cases.json).
+export interface DesignCase {
+  design_id: string
+  family: string
+  process_route?: string
+  validation_stage?: string
+  fin_thickness_mm?: number
+  channel_gap_mm?: number
+  fin_height_mm?: number
+  side_margin_mm?: number
+  wave_amplitude_mm?: number
+  wavelength_mm?: number
+  void_fraction?: number
+  surface_area_density_m2_m3?: number
+  hydraulic_diameter_mm?: number
+  unit_cell_mm?: number
+  wall_thickness_mm?: number
+  notes?: string
+}
+
+export interface StackBasis {
+  die_width_mm: number
+  die_length_mm: number
+  core_width_mm: number
+  core_length_mm: number
+  core_height_mm: number
+  base_thickness_mm: number
+  k_solid_W_mK?: number
+  tim_areal_Kcm2_W?: number
+}
+
+export interface Basis {
+  stack: StackBasis
+  operating: Record<string, number | string>
+  architecture: Record<string, number | string>
+}
+
 export interface Catalog {
   design_parameters: unknown
   candidates: BaselineResult[]
+  cases: DesignCase[]
+  basis: Basis
   gates: Gates
 }

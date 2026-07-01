@@ -110,9 +110,14 @@ def _linspace(lo: float, hi: float, n: int):
 # Business logic (pure functions — tested directly by test_api_parity.py)
 # ---------------------------------------------------------------------------
 def catalog_payload() -> dict:
-    """Master parameter registry + the 5 scored candidates + gate limits."""
+    """Master parameter registry + candidates + geometry inputs + gate limits.
+
+    `cases` and `basis` carry the *input* geometry (the results JSON has only
+    outputs) so the 3D viewer can reconstruct each design's implicit body.
+    """
     params = json.loads(PARAMS_JSON.read_text(encoding="utf-8"))
     candidates = json.loads(RESULTS_JSON.read_text(encoding="utf-8"))
+    cases_cfg = json.loads((DATA / "baseline_cases.json").read_text(encoding="utf-8"))
     op = mbc.OperatingPoint()
     gates = {
         "limit_R_jc_K_W": op.limit_R_jc_K_W,
@@ -122,6 +127,12 @@ def catalog_payload() -> dict:
     return {
         "design_parameters": params,
         "candidates": candidates,
+        "cases": cases_cfg.get("cases", []),
+        "basis": {
+            "stack": cases_cfg.get("stack", {}),
+            "operating": cases_cfg.get("operating", {}),
+            "architecture": cases_cfg.get("architecture", {}),
+        },
         "gates": gates,
     }
 
