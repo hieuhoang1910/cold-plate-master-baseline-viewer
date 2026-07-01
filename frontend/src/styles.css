@@ -153,6 +153,7 @@ header .api-bad { color: var(--fail); font-size: 12px; }
   margin: 10px 0 12px; padding-top: 11px; border-top: 1px solid var(--line);
 }
 .ds-derived b { color: var(--text); font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.ds-note { font-size: 11px; line-height: 1.5; margin: 4px 0 12px; }
 .ds-reset {
   width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
   border-radius: var(--radius-sm); padding: 8px; cursor: pointer; font-size: 12px;

@@ -22,6 +22,8 @@ varying vec2 vUv;
 
 uniform mat4 uInvViewProj;
 uniform float uW, uL, uH, uBase, uT, uGap, uMargin, uAmp, uLambda, uRib, uHasRib;
+uniform float uFamily;   // 0 = fin field, 1 = gyroid/TPMS
+uniform float uUnitCell, uWall;
 uniform vec3 uCut;       // plane position per axis (mm)
 uniform vec3 uCutSign;   // +1 removes the +side, -1 removes the -side
 uniform vec3 uCutOn;     // 1 = plane enabled, 0 = off
@@ -39,21 +41,34 @@ float mapScene(vec3 p) {
                      vec3(uW * 0.5, uL * 0.5, uBase * 0.5));
 
   float zc = uBase + uH * 0.5;
-  float dx = uAmp * sin(2.0 * PI * p.y / uLambda);   // wave displaces fins in x along flow (y)
-  float xw = p.x - dx;
-  float pitch = uT + uGap;
-  float m = mod(xw + 0.5 * pitch, pitch) - 0.5 * pitch;
-  float dWall = abs(m) - uT * 0.5;                   // distance to nearest fin wall
-  float fieldHalf = uW * 0.5 - uMargin;
-  float dbox = sdBox(p - vec3(0.0, 0.0, zc), vec3(fieldHalf, uL * 0.5, uH * 0.5));
-  float fins = max(dWall * 0.6, dbox);               // 0.6 = Lipschitz guard for the wave
+  float core;
 
-  float solid = min(base, fins);
-
-  if (uHasRib > 0.5) {
-    float rib = sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uRib * 0.5, uH * 0.5));
-    solid = min(solid, rib);
+  if (uFamily < 0.5) {
+    // --- fin field ---
+    float dx = uAmp * sin(2.0 * PI * p.y / uLambda);  // wave displaces fins in x along flow (y)
+    float xw = p.x - dx;
+    float pitch = uT + uGap;
+    float m = mod(xw + 0.5 * pitch, pitch) - 0.5 * pitch;
+    float dWall = abs(m) - uT * 0.5;                  // distance to nearest fin wall
+    float fieldHalf = uW * 0.5 - uMargin;
+    float dbox = sdBox(p - vec3(0.0, 0.0, zc), vec3(fieldHalf, uL * 0.5, uH * 0.5));
+    core = max(dWall * 0.6, dbox);                    // 0.6 = Lipschitz guard for the wave
+    if (uHasRib > 0.5) {
+      float rib = sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uRib * 0.5, uH * 0.5));
+      core = min(core, rib);
+    }
+  } else {
+    // --- gyroid / TPMS shell ---
+    float c = max(uUnitCell, 0.3);
+    float k = 2.0 * PI / c;
+    float f = cos(k * p.x) * sin(k * p.y) + cos(k * p.y) * sin(k * p.z) + cos(k * p.z) * sin(k * p.x);
+    float iso = clamp(uWall * PI / c, 0.06, 1.2);
+    float shell = (abs(f) - iso) * (c / (2.0 * PI)) * 0.7;   // approx SDF of the level-set shell
+    float boxg = sdBox(p - vec3(0.0, 0.0, zc), vec3(uW * 0.5, uL * 0.5, uH * 0.5));
+    core = max(shell, boxg);
   }
+
+  float solid = min(base, core);
 
   // section planes (each removes one side of one axis when enabled)
   if (uCutOn.x > 0.5) solid = max(solid, uCutSign.x * (p.x - uCut.x));
@@ -133,6 +148,9 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
       uLambda: { value: g.waveLen },
       uRib: { value: g.ribWidth },
       uHasRib: { value: g.ribWidth > 0 ? 1 : 0 },
+      uFamily: { value: g.family === 'gyroid_tpms' ? 1 : 0 },
+      uUnitCell: { value: g.unitCell },
+      uWall: { value: g.wallThickness },
       uCut: { value: new THREE.Vector3(cuts.x.pos, cuts.y.pos, cuts.z.pos) },
       uCutSign: { value: new THREE.Vector3(1, 1, 1) },
       uCutOn: { value: new THREE.Vector3(0, 0, 0) },
@@ -154,6 +172,9 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
     u.uLambda.value = g.waveLen
     u.uRib.value = g.ribWidth
     u.uHasRib.value = g.ribWidth > 0 ? 1 : 0
+    u.uFamily.value = g.family === 'gyroid_tpms' ? 1 : 0
+    u.uUnitCell.value = g.unitCell
+    u.uWall.value = g.wallThickness
   }, [g])
 
   useEffect(() => {
@@ -342,9 +363,9 @@ export function SdfViewer({
           ))}
         </div>
         <div className="vo-dims">
-          {family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) ·{' '}
-          {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm
-          {g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}
+          {g.family === 'gyroid_tpms'
+            ? <>{family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm · cell {fmt(g.unitCell, 2)} mm · wall {fmt(g.wallThickness, 2)} mm · void {fmt(g.voidFraction * 100, 0)}%</>
+            : <>{family} · {fmt(g.coreLength, 0)}×{fmt(g.coreWidth, 0)}×{fmt(zMax, 1)} mm (flow×fins) · {g.finCount} fins · pitch {fmt(g.finThickness + g.gap, 2)} mm{g.waveAmp > 0 ? ` · wave A${fmt(g.waveAmp, 2)}/λ${fmt(g.waveLen, 2)}` : ' · straight'}</>}
         </div>
       </div>
 

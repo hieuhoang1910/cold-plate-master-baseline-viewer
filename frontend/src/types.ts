@@ -102,16 +102,26 @@ export interface SweepResult {
   optimum: SweepPoint | null
 }
 
-// Editable live-design parameters (Phase 4 sliders).
+// Editable live-design parameters (Phase 4 sliders; Phase 6 adds gyroid fields).
 export interface DesignState {
   design_id: string        // source candidate the design was seeded from
   family: string
   process_route: string
+  // fin families
   fin_thickness_mm: number
   channel_gap_mm: number
   fin_height_mm: number
   side_margin_mm: number
   wave_amplitude_mm: number
   wavelength_mm: number
+  // gyroid / TPMS
+  unit_cell_mm: number
+  wall_thickness_mm: number
+  void_fraction: number
+  surface_area_density_m2_m3: number
+  hydraulic_diameter_mm: number
+  heat_transfer_multiplier: number
+  pressure_loss_multiplier: number
+  // operating
   flow_lpm: number
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { evaluate, getCatalog } from './api'
 import { milliKW } from './format'
-import { evalPayload, initDesign, isFinFamily } from './design'
+import { evalPayload, initDesign, isViewable } from './design'
 import type { BaselineResult, Catalog, DesignState } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
@@ -46,7 +46,7 @@ export default function App() {
   useEffect(() => {
     if (!catalog) return
     const c = catalog.cases.find((x) => x.design_id === selectedId)
-    if (c && isFinFamily(c.family)) {
+    if (c && isViewable(c.family)) {
       setDesign(initDesign(c, catalog.basis))
     } else {
       setDesign(null)
@@ -77,7 +77,7 @@ export default function App() {
   const resetDesign = () => {
     if (!catalog) return
     const c = catalog.cases.find((x) => x.design_id === selectedId)
-    if (c && isFinFamily(c.family)) setDesign(initDesign(c, catalog.basis))
+    if (c && isViewable(c.family)) setDesign(initDesign(c, catalog.basis))
   }
 
   // KPI panel + viewer follow the live design when editing a fin family.
@@ -140,8 +140,7 @@ export default function App() {
                 ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
                     onPatch={patchDesign} onReset={resetDesign} />
                 : <div className="card muted" style={{ fontSize: 12 }}>
-                    Live tuning is available for wavy/straight fin designs. Gyroid/pin sliders
-                    arrive in Phase 6.
+                    Live tuning covers wavy / straight fin and gyroid designs.
                   </div>}
             </div>
 

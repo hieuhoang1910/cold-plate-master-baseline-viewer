@@ -36,6 +36,7 @@ the exact code path the HTTP handler uses.
 from __future__ import annotations
 
 import json
+import mimetypes
 import sys
 from dataclasses import asdict, fields
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +49,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent              # 07_WebApp
 ENGINE = ROOT / "engine"
 DATA = ENGINE / "data"
+DIST = ROOT / "frontend" / "dist"                   # built frontend (production single-origin)
 
 if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
@@ -380,14 +382,36 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):  # noqa: N802
-        fn = _ROUTES_GET.get(self.path)
-        if fn is None:
-            self._json(404, {"error": f"not found: {self.path}"})
+        path = self.path.split("?", 1)[0]
+        fn = _ROUTES_GET.get(path)
+        if fn is not None:
+            try:
+                self._json(200, fn())
+            except Exception as exc:  # noqa: BLE001 — surface to the UI
+                self._json(500, {"error": str(exc)})
             return
-        try:
-            self._json(200, fn())
-        except Exception as exc:  # noqa: BLE001 — surface to the UI
-            self._json(500, {"error": str(exc)})
+        if path.startswith("/api/"):
+            self._json(404, {"error": f"not found: {path}"})
+            return
+        self._serve_static(path)
+
+    def _serve_static(self, path):
+        """Serve the built frontend (production single-origin) with SPA fallback."""
+        if not DIST.is_dir():
+            self._json(404, {"error": "frontend not built — run `npm run build` in frontend/"})
+            return
+        rel = path.lstrip("/") or "index.html"
+        target = (DIST / rel).resolve()
+        # path-traversal guard + single-page-app fallback to index.html
+        if target != DIST and DIST not in target.parents:
+            target = DIST / "index.html"
+        if not target.is_file():
+            target = DIST / "index.html"
+        if not target.is_file():
+            self._json(404, {"error": "index.html missing"})
+            return
+        ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        self._send(200, target.read_bytes(), ctype)
 
     def do_POST(self):  # noqa: N802
         fn = _ROUTES_POST.get(self.path)
