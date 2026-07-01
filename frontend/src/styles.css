@@ -311,3 +311,60 @@ th {
 
 .center-msg { display: grid; place-items: center; height: 100%; color: var(--muted); }
 .error { color: var(--fail); }
+
+/* ---- About button + overlay ---- */
+.about-btn {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.about-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.about-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(5, 8, 13, 0.66); backdrop-filter: blur(6px);
+  display: grid; place-items: center; padding: 4vh 3vw;
+}
+.about-card {
+  width: min(920px, 96vw); max-height: 92vh; overflow: auto;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg-2) 100%);
+  border: 1px solid var(--line-2); border-radius: 16px; box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
+}
+.about-head {
+  position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px; border-bottom: 1px solid var(--line);
+  background: rgba(18, 24, 38, 0.85); backdrop-filter: blur(8px); border-radius: 16px 16px 0 0;
+}
+.about-head h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.about-close {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 14px;
+}
+.about-close:hover { border-color: var(--accent); color: var(--accent); }
+
+.about-body { padding: 6px 22px 22px; }
+.about-body section { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.about-body h3 { font-size: 13px; margin: 0 0 8px; color: var(--accent); letter-spacing: 0.01em; }
+.about-body p { margin: 8px 0; color: #cdd6e4; font-size: 13px; line-height: 1.62; }
+.about-body ul { margin: 8px 0; padding-left: 18px; color: #cdd6e4; font-size: 13px; line-height: 1.6; }
+.about-body li { margin: 3px 0; }
+.about-body .note { color: var(--muted); font-size: 12px; font-style: italic; }
+.about-body code { font-family: var(--mono); font-size: 12px; background: var(--surface-3); padding: 1px 5px; border-radius: 4px; }
+
+.eq {
+  font-family: var(--mono); font-size: 13px; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; margin: 10px 0; overflow-x: auto; white-space: nowrap;
+}
+
+.about-tbl { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12.5px; }
+.about-tbl th { text-align: left; color: var(--faint); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line-2); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; }
+.about-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); color: #cdd6e4; vertical-align: top; }
+.about-tbl td:first-child { font-family: var(--mono); color: var(--text); white-space: nowrap; }
+.about-foot { color: var(--faint); font-size: 12px; padding-top: 14px; }
+.nomen .grp td {
+  color: var(--accent); font-weight: 650; background: var(--surface-2);
+  font-family: var(--font); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5px;
+  padding-top: 9px;
+}
+.nomen td:last-child { color: var(--muted); white-space: nowrap; font-family: var(--mono); }

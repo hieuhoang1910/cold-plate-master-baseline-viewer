@@ -9,6 +9,7 @@ import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
 import { DesignControls } from './components/DesignControls'
 import { OptimizerPanel } from './components/OptimizerPanel'
+import { About } from './components/About'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
@@ -23,6 +24,7 @@ export default function App() {
   const [live, setLive] = useState<BaselineResult | null>(null)
   const [evaluating, setEvaluating] = useState(false)
   const [bottomTab, setBottomTab] = useState<'compare' | 'optimize'>('compare')
+  const [showAbout, setShowAbout] = useState(false)
 
   useEffect(() => {
     getCatalog()
@@ -90,9 +92,12 @@ export default function App() {
         {error
           ? <span className="api-bad">API error: {error}</span>
           : catalog
-            ? <span className="api-ok">● API connected · {catalog.candidates.length} candidates</span>
+            ? <span className="api-ok">● Solver connected · {catalog.candidates.length} candidates</span>
             : <span className="sub">connecting…</span>}
+        <button className="about-btn" onClick={() => setShowAbout(true)}>About</button>
       </header>
+
+      {showAbout && <About onClose={() => setShowAbout(false)} />}
 
       {!catalog && !error && <div className="center-msg">Loading catalog…</div>}
 
