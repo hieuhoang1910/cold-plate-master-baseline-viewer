@@ -1,0 +1,202 @@
+{
+  "version": "master-parameter-bridge-v1",
+  "title": "Cold Plate Master Design Parameters",
+  "description": "Canonical parameter registry used by Codex, Python screening, nTop Automate JSON inputs, CFD notes, and prototype tracking.",
+  "basis": {
+    "operating": {
+      "heat_load_W": 450.0,
+      "margin_heat_load_W": 575.0,
+      "flow_lpm": 2.65,
+      "T_inlet_C": 25.0,
+      "rho_kg_m3": 997.0,
+      "mu_Pa_s": 0.00089,
+      "k_fluid_W_mK": 0.6,
+      "cp_J_kgK": 4181.0,
+      "limit_R_jc_K_W": 0.078,
+      "limit_deltaP_Pa": 50000.0,
+      "limit_pump_W": 5.0
+    },
+    "stack": {
+      "die_width_mm": 24.0,
+      "die_length_mm": 31.0,
+      "core_width_mm": 28.0,
+      "core_length_mm": 31.0,
+      "core_height_mm": 5.5,
+      "base_thickness_mm": 0.7,
+      "k_solid_W_mK": 340.0,
+      "tim_areal_Kcm2_W": 0.05
+    },
+    "architecture": {
+      "flow_architecture": "center_feed_bidirectional",
+      "n_parallel_paths": 2,
+      "path_length_mm": 15.5,
+      "header_K_total": 1.5,
+      "flow_uniformity": 1.0
+    }
+  },
+  "parameters": [
+    {"name": "design_id", "scope": "identity", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Unique prototype/candidate identifier."},
+    {"name": "family", "scope": "identity", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Geometry family: straight_fin, wavy_fin, pin_fin, gyroid_tpms, generic_surface, or hybrid."},
+    {"name": "process_route", "scope": "identity", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Manufacturing route such as LMM, standard_LPBF, green_laser_LPBF, or CNC_AM."},
+    {"name": "validation_stage", "scope": "identity", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Current evidence level: concept, analytical, nTop_measured, CFD, coupon, or prototype."},
+    {"name": "notes", "scope": "identity", "type": "text", "units": "", "ntop_type": "text", "ntop_input": false, "description": "Human-readable design rationale and open questions."},
+
+    {"name": "heat_load_W", "scope": "operating", "type": "scalar", "units": "W", "ntop_type": "scalar", "ntop_input": true, "description": "Nominal thermal load used for sizing."},
+    {"name": "margin_heat_load_W", "scope": "operating", "type": "scalar", "units": "W", "ntop_type": "scalar", "ntop_input": true, "description": "Higher load used for margin checks."},
+    {"name": "flow_lpm", "scope": "operating", "type": "scalar", "units": "L/min", "ntop_type": "scalar", "ntop_input": true, "description": "Total coolant flow rate."},
+    {"name": "T_inlet_C", "scope": "operating", "type": "scalar", "units": "degC", "ntop_type": "scalar", "ntop_input": true, "description": "Coolant inlet temperature."},
+    {"name": "rho_kg_m3", "scope": "operating", "type": "scalar", "units": "kg/m3", "ntop_type": "scalar", "ntop_input": false, "description": "Coolant density for Python screening."},
+    {"name": "mu_Pa_s", "scope": "operating", "type": "scalar", "units": "Pa*s", "ntop_type": "scalar", "ntop_input": false, "description": "Coolant dynamic viscosity for Python screening."},
+    {"name": "k_fluid_W_mK", "scope": "operating", "type": "scalar", "units": "W/mK", "ntop_type": "scalar", "ntop_input": false, "description": "Coolant thermal conductivity for Python screening."},
+    {"name": "cp_J_kgK", "scope": "operating", "type": "scalar", "units": "J/kgK", "ntop_type": "scalar", "ntop_input": false, "description": "Coolant heat capacity for Python screening."},
+    {"name": "limit_R_jc_K_W", "scope": "operating", "type": "scalar", "units": "K/W", "ntop_type": "scalar", "ntop_input": false, "description": "Full junction-to-coolant resistance gate."},
+    {"name": "limit_deltaP_Pa", "scope": "operating", "type": "scalar", "units": "Pa", "ntop_type": "scalar", "ntop_input": false, "description": "Cold-plate pressure-drop gate."},
+    {"name": "limit_pump_W", "scope": "operating", "type": "scalar", "units": "W", "ntop_type": "scalar", "ntop_input": false, "description": "Ideal hydraulic pump-power gate."},
+
+    {"name": "die_width_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Heat-source width. Default is GB202 die basis."},
+    {"name": "die_length_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Heat-source length. Default is GB202 die basis."},
+    {"name": "core_width_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Active cooled-core width."},
+    {"name": "core_length_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Active cooled-core length; this drives die coverage."},
+    {"name": "core_height_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Active heat-transfer height available for fins, TPMS, or lattice."},
+    {"name": "base_thickness_mm", "scope": "stack", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Base conduction thickness after machining."},
+    {"name": "k_solid_W_mK", "scope": "stack", "type": "scalar", "units": "W/mK", "ntop_type": "scalar", "ntop_input": false, "description": "Effective printed copper conductivity for stack screening."},
+    {"name": "tim_areal_Kcm2_W", "scope": "stack", "type": "scalar", "units": "K*cm2/W", "ntop_type": "scalar", "ntop_input": false, "description": "TIM areal resistance over the die."},
+
+    {"name": "flow_architecture", "scope": "architecture", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Flow concept such as center_feed_bidirectional, one_pass, radial, or plenum_fed."},
+    {"name": "n_parallel_paths", "scope": "architecture", "type": "integer", "units": "count", "ntop_type": "integer", "ntop_input": true, "description": "Number of parallel paths used for flow split."},
+    {"name": "path_length_mm", "scope": "architecture", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Single hydraulic path length. If blank, Python uses core_length_mm / n_parallel_paths."},
+    {"name": "header_K_total", "scope": "architecture", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Lumped inlet/outlet minor-loss coefficient."},
+    {"name": "flow_uniformity", "scope": "architecture", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "UA derating factor for maldistribution."},
+
+    {"name": "fin_thickness_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Fin wall thickness."},
+    {"name": "channel_gap_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Open coolant channel gap."},
+    {"name": "fin_height_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Fin height. Defaults to core_height_mm when omitted."},
+    {"name": "side_margin_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Side margin on each side of the active fin/lattice region."},
+    {"name": "fin_count", "scope": "geometry", "type": "integer", "units": "count", "ntop_type": "integer", "ntop_input": true, "description": "Optional explicit fin count. Python can compute it from pitch."},
+    {"name": "channel_count", "scope": "geometry", "type": "integer", "units": "count", "ntop_type": "integer", "ntop_input": true, "description": "Optional explicit channel count. Default is fin_count + 1."},
+    {"name": "wave_amplitude_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Wavy-fin centerline amplitude."},
+    {"name": "wavelength_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Wavy-fin wavelength along the hydraulic path."},
+    {"name": "wetted_area_multiplier", "scope": "geometry", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Correction multiplier for measured nTop wetted area."},
+    {"name": "surface_access_factor", "scope": "geometry", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Derate for dead, shielded, or poorly washed surface."},
+
+    {"name": "pin_diameter_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Pin-fin diameter for pin-family notebooks."},
+    {"name": "pin_pitch_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Pin-fin pitch for pin-family notebooks."},
+    {"name": "pin_pattern", "scope": "geometry", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "Pin pattern such as inline, staggered, or field_driven."},
+
+    {"name": "tpms_type", "scope": "geometry", "type": "text", "units": "", "ntop_type": "text", "ntop_input": true, "description": "TPMS family such as gyroid, diamond, or schwarz_p."},
+    {"name": "unit_cell_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "TPMS/lattice unit-cell size."},
+    {"name": "wall_thickness_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "TPMS/lattice wall thickness or level-set equivalent."},
+    {"name": "void_fraction", "scope": "geometry", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Open-fluid volume fraction."},
+    {"name": "surface_area_density_m2_m3", "scope": "geometry", "type": "scalar", "units": "m2/m3", "ntop_type": "scalar", "ntop_input": true, "description": "Wetted area per active-core volume from nTop or a placeholder."},
+    {"name": "hydraulic_diameter_mm", "scope": "geometry", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": true, "description": "Measured or estimated hydraulic diameter."},
+    {"name": "heat_transfer_multiplier", "scope": "geometry", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Screening multiplier pending CFD calibration."},
+    {"name": "pressure_loss_multiplier", "scope": "geometry", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": true, "description": "Screening multiplier pending CFD calibration."},
+
+    {"name": "computed_surface_area_m2", "scope": "ntop_output", "type": "scalar", "units": "m2", "ntop_type": "scalar", "ntop_input": false, "description": "nTop-measured wetted surface area output."},
+    {"name": "solid_volume_mm3", "scope": "ntop_output", "type": "scalar", "units": "mm3", "ntop_type": "scalar", "ntop_input": false, "description": "nTop-measured solid volume output."},
+    {"name": "open_volume_fraction", "scope": "ntop_output", "type": "scalar", "units": "", "ntop_type": "scalar", "ntop_input": false, "description": "nTop-measured open volume fraction output."},
+    {"name": "min_wall_mm", "scope": "ntop_output", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": false, "description": "nTop or inspection minimum wall output."},
+    {"name": "min_gap_mm", "scope": "ntop_output", "type": "scalar", "units": "mm", "ntop_type": "scalar", "ntop_input": false, "description": "nTop or inspection minimum gap output."}
+  ],
+  "families": {
+    "straight_fin": {
+      "required": ["fin_thickness_mm", "channel_gap_mm", "fin_height_mm", "side_margin_mm"],
+      "description": "Straight parallel fins in the active core."
+    },
+    "wavy_fin": {
+      "required": ["fin_thickness_mm", "channel_gap_mm", "fin_height_mm", "side_margin_mm", "wave_amplitude_mm", "wavelength_mm"],
+      "description": "Sinusoidal or field-driven wavy fins."
+    },
+    "pin_fin": {
+      "required": ["pin_diameter_mm", "pin_pitch_mm", "fin_height_mm", "side_margin_mm"],
+      "description": "Pin-fin or post array; screened as generic surface until nTop/CFD replaces measured values."
+    },
+    "gyroid_tpms": {
+      "required": ["tpms_type", "unit_cell_mm", "wall_thickness_mm", "void_fraction", "surface_area_density_m2_m3", "hydraulic_diameter_mm"],
+      "description": "TPMS/lattice active core; requires nTop measurement before claims."
+    },
+    "generic_surface": {
+      "required": ["void_fraction", "surface_area_density_m2_m3", "hydraulic_diameter_mm"],
+      "description": "Placeholder family for new concepts before a dedicated model exists."
+    },
+    "hybrid": {
+      "required": ["void_fraction", "surface_area_density_m2_m3", "hydraulic_diameter_mm"],
+      "description": "Mixed family such as wavy plus TPMS, pins plus manifold field, or split-core concepts."
+    }
+  },
+  "presets": [
+    {
+      "preset_id": "v6_die_coverage_wavy_lmm",
+      "description": "Primary die-coverage wavy-fin LMM baseline. This is the default starting point for new prototype work.",
+      "family": "wavy_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_v6_reference",
+      "overrides": {
+        "fin_thickness_mm": 0.10,
+        "channel_gap_mm": 0.10,
+        "fin_height_mm": 5.50,
+        "side_margin_mm": 0.90,
+        "wave_amplitude_mm": 0.55,
+        "wavelength_mm": 2.50,
+        "wetted_area_multiplier": 1.0,
+        "surface_access_factor": 1.0,
+        "notes": "Default master die-coverage LMM wavy-fin case."
+      }
+    },
+    {
+      "preset_id": "straight_fin_die_coverage_lmm",
+      "description": "Straight-fin control case in the same die-coverage envelope.",
+      "family": "straight_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_screening",
+      "overrides": {
+        "fin_thickness_mm": 0.10,
+        "channel_gap_mm": 0.10,
+        "fin_height_mm": 5.50,
+        "side_margin_mm": 0.90,
+        "wave_amplitude_mm": 0.0,
+        "wavelength_mm": 2.50,
+        "wetted_area_multiplier": 1.0,
+        "surface_access_factor": 1.0,
+        "notes": "Straight-fin control for comparing wave value."
+      }
+    },
+    {
+      "preset_id": "supplier_floor_wavy_0p12_lmm",
+      "description": "Supplier-risk fallback when 0.10 mm wall/gap is not coupon-qualified.",
+      "family": "wavy_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_screening",
+      "overrides": {
+        "fin_thickness_mm": 0.12,
+        "channel_gap_mm": 0.12,
+        "fin_height_mm": 5.50,
+        "side_margin_mm": 0.90,
+        "wave_amplitude_mm": 0.55,
+        "wavelength_mm": 2.50,
+        "wetted_area_multiplier": 1.0,
+        "surface_access_factor": 1.0,
+        "notes": "Fallback if 0.10 mm copper features are not build-qualified."
+      }
+    },
+    {
+      "preset_id": "gyroid_die_coverage_lmm",
+      "description": "Gyroid/TPMS starter case for nTop measurement and CFD screening.",
+      "family": "gyroid_tpms",
+      "process_route": "LMM",
+      "validation_stage": "analytical_placeholder_pending_nTop_CFD",
+      "overrides": {
+        "tpms_type": "gyroid",
+        "unit_cell_mm": 2.50,
+        "wall_thickness_mm": 0.10,
+        "void_fraction": 0.55,
+        "surface_area_density_m2_m3": 9000.0,
+        "hydraulic_diameter_mm": 0.25,
+        "surface_access_factor": 1.0,
+        "heat_transfer_multiplier": 0.85,
+        "pressure_loss_multiplier": 2.0,
+        "notes": "Starter gyroid values. Replace placeholders with nTop measured outputs."
+      }
+    }
+  ]
+}

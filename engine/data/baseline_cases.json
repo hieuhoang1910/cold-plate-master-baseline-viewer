@@ -1,0 +1,93 @@
+{
+  "operating": {
+    "heat_load_W": 450.0,
+    "margin_heat_load_W": 575.0,
+    "flow_lpm": 2.65,
+    "T_inlet_C": 25.0,
+    "limit_R_jc_K_W": 0.078,
+    "limit_deltaP_Pa": 50000.0,
+    "limit_pump_W": 5.0
+  },
+  "stack": {
+    "die_width_mm": 24.0,
+    "die_length_mm": 31.0,
+    "core_width_mm": 28.0,
+    "core_length_mm": 31.0,
+    "core_height_mm": 5.5,
+    "base_thickness_mm": 0.70,
+    "k_solid_W_mK": 340.0,
+    "tim_areal_Kcm2_W": 0.05
+  },
+  "architecture": {
+    "name": "center_feed_bidirectional",
+    "n_parallel_paths": 2,
+    "path_length_mm": 15.5,
+    "header_K_total": 1.5,
+    "flow_uniformity": 1.0
+  },
+  "cases": [
+    {
+      "design_id": "v6_reference_wavy_fin_0p10",
+      "family": "wavy_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_v6_reference",
+      "fin_thickness_mm": 0.10,
+      "channel_gap_mm": 0.10,
+      "fin_height_mm": 5.50,
+      "side_margin_mm": 0.90,
+      "wave_amplitude_mm": 0.55,
+      "wavelength_mm": 2.50,
+      "notes": "Matches the v6 die-coverage LMM intent as a reusable reference case."
+    },
+    {
+      "design_id": "straight_fin_same_floor_0p10",
+      "family": "straight_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_screening",
+      "fin_thickness_mm": 0.10,
+      "channel_gap_mm": 0.10,
+      "fin_height_mm": 5.50,
+      "side_margin_mm": 0.90,
+      "notes": "Same envelope and wall/gap as the wavy reference, with wave gain removed."
+    },
+    {
+      "design_id": "supplier_floor_wavy_fin_0p12",
+      "family": "wavy_fin",
+      "process_route": "LMM",
+      "validation_stage": "analytical_screening",
+      "fin_thickness_mm": 0.12,
+      "channel_gap_mm": 0.12,
+      "fin_height_mm": 5.50,
+      "side_margin_mm": 0.90,
+      "wave_amplitude_mm": 0.55,
+      "wavelength_mm": 2.50,
+      "notes": "Fallback if 0.10 mm wall/gap is not coupon-qualified."
+    },
+    {
+      "design_id": "std_lpbf_fallback_wavy_fin_0p20",
+      "family": "wavy_fin",
+      "process_route": "standard_LPBF",
+      "validation_stage": "analytical_screening",
+      "fin_thickness_mm": 0.20,
+      "channel_gap_mm": 0.20,
+      "fin_height_mm": 5.50,
+      "side_margin_mm": 0.90,
+      "wave_amplitude_mm": 0.55,
+      "wavelength_mm": 2.50,
+      "notes": "Build-risk fallback at the more conservative LPBF wall/gap floor."
+    },
+    {
+      "design_id": "gyroid_tpms_ntop_screening",
+      "family": "gyroid_tpms",
+      "process_route": "LMM",
+      "validation_stage": "analytical_placeholder_pending_nTop_CFD",
+      "void_fraction": 0.55,
+      "surface_area_density_m2_m3": 9000.0,
+      "hydraulic_diameter_mm": 0.25,
+      "heat_transfer_multiplier": 0.85,
+      "pressure_loss_multiplier": 2.0,
+      "notes": "Placeholder based on nTop TPMS workflow idea; replace with nTop measured surface area/open area and CFD."
+    }
+  ]
+}
+

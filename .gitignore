@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# Node / frontend (Phase 2+)
+node_modules/
+frontend/dist/
+dist/
+build/
+*.local
+npm-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local user snapshots (spec §15 Q4 — server-side save is deferred)
+snapshots/
