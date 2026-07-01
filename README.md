@@ -57,9 +57,19 @@ npm install        # first time only
 npm run dev        # http://localhost:5173
 ```
 
-Open http://localhost:5173. Build a production bundle with `npm run build` (output
-in `frontend/dist/`; a later phase serves it from the Python app for single-origin
-deploy).
+Open http://localhost:5173.
+
+## Production (single-origin)
+
+Build the frontend, then let the Python app serve everything on one port:
+
+```bash
+cd frontend && npm run build   # -> frontend/dist/
+cd .. && python server.py      # serves the app + API on http://127.0.0.1:8000
+```
+
+`server.py` serves `frontend/dist/` (with SPA fallback) alongside `/api/*`, so a
+single process runs the whole app — ready to host on any Python-capable host.
 
 ## Test (acceptance gate)
 
