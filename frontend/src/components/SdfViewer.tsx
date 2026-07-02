@@ -485,14 +485,15 @@ export function SdfViewer({
         <AxisCut axis="z" min={0} max={zMax} cut={cuts.z} onChange={(p) => patch('z', p)} />
         <button className="vo-reset" onClick={() => setCuts(defaultCuts())}>reset</button>
         <span className="vo-sep" />
-        {isTpmsSurface && (
-          <select className="vo-stlq" value={stlQuality} title="Lattice mesh resolution — sheet lattices export dense"
-            onChange={(e) => setStlQuality(e.target.value as StlQuality)}>
-            <option value="draft">draft</option>
-            <option value="standard">standard</option>
-            <option value="fine">fine</option>
-          </select>
-        )}
+        <select className="vo-stlq" value={stlQuality} disabled={!isTpmsSurface}
+          title={isTpmsSurface
+            ? 'Lattice mesh resolution — sheet lattices export dense (draft to review, fine to print)'
+            : 'Resolution only applies to TPMS lattices — fins and pins export as exact geometry'}
+          onChange={(e) => setStlQuality(e.target.value as StlQuality)}>
+          <option value="draft">draft</option>
+          <option value="standard">standard</option>
+          <option value="fine">fine</option>
+        </select>
         <button className="vo-reset" onClick={downloadStl} disabled={stl.busy}
           title="Download the current model as a binary STL (units: mm)">
           {stl.busy ? 'building…' : '⬇ STL'}
