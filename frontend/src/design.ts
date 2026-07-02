@@ -98,22 +98,23 @@ export interface ProblemOpts {
 /** Build the /api/evaluate request body — family-aware so fin params don't leak
  *  into the gyroid generic-surface model (and vice-versa). `opts` adds the V2.1
  *  coolant + target blocks (omitted when not provided, so behaviour is V1). */
-export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}) {
+/** Build the family-aware master `case` from a design (pin-fins -> family=pin_fin;
+ *  gyroid sends cell/wall/type; fin sends t/b/H/A/λ). Shared by evaluate + sweep. */
+export function caseFromDesign(d: DesignState): Record<string, unknown> {
   // Pin-fins are drawn as a gyroid sub-type in the viewer but have their own
   // analytical solver (S1) — route them to family=pin_fin so the KPIs use it.
-  const isPin = isGyroid(d.family) && isPinStructure(d.tpms_type)
-  let caseObj: Record<string, unknown>
-  if (isPin) {
-    caseObj = {
+  if (isGyroid(d.family) && isPinStructure(d.tpms_type)) {
+    return {
       design_id: 'live', family: 'pin_fin', process_route: d.process_route,
       pin_diameter_mm: d.pin_diameter_mm, pin_pitch_mm: d.pin_pitch_mm,
       pin_pattern: d.pin_pattern, fin_height_mm: d.fin_height_mm,
     }
-  } else if (isGyroid(d.family)) {
+  }
+  if (isGyroid(d.family)) {
     // Send cell/wall/type so the backend derives SA/V, void & D_h from the
     // minimal-surface geometry for the literature TPMS types (S2); the hand
     // values ride along as the fallback for the other viewer shapes.
-    caseObj = {
+    return {
       design_id: 'live', family: d.family, process_route: d.process_route,
       tpms_type: d.tpms_type,
       unit_cell_mm: d.unit_cell_mm,
@@ -125,14 +126,17 @@ export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}
       heat_transfer_multiplier: d.heat_transfer_multiplier,
       pressure_loss_multiplier: d.pressure_loss_multiplier,
     }
-  } else {
-    caseObj = {
-      design_id: 'live', family: d.family, process_route: d.process_route,
-      fin_thickness_mm: d.fin_thickness_mm, channel_gap_mm: d.channel_gap_mm,
-      fin_height_mm: d.fin_height_mm, side_margin_mm: d.side_margin_mm,
-      wave_amplitude_mm: d.wave_amplitude_mm, wavelength_mm: d.wavelength_mm,
-    }
   }
+  return {
+    design_id: 'live', family: d.family, process_route: d.process_route,
+    fin_thickness_mm: d.fin_thickness_mm, channel_gap_mm: d.channel_gap_mm,
+    fin_height_mm: d.fin_height_mm, side_margin_mm: d.side_margin_mm,
+    wave_amplitude_mm: d.wave_amplitude_mm, wavelength_mm: d.wavelength_mm,
+  }
+}
+
+export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}) {
+  const caseObj = caseFromDesign(d)
   const payload: Record<string, unknown> = {
     case: caseObj,
     stack: basis.stack,

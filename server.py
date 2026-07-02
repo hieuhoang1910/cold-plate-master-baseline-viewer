@@ -536,8 +536,12 @@ def solve_payload(payload: dict) -> dict:
 # rate lives on the operating point (L/min) — the strongest thermal-hydraulic
 # lever, so it earns a sweep axis (spec optimizer tier 1).
 _SWEEP_VARS = {
+    # fin families
     "fin_thickness_mm", "channel_gap_mm", "fin_height_mm",
     "wave_amplitude_mm", "wavelength_mm",
+    # TPMS sheet (S2) + pin (S1) geometry — so the optimizer works per family
+    "unit_cell_mm", "wall_thickness_mm", "cell_grading",
+    "pin_diameter_mm", "pin_pitch_mm",
 }
 _SWEEP_OP_VARS = {"flow_lpm"}
 
@@ -627,13 +631,22 @@ def sweep_payload(payload: dict) -> dict:
             op_in = dict(base_op)
             _apply(x_name, xv, case_in, op_in)
             _apply(y_name, yv, case_in, op_in)
-            r = evaluate_payload({
-                "case": case_in,
-                "stack": stack_d,
-                "operating": op_in,
-                "architecture": base.get("architecture"),
-                "relative_roughness": base.get("relative_roughness", 0.03),
-            })
+            try:
+                r = evaluate_payload({
+                    "case": case_in,
+                    "stack": stack_d,
+                    "operating": op_in,
+                    "architecture": base.get("architecture"),
+                    "relative_roughness": base.get("relative_roughness", 0.03),
+                })
+            except Exception:  # noqa: BLE001 — an invalid combo (e.g. pin pitch <= dia)
+                grid.append({
+                    "x": xv, "y": yv, "objective": None,
+                    "R_jc_K_W": None, "R_th_conv_K_W": None, "DeltaP_Pa": None,
+                    "pump_power_W": None, "mass_g": None, "cop": None,
+                    "kpi_status": "INVALID", "feasible": False,
+                })
+                continue
             status = r.get("kpi_status") or ""
             pump = r.get("pump_power_W")
             mass = _sweep_mass_g(r, stack_d)

@@ -1,16 +1,34 @@
-import { routeFloor } from './design'
+import { caseFromDesign, isGyroid, isPinStructure, routeFloor } from './design'
 import type { Basis, DesignState } from './types'
 
 export interface SweepVar { key: string; label: string }
 
+// The full set (used for label lookup); sweepVarsFor() picks the family subset.
 export const SWEEP_VARS: SweepVar[] = [
   { key: 'fin_thickness_mm', label: 'fin thickness t' },
   { key: 'channel_gap_mm', label: 'channel gap b' },
   { key: 'fin_height_mm', label: 'fin height H' },
   { key: 'wave_amplitude_mm', label: 'wave amplitude A' },
   { key: 'wavelength_mm', label: 'wavelength λ' },
+  { key: 'unit_cell_mm', label: 'unit cell c' },
+  { key: 'wall_thickness_mm', label: 'wall thickness w' },
+  { key: 'cell_grading', label: 'cell grading' },
+  { key: 'pin_diameter_mm', label: 'pin diameter d' },
+  { key: 'pin_pitch_mm', label: 'pin pitch S' },
   { key: 'flow_lpm', label: 'flow rate V̇' },
 ]
+
+const FIN_KEYS = ['fin_thickness_mm', 'channel_gap_mm', 'fin_height_mm', 'wave_amplitude_mm', 'wavelength_mm', 'flow_lpm']
+const TPMS_KEYS = ['unit_cell_mm', 'wall_thickness_mm', 'cell_grading', 'flow_lpm']
+const PIN_KEYS = ['pin_diameter_mm', 'pin_pitch_mm', 'flow_lpm']
+
+/** Sweep variables valid for a design's family (fin vs TPMS sheet vs pin). */
+export function sweepVarsFor(d: DesignState | null): SweepVar[] {
+  const keys = !d ? FIN_KEYS
+    : (isGyroid(d.family) && isPinStructure(d.tpms_type)) ? PIN_KEYS
+      : isGyroid(d.family) ? TPMS_KEYS : FIN_KEYS
+  return SWEEP_VARS.filter((v) => keys.includes(v.key))
+}
 
 // What to minimise/maximise across the grid (tier-1 optimizer objectives).
 export interface Objective { key: string; label: string; short: string; unit: string; dir: 'min' | 'max'; scale: number; digits: number }
@@ -29,10 +47,12 @@ export function varLabel(key: string): string {
   return SWEEP_VARS.find((v) => v.key === key)?.label ?? key
 }
 export function varUnit(key: string): string {
-  return key === 'flow_lpm' ? 'L/min' : 'mm'
+  if (key === 'flow_lpm') return 'L/min'
+  if (key === 'cell_grading') return ''
+  return 'mm'
 }
 
-/** Sweep range for a variable — mirrors the slider bounds; t/b clamp to the route floor. */
+/** Sweep range for a variable — mirrors the slider bounds; t/b/wall clamp to the route floor. */
 export function varRange(key: string, design: DesignState): { min: number; max: number } {
   const fl = routeFloor(design.process_route)
   switch (key) {
@@ -41,6 +61,11 @@ export function varRange(key: string, design: DesignState): { min: number; max: 
     case 'fin_height_mm': return { min: 2.0, max: 6.5 }
     case 'wave_amplitude_mm': return { min: 0.0, max: 1.0 }
     case 'wavelength_mm': return { min: 1.5, max: 6.0 }
+    case 'unit_cell_mm': return { min: 1.0, max: 4.0 }
+    case 'wall_thickness_mm': return { min: fl.t, max: 0.3 }
+    case 'cell_grading': return { min: 0.0, max: 1.0 }
+    case 'pin_diameter_mm': return { min: 0.2, max: 2.0 }
+    case 'pin_pitch_mm': return { min: 0.5, max: 4.0 }
     case 'flow_lpm': return { min: 1.0, max: 4.0 }
     default: return { min: 0, max: 1 }
   }
@@ -54,16 +79,7 @@ export function buildSweepRequest(
   const ry = varRange(yVar, design)
   return {
     base: {
-      case: {
-        family: design.family,
-        process_route: design.process_route,
-        fin_thickness_mm: design.fin_thickness_mm,
-        channel_gap_mm: design.channel_gap_mm,
-        fin_height_mm: design.fin_height_mm,
-        side_margin_mm: design.side_margin_mm,
-        wave_amplitude_mm: design.wave_amplitude_mm,
-        wavelength_mm: design.wavelength_mm,
-      },
+      case: caseFromDesign(design),       // family-aware (fin / gyroid / pin)
       stack: basis.stack,
       operating: { ...basis.operating, flow_lpm: design.flow_lpm },
       architecture: basis.architecture,

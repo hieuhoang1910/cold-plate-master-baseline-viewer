@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { sweep } from '../api'
 import { fmt } from '../format'
-import { OBJECTIVES, SWEEP_VARS, buildSweepRequest, objectiveOf, varLabel, varUnit } from '../optimizer'
+import { OBJECTIVES, buildSweepRequest, objectiveOf, sweepVarsFor, varLabel, varUnit } from '../optimizer'
 import type { Basis, BaselineResult, DesignState, SavedDesign, SweepPoint, SweepResult } from '../types'
 import { Heatmap } from './Heatmap'
 import { Pareto } from './Pareto'
@@ -23,24 +23,31 @@ export function OptimizerPanel({
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  // Family-aware sweep variables (fin vs TPMS sheet vs pin). The chosen X/Y are
+  // clamped to the valid set so switching family never sweeps a no-op variable.
+  const vars = sweepVarsFor(design)
+  const keys = vars.map((v) => v.key)
+  const xEff = keys.includes(xVar) ? xVar : (keys[0] ?? xVar)
+  const yEff = keys.includes(yVar) && yVar !== xEff ? yVar : (keys.find((k) => k !== xEff) ?? xEff)
+
   const run = () => {
     if (!design) return
     setLoading(true)
     setErr(null)
-    sweep(buildSweepRequest(design, basis, xVar, yVar, objective))
+    sweep(buildSweepRequest(design, basis, xEff, yEff, objective))
       .then(setResult)
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setLoading(false))
   }
 
-  // Re-sweep on open, variable/objective change, or when a different design is selected.
+  // Re-sweep on open, variable/objective change, or when the design (family) changes.
   useEffect(() => {
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xVar, yVar, objective, design?.design_id])
+  }, [xEff, yEff, objective, design?.design_id, design?.family, design?.tpms_type])
 
   if (!design) {
-    return <div className="muted" style={{ padding: 14 }}>The optimizer works on wavy/straight fin designs — select one.</div>
+    return <div className="muted" style={{ padding: 14 }}>The optimizer works on viewable designs (fin, gyroid, pin) — select one.</div>
   }
 
   const o = result?.optimum
@@ -70,13 +77,13 @@ export function OptimizerPanel({
     <div className="opt">
       <div className="opt-controls">
         <label>X&nbsp;
-          <select value={xVar} onChange={(e) => setXVar(e.target.value)}>
-            {SWEEP_VARS.map((v) => <option key={v.key} value={v.key} disabled={v.key === yVar}>{v.label}</option>)}
+          <select value={xEff} onChange={(e) => setXVar(e.target.value)}>
+            {vars.map((v) => <option key={v.key} value={v.key} disabled={v.key === yEff}>{v.label}</option>)}
           </select>
         </label>
         <label>Y&nbsp;
-          <select value={yVar} onChange={(e) => setYVar(e.target.value)}>
-            {SWEEP_VARS.map((v) => <option key={v.key} value={v.key} disabled={v.key === xVar}>{v.label}</option>)}
+          <select value={yEff} onChange={(e) => setYVar(e.target.value)}>
+            {vars.map((v) => <option key={v.key} value={v.key} disabled={v.key === xEff}>{v.label}</option>)}
           </select>
         </label>
         <label>Optimize&nbsp;
