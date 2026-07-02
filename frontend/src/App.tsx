@@ -282,7 +282,7 @@ export default function App() {
               {design
                 ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
                     onPatch={patchDesign} onReset={resetDesign} />
-                : <div className="card muted" style={{ fontSize: 12 }}>
+                : <div className="card muted" style={{ fontSize: 14 }}>
                     Live tuning covers wavy / straight fin and gyroid designs.
                   </div>}
 

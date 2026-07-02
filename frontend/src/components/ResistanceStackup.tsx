@@ -25,7 +25,7 @@ export function ResistanceStackup({ r }: { r: BaselineResult }) {
         <div className="k"><span className="swatch" style={{ background: 'var(--rtim)' }} /> TIM {milliKW(tim)} <span className="muted">({pct(tim / total)})</span></div>
         <div className="k"><span className="swatch" style={{ background: 'var(--rconv)' }} /> conv {milliKW(conv)} <span className="muted">({pct(conv / total)})</span></div>
       </div>
-      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+      <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
         Values in mK/W. Convection (the fin lever) is only {pct(r.conv_fraction)} of R_jc — TIM + base set the floor.
       </div>
     </div>

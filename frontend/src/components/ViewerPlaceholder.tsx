@@ -10,7 +10,7 @@ export function ViewerPlaceholder({ r }: { r: BaselineResult | null }) {
       <div className="big">3D implicit-body viewer</div>
       <div>Raymarched SDF geometry lands in <b>Phase 3</b>.</div>
       {r && (
-        <div className="muted" style={{ fontSize: 12 }}>
+        <div className="muted" style={{ fontSize: 14 }}>
           loaded: <b>{r.design_id}</b> · family <b>{r.family}</b>
         </div>
       )}

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 /** Resizable-panel sizes (px). Left/right columns + bottom panel height. */
 export interface PanelSizes { left: number; right: number; bottom: number }
 
-export const DEFAULT_PANELS: PanelSizes = { left: 268, right: 384, bottom: 300 }
+export const DEFAULT_PANELS: PanelSizes = { left: 292, right: 404, bottom: 320 }
 
 const KEY = 'cp-panel-sizes'
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))

@@ -41,7 +41,7 @@ export function Report({
         <div className="report-actions">
           <button className="ds2-save" onClick={download}>⬇ Download .md</button>
           <button className="vo-reset" onClick={copy}>{copied ? 'Copied ✓' : 'Copy Markdown'}</button>
-          <span className="muted" style={{ fontSize: 11 }}>
+          <span className="muted" style={{ fontSize: 13 }}>
             Print-ready review of the current problem + selected design + candidates + provenance.
           </span>
         </div>
