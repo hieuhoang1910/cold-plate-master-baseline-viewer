@@ -8,10 +8,16 @@ the browser never runs a second physics model.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
 - **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), and an About tab with nomenclature + cited references.
 
-## Quick start (easiest — one command)
+## Quick start
 
-The UI is pre-built into `frontend/dist`, so a single Python process serves the
-whole app. You only need **Python 3.10+** for this.
+**Easiest — double-click the launcher (Windows).** In the `07_WebApp` folder,
+double-click **`Start Cold Plate Viewer.bat`**. It frees the port if a previous
+run is stuck, starts the server, and opens **http://127.0.0.1:8000** in your
+browser. Close the black window to stop the app.
+*(Needs Python 3.10+. The very first run also needs Node.js once, to build the UI.)*
+
+**Or run it manually (one command).** The UI is pre-built into `frontend/dist`,
+so a single Python process serves the whole app:
 
 1. Open a terminal in the `07_WebApp/` folder.
 2. Run:
