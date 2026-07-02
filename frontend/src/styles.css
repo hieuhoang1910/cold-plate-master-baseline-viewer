@@ -357,7 +357,9 @@ th {
   display: grid; place-items: center; padding: 4vh 3vw;
 }
 .about-card {
-  width: min(920px, 96vw); max-height: 92vh; overflow: auto;
+  /* wide enough that the KPI/nomenclature tables fit without horizontal
+     scrolling at the V2 type scale */
+  width: min(1280px, 96vw); max-height: 92vh; overflow: auto;
   background: linear-gradient(180deg, var(--surface) 0%, var(--bg-2) 100%);
   border: 1px solid var(--line-2); border-radius: 16px; box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
 }
@@ -450,7 +452,7 @@ th {
 }
 .proj-chip:hover { filter: brightness(1.15); }
 
-.about-card.ds2 { max-width: 980px; }
+.about-card.ds2 { max-width: 1120px; }
 .ds2-body { display: flex; flex-direction: column; gap: 12px; }
 .ds2-picker { display: flex; align-items: flex-end; gap: 8px; }
 .ds2-name { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
@@ -501,7 +503,7 @@ th {
 /* ---- V2.6 R_jc uncertainty band + Report modal ---- */
 .rjc-band { font-size: 13px; margin-top: 5px; }
 .rjc-band b { font-family: var(--mono); color: var(--text); }
-.about-card.report { max-width: 900px; }
+.about-card.report { max-width: 1040px; }
 .report-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .report-md {
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;

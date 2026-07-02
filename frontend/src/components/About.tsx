@@ -127,8 +127,17 @@ export function About({ onClose }: { onClose: () => void }) {
 
           <section>
             <h3>The optimization doctrine</h3>
-            <Eq>minimize R_jc &nbsp; subject to &nbsp; ΔP, pump, coverage, open-volume, manufacturability, validation gates</Eq>
-            <p>Not "maximize surface area" or "maximize open volume" — those pull against each other. Track raw &amp; effective SA/V as <i>diagnostics</i>, but decide on R_jc. The <b>Optimizer</b> tab sweeps two variables into an R_jc heatmap (green = lower) and a Pareto front (R_jc vs pump power) so you can pick the knee, then load it back into the sliders. The <b>manufacturing floor</b> (LMM 0.10 mm wall/gap) is the dominant constraint and clamps the sliders.</p>
+            <Eq>minimize R_jc &nbsp; subject to &nbsp; T_j gate · ΔP budget · pump budget · coverage · manufacturability</Eq>
+            <p>Not "maximize surface area" or "balance three numbers by feel" — the expert formulation is asymmetric:
+              <b> thermal is the objective, hydraulics are constraints</b>. Your pump/loop grants the plate a fixed
+              ΔP / pump budget (set in the Design Studio); the best design <i>spends</i> that budget rather than
+              minimizing it. The <b>Optimizer</b> tab sweeps two family-appropriate variables (fin t/b/H/A/λ ·
+              TPMS cell/wall/grading · pin Ø/pitch · flow) with the active project's coolant and budgets riding on
+              every grid point — the ★ optimum is the best <i>feasible</i> point, reported with its T_j margin in °C,
+              and the Pareto chart draws the pump-budget line: your answer is the lowest point left of it. To explore
+              the trade, move the budget and watch ★ walk the front. COP is not an objective (with Q fixed it is just
+              inverted pump power) and mass is reported, not optimized. The <b>manufacturing floor</b> (LMM 0.10 mm
+              wall/gap) still clamps the sliders and the sweep ranges.</p>
           </section>
 
           <section>
@@ -138,11 +147,14 @@ export function About({ onClose }: { onClose: () => void }) {
               <li><b>v6 solver</b> (validated depth): the wavy-fin hero with jet impingement, center rib, thermal entry, NTU/effectiveness. Jet-impingement basis: Zuckerman &amp; Lior (2006) [8], Martin (1977) [9].</li>
             </ul>
             <p className="note">
-              These are <b>screening</b> results — a design direction, not frozen CAD. The gyroid row is flagged
-              SCREENING_ONLY (placeholder until nTop-measured area + CFD). TPMS AM heat-sink performance:
-              Chouhan et al. (2025) [1], Renon &amp; Jeanningros (2025) [2]; the viewer's level-set equations:
-              Gandy et al. (1999–2001) [5–7]. No external performance claim until supplier coupon, CFD/CHT on
-              the manifold + center rib + local die temperature, and test close the loop.
+              These are <b>screening</b> results — a design direction, not frozen CAD. Trust tiers: fins =
+              textbook-validated Shah–London; pins = Zukauskas/Gaddis–Gnielinski (tube-bank physics on micro pins);
+              gyroid &amp; diamond = ANALYTICAL_LIT via Renon &amp; Jeanningros (2025) [2] but <b>EXTRAPOLATED</b>
+              (their fit is turbulent Re 3000–18000, this plate runs Re ≈ 200); Schwarz-P and the exotic TPMS types
+              stay SCREENING_ONLY (no in-regime coefficients exist — none were invented). TPMS AM heat-sink
+              performance: Chouhan et al. (2025) [1]; the viewer's level-set equations: Gandy et al. (1999–2001)
+              [5–7]. No external performance claim until supplier coupon, CFD/CHT on the manifold + center rib +
+              local die temperature, and test close the loop.
             </p>
           </section>
 
@@ -167,8 +179,9 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr>
                   <td>PASS / FAIL / SCREENING badge</td>
                   <td>The solver's gate verdict (kpi_status). FAIL lists which gate tripped (R_jc, ΔP, pump, coverage,
-                    open volume…). SCREENING_ONLY marks families (gyroid/TPMS) whose model is a placeholder until
-                    nTop-measured area + CFD exist.</td>
+                    open volume…). SCREENING_ONLY marks models without an in-regime correlation (Schwarz-P + exotic
+                    TPMS types); gyroid/diamond carry an EXTRAPOLATED warning instead (turbulent-fit correlation used
+                    at laminar Re).</td>
                   <td>A design that fails any gate is out regardless of a pretty R_jc. Screening rows can be compared
                     with each other but should not be quoted externally.</td>
                 </tr>
@@ -380,6 +393,41 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>A_die / A_funnel</td><td>Die footprint / conduction funnel area = min(die, cooled)</td><td>m²</td></tr>
               </tbody>
             </table>
+          </section>
+
+          <section>
+            <h3>Implicit geometry — the exact equations (rebuild in nTop)</h3>
+            <p className="note">
+              The viewer raymarches these equations and the STL exporter meshes the same field — this is the
+              authoritative geometry definition. Units mm; x = transverse (35 mm span, fin count), y = flow (28 mm),
+              z = height with the base slab at z ∈ [0, t_base]; structures occupy z ∈ [t_base, t_base + H]. The full
+              step-by-step nTop recipe (patterns, clips, verification targets) is in <code>NTOP_REPLICATION.md</code>.
+            </p>
+            <p><b>Wavy / straight fins</b> — fin i (one fin centred at x = 0), sine phase with y = 0 at mid-path
+              (a cosine build is the same body shifted λ/4):</p>
+            <Eq>|x − i·p − A·sin(2π·y/λ)| ≤ t/2 &nbsp;·&nbsp; p = t + b &nbsp;·&nbsp; |x| ≤ W/2 − margin &nbsp;·&nbsp; straight: A = 0</Eq>
+            <p className="note">Centre rib (2-path layouts): box |y| ≤ w_rib/2 across the full width, same z band.
+              Fins the clip would cut partially are omitted whole (watertight-shell rule).</p>
+            <p><b>Pin fins</b> — cylinders Ø d at pitch p in both directions; staggered = odd rows shifted p/2 in x;
+              only pins fully inside the boundary are kept (|x_c| ≤ W/2 − d/2 etc.).</p>
+            <p><b>TPMS lattices</b> — with scaled coordinates x̂ = 2πx/c (k = 2π/c):</p>
+            <Eq>gyroid: F = cos x̂·sin ŷ + cos ŷ·sin ẑ + cos ẑ·sin x̂ &nbsp;·&nbsp; diamond: F = sx̂·sŷ·sẑ + sx̂·cŷ·cẑ + cx̂·sŷ·cẑ + cx̂·cŷ·sẑ &nbsp;·&nbsp; schwarz-P: F = cos x̂ + cos ŷ + cos ẑ</Eq>
+            <Eq>sheet: |F| ≤ iso &nbsp;·&nbsp; solid: F ≤ iso &nbsp;·&nbsp; iso = clamp(π·w/c, 0.06, 1.2)</Eq>
+            <p>
+              The iso threshold <b>is</b> the wall: the slab |F| ≤ iso is 2·iso/(k·|∇F|) = w/|∇F| thick, i.e. exactly
+              w where |∇F| = 1 (±~30% locally across a gyroid, |∇F| ≈ 0.7–1.5). nTop's native walled-TPMS blocks make
+              a true-offset (uniform-w) wall instead — same nominal design, slightly better geometry; prefer them for
+              print CAD and use a custom implicit only for exact parity or the exotic types (lidinoid, split-P, I-WP,
+              neovius, Fischer-Koch S — equations in <code>NTOP_REPLICATION.md</code>).
+            </p>
+            <p><b>Jet-adaptive cell grading</b> — the cell size varies radially (r from the core centre axis,
+              R = min(W, L)/2; finer than nominal under the jet, coarser outboard, crossover at r = R/2):</p>
+            <Eq>c(r) = c₀ · (1 + g·(clamp(r/R, 0, 1.5) − 0.5)) &nbsp;·&nbsp; c ≥ 0.3 mm &nbsp;·&nbsp; g = cell_grading (0–1)</Eq>
+            <p className="note">
+              Verification targets for a rebuild (gyroid, c = 2.5, w = 0.12): relative density ρ* = (A₀/a²)·(w/c) =
+              0.148 → void 0.852 · sheet SA/V = 2·(A₀/a²)/c = 2473 m²/m³ (A₀/a²: gyroid 3.0915, diamond 3.8385,
+              schwarz-P 2.3451). Measure area/volume on the nTop body and compare.
+            </p>
           </section>
 
           <section>

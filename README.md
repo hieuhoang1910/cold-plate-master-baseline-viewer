@@ -1,22 +1,42 @@
 # Cold Plate — Master Baseline Viewer
 
-Internal engineering tool to view GPU cold-plate / heat-sink designs as live
-implicit-body (SDF) 3D geometry next to their KPIs, with a multi-objective
-(Pareto) optimizer. Physics comes from the **validated** Cold Plate solvers —
-the browser never runs a second physics model.
+Internal engineering tool to view, tune, and optimize GPU cold-plate /
+heat-sink designs as live implicit-body (SDF) 3D geometry next to their KPIs.
+Physics comes from the **validated** Cold Plate solvers — the browser never
+runs a second physics model.
 
-- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
-- **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), STL export, and an About tab with nomenclature + cited references.
+- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; latest addenda §30–31)
+- **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
+- **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Status:** V2 complete — projects & Design Studio (problem definition:
+  coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts), fin +
+  TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros / Zukauskas), live
+  3D tuning, constrained optimizer, saved designs as candidates, report
+  export, mass/cost + R_jc uncertainty band, STL export, LAN hosting.
+
+**Optimizer.** The Optimizer tab sweeps two family-appropriate variables
+(fin t/b/H/A/λ · TPMS cell/wall/grading · pin Ø/pitch · flow) into an
+objective heatmap + Pareto front. The sweep carries the active project's
+coolant and budgets, so the ★ optimum is the **constrained** optimum — best
+R_jc (or pump/ΔP) *among points that fit the T_j gate + ΔP + pump budgets* —
+reported with its T_j margin in °C; the Pareto chart draws the pump-budget
+line. Set the budgets in the Design Studio (◆ chip in the header) and the
+optimizer re-runs against them. "★ add top 5 → candidates" turns the best
+sweep points into named, tunable candidates.
 
 **STL export.** The **⬇ STL** button in the viewer's bottom bar downloads the
 current model as a binary STL in millimetres (base + fins/pins/lattice, viewer
 axes). Fin and pin-fin families are meshed analytically — watertight,
 exact-dimension shells at tiny file sizes (straight fins ~50 KB, wavy fins a
-few MB). TPMS lattices are meshed from the implicit field (surface nets) with
-a draft/standard/fine resolution picker; **sheet** lattices with thin walls are
-inherently triangle-dense — expect large files (tens to hundreds of MB), which
-is normal for lattice STLs. Joined shells overlap by 0.05 mm on purpose so
-slicers/CAD union them cleanly.
+few MB). TPMS lattices are meshed from the implicit field with **manifold
+surface nets** (one vertex per sheet side per cell, so thin walls don't pinch
+into non-manifold edges; sub-voxel debris shells are dropped). Use the
+resolution picker: **draft** to eyeball, **fine** (≈2 voxels per wall) for
+print prep; sheet lattices are inherently triangle-dense — expect 50–200 MB,
+normal for lattice STLs. A residual ~0.05 % of edges are saddle point-contacts
+that netfabb/slicers auto-repair. Joined shells overlap by 0.05 mm on purpose
+so slicers/CAD union them cleanly; the picker is greyed out for fin/pin
+(exact meshes need no resolution).
 
 ## Quick start
 
@@ -163,9 +183,19 @@ parent project, so the webapp stays fully self-contained.
 ## Test (acceptance gate)
 
 ```bash
-python test_api_parity.py            # exit 0 = API reproduces the 5 golden results
-python test_v2_targets_coolants.py   # exit 0 = V2.1 coolants + targets + wiring
+python test_api_parity.py            # exit 0 = API reproduces the 5 golden results (anti-drift gate)
+python test_v2_targets_coolants.py   # V2.1 coolants + targets + wiring
+python test_v2_projects.py           # V2.2 projects / Design Studio / rescoring
+python test_v2_pin_fin.py            # S1 pin-fin solver (Zukauskas + Gaddis-Gnielinski)
+python test_v2_tpms.py               # S2 TPMS minimal-surface geometry
+python test_v2_tpms_corr.py          # S2 TPMS Nu/f correlations (Renon & Jeanningros)
+python test_v2_layouts.py            # S3 layouts + jet-flux coupling
+python test_v2_report.py             # V2.6 report / mass / uncertainty band
+python test_v2_sweep.py              # optimizer: family-aware + budget-constrained sweep
 ```
+
+All V2 features are **additive**: with no V2 keys in a request, responses are
+bit-identical to V1 — `test_api_parity.py` enforces this after every change.
 
 ## The `engine/` snapshot
 

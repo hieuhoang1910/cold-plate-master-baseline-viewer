@@ -667,3 +667,76 @@ The Design Studio flow is a pipeline, not just problem definition: **choose inpu
 **Uncertainty band** (spec §15 Q7): with `"uncertainty": true`, the result adds `r_jc_band` -- R_jc re-evaluated at the Cu-AM conductivity extremes k = 250 (conservative) and 400 (optimistic) W/mK around the design's nominal k. The KPI panel shows R_jc as a band (e.g. 12.2-14.4 mK/W), the honest robustness picture rather than a single point. Additive -> golden parity untouched.
 
 **Report tab**: a header 'Report' button opens a print-ready Markdown design review (report.ts + Report.tsx) -- problem, targets/gates, the selected design's full KPI table (incl. R_jc band + mass), the candidate comparison table, per-design warnings, and a provenance/caveats section citing the solver pedigree (Shah-London, Zukauskas, Renon & Jeanningros) and screening labels. Copy-to-clipboard + download .md. This is the design-review artifact. Validity guardrails were already surfaced via each result's warnings (extrapolation/screening notes) and are reproduced in the report. Tests: test_v2_report.py (7 checks); parity 5/5.
+
+## 30. Post-V2.6 addenda (2026-07-02)
+
+**Optimizer tier 1 — objectives.** The sweep gained flow_lpm as an operating
+axis, direction-aware objectives, mass_g/cop per point, and the R_jc floor
+(TIM+base) + gate drawn on the charts. Superseded in part by tier 2 below.
+
+**Optimizer — family-aware sweep (fix).** The sweep previously sent fin
+variables regardless of family, so TPMS/pin optimization was flat (one
+distinct R_jc). `caseFromDesign()` (design.ts) is now shared by evaluate and
+sweep; sweepable variables are family-scoped (fin: t/b/H/A/lambda; TPMS sheet:
+unit_cell/wall/cell_grading; pin: diameter/pitch; all: flow). Invalid grid
+combos (e.g. pin pitch <= diameter) are marked INVALID/infeasible instead of
+crashing the sweep. Tests: test_v2_sweep.py.
+
+**Optimizer tier 2 — the problem constrains the optimum.** The sweep base is
+built by evalPayload, so the active project's coolant + targets (T_j_max ->
+derived R_jc gate, limit_deltaP_Pa, limit_pump_W) ride on every grid point.
+`feasible` = fits THIS problem; the starred optimum = best objective among
+feasible points (fallback to best-overall, flagged, when nothing fits). The
+response echoes the resolved budgets (`gates`); the panel states them, reports
+the optimum as T_j margin in degC at TDP, and the Pareto draws the pump-budget
+line (the answer = lowest point left of it). Objectives trimmed to R_jc /
+pump / DeltaP: COP dropped (Q fixed -> inverse pump power), mass demoted to a
+reported metric (as an objective it drives to the flimsiest geometry). The
+doctrine (s8) is thereby implemented as: minimize R_jc subject to the
+project's hydraulic budgets — the "balance knob" is the budget, not weights.
+
+**STL export — manifold surface nets.** TPMS sheet exports had O(10^5)
+non-manifold edges (thin sheet pinching through voxels: plain surface nets
+places one vertex per mixed cell). The mesher now places one vertex per
+connected inside-corner component per cell (max 4), stitches quads to the
+vertex owning each crossing's inside corner, biases multi-component vertices
+15% toward their own corners (kissing sheets can't coincide), and drops
+disconnected micro-shells (< 32 tris, sub-voxel dust). Measured on the full
+35x28 gyroid sheet (offline Node harness bundling the real exporter):
+467,122 -> ~5k non-manifold edges (-99%), 35,585 -> ~900 shells, 0 holes,
+0 flipped normals, ~10% smaller files; fin/pin exports byte-identical (they
+were always clean analytic shells). Residual edges are isolated saddle
+point-contacts (face-ambiguity class), auto-repaired by netfabb/slicers; a
+full manifold-dual-contouring pass is the (unneeded so far) upgrade path.
+The draft/standard/fine picker is always visible, disabled for fin/pin
+(exact meshes need no resolution).
+
+**UI quality-of-life.** (a) VS Code-style draggable splitters between
+left/centre/right columns and above the bottom panel; sizes persist in
+localStorage; double-click resets; CSS-variable driven so the responsive
+collapse still wins. (b) Type scale lifted (base 15.5px, body 13-14px,
+KPI hero 40px) and a neutral near-black theme (uppercase tracked chrome) for
+readability. (c) LAN hosting + launcher .bat + STL export were documented in
+README (earlier phases).
+
+## 31. Implicit-body equations — nTop replication
+
+The full engineer-facing recipe lives in **`NTOP_REPLICATION.md`** (kept as
+the single source of truth; the About tab carries a condensed version).
+Summary of what it pins down:
+
+- Frame/units (mm; x transverse 35, y flow 28, z height; base z in [0, 0.7]).
+- Fins: fin i solid where |x - i*p - A*sin(2*pi*y/lambda)| <= t/2, clipped to
+  |x| <= W/2 - margin, z in [t_base, t_base+H]; sine phase (cosine files are
+  the same body shifted lambda/4); n_max, edge-fin omission rule; centre-rib
+  box across the flow at y=0.
+- Pins: staggered/inline cylinder array (offset p/2 on odd rows), fully-inside
+  rule, same z band.
+- TPMS: the 8 level-set fields F(2*pi*p/c); sheet |F| <= iso, solid F <= iso,
+  iso = clamp(pi*w/c, 0.06, 1.2) (= nominal wall w where |grad F|=1, +-30%
+  local across a gyroid); grading law c(r) = c0*(1 + g*(clamp(r/R,0,1.5) -
+  0.5)) with c >= 0.3, R = min(W,L)/2; box/cylinder clips.
+- nTop route A (native walled-TPMS blocks, true-offset walls — preferred for
+  print CAD) vs route B (custom implicit, exact parity, needed for the five
+  exotic types); verification targets rho*, void, SA/V from the A0/a^2
+  coefficients (gyroid c=2.5/w=0.12: rho*=0.148, SA/V=2473 m2/m3).
