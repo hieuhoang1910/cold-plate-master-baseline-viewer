@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { sweep } from '../api'
 import { fmt } from '../format'
+import type { ProblemOpts } from '../design'
 import { OBJECTIVES, buildSweepRequest, objectiveOf, sweepVarsFor, varLabel, varUnit } from '../optimizer'
 import type { Basis, BaselineResult, DesignState, SavedDesign, SweepPoint, SweepResult } from '../types'
 import { Heatmap } from './Heatmap'
 import { Pareto } from './Pareto'
 
 export function OptimizerPanel({
-  design, basis, candidates, current, onLoadOptimum, onAddCandidates,
+  design, basis, opts, candidates, current, onLoadOptimum, onAddCandidates,
 }: {
   design: DesignState | null
   basis: Basis
+  opts: ProblemOpts
   candidates: BaselineResult[]
   current: BaselineResult | null
   onLoadOptimum: (p: Partial<DesignState>) => void
@@ -34,17 +36,19 @@ export function OptimizerPanel({
     if (!design) return
     setLoading(true)
     setErr(null)
-    sweep(buildSweepRequest(design, basis, xEff, yEff, objective))
+    sweep(buildSweepRequest(design, basis, xEff, yEff, objective, opts))
       .then(setResult)
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setLoading(false))
   }
 
-  // Re-sweep on open, variable/objective change, or when the design (family) changes.
+  // Re-sweep on open, variable/objective change, when the design (family)
+  // changes, or when the problem (coolant / targets / budgets) changes.
   useEffect(() => {
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xEff, yEff, objective, design?.design_id, design?.family, design?.tpms_type])
+  }, [xEff, yEff, objective, design?.design_id, design?.family, design?.tpms_type,
+    JSON.stringify(opts)])
 
   if (!design) {
     return <div className="muted" style={{ padding: 14 }}>The optimizer works on viewable designs (fin, gyroid, pin) — select one.</div>
@@ -94,6 +98,12 @@ export function OptimizerPanel({
         <button className="opt-run" onClick={run}>{loading ? 'sweeping…' : '↻ refresh'}</button>
         {o && (() => {
           const ob = objectiveOf(result!.objective)
+          // T_j margin in °C at TDP: (gate − R_jc) × Q. Engineers think in
+          // degrees of headroom, not mK/W.
+          const gate = result!.gates?.limit_R_jc_K_W
+          const Q = Number(basis.operating.heat_load_W ?? 450)
+          const marginC = (gate != null && o.R_jc_K_W != null)
+            ? (gate - o.R_jc_K_W) * Q : null
           return (
             <>
               <span className="opt-optval">
@@ -102,6 +112,10 @@ export function OptimizerPanel({
                 {varLabel(result!.y_var)} {fmt(o.y, 3)} {varUnit(result!.y_var)}
                 {result!.objective !== 'R_jc_K_W' && o.R_jc_K_W != null &&
                   <> · R_jc {fmt(o.R_jc_K_W * 1000, 2)} mK/W</>}
+                {marginC != null && (
+                  <> · T_j margin <b style={{ color: marginC >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
+                    {marginC >= 0 ? '+' : ''}{fmt(marginC, 1)} °C</b> @ {fmt(Q, 0)} W</>
+                )}
               </span>
               <button className="opt-load" onClick={loadOpt}>load optimum → sliders</button>
               <button className="opt-load" onClick={() => addTop(5)}
@@ -112,6 +126,20 @@ export function OptimizerPanel({
           )
         })()}
       </div>
+
+      {result?.gates && (
+        <div className="opt-note muted">
+          constrained by the project&apos;s budgets: R_jc ≤ {fmt((result.gates.limit_R_jc_K_W ?? 0) * 1000, 1)} mK/W
+          {' '}· ΔP ≤ {fmt((result.gates.limit_deltaP_Pa ?? 0) / 1000, 0)} kPa
+          {' '}· pump ≤ {fmt(result.gates.limit_pump_W ?? 0, 1)} W — ★ = best point that fits all three
+        </div>
+      )}
+      {o && !o.feasible && (
+        <div className="opt-note" style={{ color: 'var(--warn)' }}>
+          ⚠ no swept point meets the budgets — showing the best overall instead.
+          Relax the targets in the Design Studio or widen the sweep.
+        </div>
+      )}
 
       {err && <div className="error" style={{ padding: 8 }}>sweep error: {err}</div>}
 

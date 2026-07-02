@@ -620,25 +620,36 @@ def sweep_payload(payload: dict) -> dict:
     base_op = dict(base.get("operating") or {})
     stack_d = base.get("stack")
     Q = float(base_op.get("heat_load_W", 450.0))
+    # V2 problem context: coolant + targets (T_j gate, ΔP/pump budgets) ride
+    # along on every grid point so `feasible` means "fits THIS problem" and the
+    # optimum is the constrained optimum, not the unconstrained corner.
+    base_coolant = base.get("coolant")
+    base_targets = base.get("targets")
 
     def _apply(var, val, case_in, op_in):
         (op_in if var in _SWEEP_OP_VARS else case_in)[var] = val
 
     grid = []
+    gates_out = None
     for xv in xs:
         for yv in ys:
             case_in = dict(base_case)
             op_in = dict(base_op)
             _apply(x_name, xv, case_in, op_in)
             _apply(y_name, yv, case_in, op_in)
+            point = {
+                "case": case_in,
+                "stack": stack_d,
+                "operating": op_in,
+                "architecture": base.get("architecture"),
+                "relative_roughness": base.get("relative_roughness", 0.03),
+            }
+            if base_coolant is not None:
+                point["coolant"] = base_coolant
+            if base_targets is not None:
+                point["targets"] = base_targets
             try:
-                r = evaluate_payload({
-                    "case": case_in,
-                    "stack": stack_d,
-                    "operating": op_in,
-                    "architecture": base.get("architecture"),
-                    "relative_roughness": base.get("relative_roughness", 0.03),
-                })
+                r = evaluate_payload(point)
             except Exception:  # noqa: BLE001 — an invalid combo (e.g. pin pitch <= dia)
                 grid.append({
                     "x": xv, "y": yv, "objective": None,
@@ -651,6 +662,25 @@ def sweep_payload(payload: dict) -> dict:
             pump = r.get("pump_power_W")
             mass = _sweep_mass_g(r, stack_d)
             cop = (Q / pump) if pump else None
+            if gates_out is None:
+                # Echo the budgets each point was judged against (targets win,
+                # else operating overrides, else engine defaults). When flow is
+                # a sweep axis a T_j-derived gate varies slightly per point;
+                # this echo is the first point's — indicative for chart lines.
+                dflt = mbc.OperatingPoint()
+                tinfo = r.get("targets") or {}
+                tgt_in = base_targets or {}
+                gates_out = {
+                    "limit_R_jc_K_W": tinfo.get(
+                        "R_jc_gate_K_W",
+                        op_in.get("limit_R_jc_K_W", dflt.limit_R_jc_K_W)),
+                    "limit_deltaP_Pa": tgt_in.get(
+                        "limit_deltaP_Pa",
+                        op_in.get("limit_deltaP_Pa", dflt.limit_deltaP_Pa)),
+                    "limit_pump_W": tgt_in.get(
+                        "limit_pump_W",
+                        op_in.get("limit_pump_W", dflt.limit_pump_W)),
+                }
             metrics = {
                 "R_jc_K_W": r.get("R_jc_K_W"),
                 "R_th_conv_K_W": r.get("R_th_conv_K_W"),
@@ -707,7 +737,9 @@ def sweep_payload(payload: dict) -> dict:
         "pareto": pareto,
         "optimum": optimum,
         "r_jc_floor_K_W": floor,
-        "r_jc_gate_K_W": base_op.get("limit_R_jc_K_W"),
+        "r_jc_gate_K_W": (gates_out or {}).get("limit_R_jc_K_W",
+                                               base_op.get("limit_R_jc_K_W")),
+        "gates": gates_out,
     }
 
 

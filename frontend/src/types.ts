@@ -244,6 +244,13 @@ export interface SweepResult {
   optimum: SweepPoint | null
   r_jc_floor_K_W: number | null
   r_jc_gate_K_W: number | null
+  // V2 tier-2 — the budgets every grid point was judged against (from the
+  // active project's targets; engine defaults when none were sent).
+  gates?: {
+    limit_R_jc_K_W: number | null
+    limit_deltaP_Pa: number | null
+    limit_pump_W: number | null
+  } | null
 }
 
 // Editable live-design parameters (Phase 4 sliders; Phase 6 adds gyroid fields).

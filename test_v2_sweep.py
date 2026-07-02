@@ -66,6 +66,43 @@ check(len(invalid) > 0 and all(not g["feasible"] for g in invalid),
       f"invalid combos (dia>=pitch) marked INVALID + infeasible, sweep survives ({len(invalid)} pts)")
 check(rp["optimum"] is not None and rp["optimum"]["feasible"], "pin optimum is a valid feasible point")
 
+print("tier-2 — the problem (coolant + budgets) constrains the optimum")
+fbase = {"case": {"family": "wavy_fin", "process_route": "LMM", "fin_thickness_mm": 0.1,
+                  "channel_gap_mm": 0.15, "fin_height_mm": 5.5, "side_margin_mm": 0.9,
+                  "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5},
+         "stack": BASE_STACK, "operating": {"flow_lpm": 2.65}, "architecture": ARCH}
+AX = {"x": {"var": "channel_gap_mm", "min": 0.1, "max": 0.4, "steps": 6},
+      "y": {"var": "flow_lpm", "min": 1.0, "max": 4.0, "steps": 6}}
+
+r_free = server.sweep_payload({"base": fbase, **AX, "objective": "R_jc_K_W"})
+tight_pump = 0.5 * max(g["pump_power_W"] for g in r_free["grid"] if g["pump_power_W"])
+r_tight = server.sweep_payload({
+    "base": {**fbase, "targets": {"T_j_max_C": 100.0, "limit_pump_W": tight_pump}},
+    **AX, "objective": "R_jc_K_W"})
+og = r_tight["gates"]
+check(og is not None and abs(og["limit_pump_W"] - tight_pump) < 1e-12,
+      "sweep echoes the budgets it judged against (gates.limit_pump_W)")
+check(og is not None and og["limit_R_jc_K_W"] is not None,
+      "T_j target resolves to an R_jc gate in the echo")
+ot = r_tight["optimum"]
+check(ot is not None and ot["feasible"] and ot["pump_power_W"] <= tight_pump + 1e-12,
+      f"optimum respects the pump budget ({ot['pump_power_W']:.3f} <= {tight_pump:.3f} W)")
+of = r_free["optimum"]
+check(of is not None and of["pump_power_W"] > tight_pump,
+      "unconstrained optimum would have blown that budget (constraint bites)")
+
+r_glycol = server.sweep_payload({"base": {**fbase, "coolant": "pg25"}, **AX, "objective": "R_jc_K_W"})
+same_pt = lambda res: next(g for g in res["grid"] if g["R_jc_K_W"] is not None)  # noqa: E731
+check(abs(same_pt(r_glycol)["R_jc_K_W"] - same_pt(r_free)["R_jc_K_W"]) > 1e-6,
+      "coolant is forwarded into the sweep (pg25 shifts R_jc vs water)")
+
+r_imposs = server.sweep_payload({
+    "base": {**fbase, "targets": {"T_j_max_C": 100.0, "limit_deltaP_Pa": 1.0}},
+    **AX, "objective": "R_jc_K_W"})
+oi = r_imposs["optimum"]
+check(oi is not None and not oi["feasible"],
+      "impossible budget -> graceful fallback to best overall (flagged infeasible)")
+
 print("-" * 60)
 if _fails == 0:
     print(f"OK: {_passes} checks passed."); sys.exit(0)

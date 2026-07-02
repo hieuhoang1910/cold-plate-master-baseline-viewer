@@ -323,7 +323,8 @@ export default function App() {
             </div>
             {bottomTab === 'compare'
               ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
-              : <OptimizerPanel design={design} basis={catalog.basis} candidates={catalog.candidates}
+              : <OptimizerPanel design={design} basis={catalog.basis} opts={liveOpts}
+                  candidates={catalog.candidates}
                   current={kpiResult} onLoadOptimum={patchDesign} onAddCandidates={addCandidates} />}
           </div>
         </>

@@ -21,9 +21,13 @@ export function Pareto({
 
   const floor = result.r_jc_floor_K_W != null ? result.r_jc_floor_K_W * 1000 : null
   const gate = result.r_jc_gate_K_W != null ? result.r_jc_gate_K_W * 1000 : null
+  const pumpBudget = result.gates?.limit_pump_W ?? null
 
   const xlo = 0
-  const xhi = Math.max(...pumps) * 1.06 || 1
+  // keep the pump budget on-chart when it's near the cloud (not when it's
+  // far right of everything — that would crush the data into a sliver)
+  const xData = Math.max(...pumps) || 1
+  const xhi = (pumpBudget != null && pumpBudget <= xData * 2 ? Math.max(xData, pumpBudget) : xData) * 1.06
   // extend the y-range down to the floor so the "can't beat this" line shows.
   const ylo = Math.min(...rjcs, floor ?? Infinity) * 0.985
   const yhi = Math.max(...rjcs, gate ?? -Infinity) * 1.015
@@ -53,6 +57,13 @@ export function Pareto({
         <g>
           <line x1={ml} y1={Y(gate)} x2={ml + pw} y2={Y(gate)} stroke="#e3b341" strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
           <text x={ml + pw} y={Y(gate) - 3} textAnchor="end" fontSize="8.5" fill="#e3b341">gate {fmt(gate, 1)}</text>
+        </g>
+      )}
+      {/* pump budget: the answer is the lowest point LEFT of this line */}
+      {pumpBudget != null && pumpBudget > xlo && pumpBudget <= xhi && (
+        <g>
+          <line x1={X(pumpBudget)} y1={mt} x2={X(pumpBudget)} y2={mt + ph} stroke="#f85149" strokeWidth={1} strokeDasharray="4 3" opacity={0.65} />
+          <text x={X(pumpBudget) - 3} y={mt + 8} textAnchor="end" fontSize="8.5" fill="#f85149">pump budget {fmt(pumpBudget, 1)} W</text>
         </g>
       )}
 

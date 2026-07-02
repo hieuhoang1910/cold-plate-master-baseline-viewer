@@ -1,4 +1,4 @@
-import { caseFromDesign, isGyroid, isPinStructure, routeFloor } from './design'
+import { evalPayload, isGyroid, isPinStructure, routeFloor, type ProblemOpts } from './design'
 import type { Basis, DesignState } from './types'
 
 export interface SweepVar { key: string; label: string }
@@ -30,14 +30,16 @@ export function sweepVarsFor(d: DesignState | null): SweepVar[] {
   return SWEEP_VARS.filter((v) => keys.includes(v.key))
 }
 
-// What to minimise/maximise across the grid (tier-1 optimizer objectives).
+// What to minimise across the grid, always subject to the problem's budgets
+// (T_j gate + ΔP + pump): the optimum is the best FEASIBLE point. Mass and COP
+// were dropped as objectives on review — with Q fixed, COP is just inverted
+// pump power, and minimising mass drives to the flimsiest geometry; both stay
+// as reported per-point metrics.
 export interface Objective { key: string; label: string; short: string; unit: string; dir: 'min' | 'max'; scale: number; digits: number }
 export const OBJECTIVES: Objective[] = [
-  { key: 'R_jc_K_W', label: 'R_jc (thermal)', short: 'rjc', unit: 'mK/W', dir: 'min', scale: 1000, digits: 2 },
+  { key: 'R_jc_K_W', label: 'R_jc (thermal margin)', short: 'rjc', unit: 'mK/W', dir: 'min', scale: 1000, digits: 2 },
   { key: 'pump_power_W', label: 'pump power', short: 'pump', unit: 'W', dir: 'min', scale: 1, digits: 3 },
   { key: 'DeltaP_Pa', label: 'pressure drop', short: 'dp', unit: 'kPa', dir: 'min', scale: 1e-3, digits: 2 },
-  { key: 'mass_g', label: 'mass (Cu)', short: 'mass', unit: 'g', dir: 'min', scale: 1, digits: 1 },
-  { key: 'cop', label: 'COP (Q/pump)', short: 'cop', unit: '', dir: 'max', scale: 1, digits: 0 },
 ]
 export function objectiveOf(key: string): Objective {
   return OBJECTIVES.find((o) => o.key === key) ?? OBJECTIVES[0]
@@ -73,17 +75,14 @@ export function varRange(key: string, design: DesignState): { min: number; max: 
 
 export function buildSweepRequest(
   design: DesignState, basis: Basis, xVar: string, yVar: string,
-  objective = 'R_jc_K_W', steps = 24,
+  objective = 'R_jc_K_W', opts: ProblemOpts = {}, steps = 24,
 ) {
   const rx = varRange(xVar, design)
   const ry = varRange(yVar, design)
   return {
-    base: {
-      case: caseFromDesign(design),       // family-aware (fin / gyroid / pin)
-      stack: basis.stack,
-      operating: { ...basis.operating, flow_lpm: design.flow_lpm },
-      architecture: basis.architecture,
-    },
+    // Same family-aware case + coolant + targets as the live KPI evaluate, so
+    // "feasible" in the sweep means "fits the active project's problem".
+    base: evalPayload(design, basis, opts),
     x: { var: xVar, min: rx.min, max: rx.max, steps },
     y: { var: yVar, min: ry.min, max: ry.max, steps },
     objective,
