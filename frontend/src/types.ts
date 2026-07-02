@@ -141,6 +141,61 @@ export interface Catalog {
   cases: DesignCase[]
   basis: Basis
   gates: Gates
+  // V2.2 — present when the catalog was computed for a project (POST /api/catalog)
+  project?: { id: string; name: string; builtin: boolean; families?: string[] }
+  coolant?: CoolantInfo
+  targets?: TargetsInfo
+}
+
+// V2.2 — a Project scopes the whole app to a user-defined problem (spec §19).
+export interface Project {
+  id?: string
+  name: string
+  schema_version?: number
+  builtin?: boolean
+  description?: string
+  problem: {
+    die_width_mm: number
+    die_length_mm: number
+    core_width_mm: number
+    core_length_mm: number
+    core_height_mm: number
+    base_thickness_mm: number
+    k_solid_W_mK: number
+    tim_areal_Kcm2_W: number
+    coolant: string
+  }
+  operating: {
+    heat_load_W: number
+    margin_heat_load_W?: number
+    flow_lpm: number
+    T_inlet_C: number
+  }
+  targets: {
+    T_j_max_C?: number
+    R_jc_gate_override?: number | null
+    limit_deltaP_Pa?: number
+    limit_pump_W?: number
+  }
+  architecture: {
+    name?: string
+    n_parallel_paths?: number
+    path_length_mm?: number
+    header_K_total?: number
+    flow_uniformity?: number
+  }
+  families?: string[]
+  physical_footprint?: { width_mm: number; length_mm: number }
+  created?: string | null
+  modified?: string | null
+}
+
+export interface ProjectSummary {
+  id: string
+  name: string
+  builtin: boolean
+  created: string | null
+  modified: string | null
 }
 
 // Optimizer sweep (Phase 5).

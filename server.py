@@ -42,6 +42,7 @@ import mimetypes
 import socket
 import sys
 from dataclasses import asdict, fields, replace
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -60,6 +61,7 @@ if str(ENGINE) not in sys.path:
 import master_baseline_calculator as mbc             # noqa: E402  (path set above)
 import coolants                                       # noqa: E402  (V2 fluid library)
 import targets                                        # noqa: E402  (V2 targets->gate)
+import projects                                       # noqa: E402  (V2.2 project store)
 
 from cold_plate_v6.architecture import FlowArchitecture as V6Arch   # noqa: E402
 from cold_plate_v6.geometry import Geometry                          # noqa: E402
@@ -97,6 +99,38 @@ DIE_COVERAGE_ARCH = {
     "flow_uniformity": 1.0,
 }
 PHYSICAL_FOOTPRINT = {"width_mm": 28.0, "length_mm": 35.0}
+
+# ---------------------------------------------------------------------------
+# V2.2 projects: the built-in GB202 preset is defined FROM the die-coverage
+# constants above (single source, no drift), and its R_jc gate is pinned to the
+# historical validated 0.078 K/W so `POST /api/catalog {project: gb202}`
+# reproduces the V1 `GET /api/catalog` view exactly. User projects persist under
+# 07_WebApp/projects/ (server-local, LAN-shared).
+# ---------------------------------------------------------------------------
+GB202_PROJECT = {
+    "id": "gb202-gpu",
+    "name": "GB202 GPU cold plate",
+    "schema_version": projects.SCHEMA_VERSION,
+    "builtin": True,
+    "description": "The validated V1 baseline: RTX 5090-class GB202 die, water, "
+                   "die-coverage core. Reproduces the master baseline view.",
+    "problem": {**DIE_COVERAGE_STACK, "coolant": "water"},
+    "operating": {"heat_load_W": 450.0, "margin_heat_load_W": 575.0,
+                  "flow_lpm": 2.65, "T_inlet_C": 25.0},
+    "targets": {"T_j_max_C": 100.0, "R_jc_gate_override": 0.078,
+                "limit_deltaP_Pa": 50000.0, "limit_pump_W": 5.0},
+    "architecture": dict(DIE_COVERAGE_ARCH),
+    "families": ["wavy_fin", "straight_fin", "gyroid_tpms", "pin_fin"],
+    "physical_footprint": PHYSICAL_FOOTPRINT,
+}
+
+PROJECTS_DIR = ROOT / "projects"
+STORE = projects.ProjectStore(PROJECTS_DIR, builtins=[GB202_PROJECT])
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
 
 # Bind to all interfaces so colleagues on the same LAN/WiFi can open the app
 # via this machine's LAN IP (printed at startup). Use "127.0.0.1" to restrict
@@ -156,21 +190,20 @@ def _linspace(lo: float, hi: float, n: int):
 # ---------------------------------------------------------------------------
 # Business logic (pure functions — tested directly by test_api_parity.py)
 # ---------------------------------------------------------------------------
-def catalog_payload() -> dict:
-    """Parameter registry + candidates + geometry inputs + gate limits.
-
-    Candidates are (re)computed at the v6 die-coverage footprint so the whole app
-    is consistent with the design it targets. `cases` and `basis` carry the input
-    geometry (the results JSON has only outputs) so the 3D viewer can reconstruct
-    each design's implicit body.
+def _build_catalog(stack_d: dict, arch_d: dict, op_d: dict, *,
+                   coolant=None, targets_info=None, project=None) -> dict:
+    """Parameter registry + candidates + geometry inputs + gate limits, computed
+    against an explicit basis. Candidates are (re)scored with `op_d` (which may
+    carry coolant fluid properties and the project's gate), so this one builder
+    serves both the GB202 default (GET) and project rescoring (POST).
     """
     params = json.loads(PARAMS_JSON.read_text(encoding="utf-8"))
     cases_cfg = json.loads(CASES_JSON.read_text(encoding="utf-8"))
     cases = cases_cfg.get("cases", [])
 
-    stack = mbc.StackBasis(**_filtered(DIE_COVERAGE_STACK, _STACK_FIELDS))
-    arch = mbc.FlowArchitecture(**_filtered(DIE_COVERAGE_ARCH, _ARCH_FIELDS))
-    op = mbc.OperatingPoint(**_filtered(cases_cfg.get("operating"), _OP_FIELDS))
+    stack = mbc.StackBasis(**_filtered(stack_d, _STACK_FIELDS))
+    arch = mbc.FlowArchitecture(**_filtered(arch_d, _ARCH_FIELDS))
+    op = mbc.OperatingPoint(**_filtered(op_d, _OP_FIELDS))
 
     candidates = []
     for c in cases:
@@ -182,18 +215,74 @@ def catalog_payload() -> dict:
         "limit_deltaP_Pa": op.limit_deltaP_Pa,
         "limit_pump_W": op.limit_pump_W,
     }
-    return {
+    out = {
         "design_parameters": params,
         "candidates": candidates,
         "cases": cases,
-        "basis": {
-            "stack": DIE_COVERAGE_STACK,
-            "operating": cases_cfg.get("operating", {}),
-            "architecture": DIE_COVERAGE_ARCH,
-        },
+        "basis": {"stack": stack_d, "operating": op_d, "architecture": arch_d},
         "physical_footprint": PHYSICAL_FOOTPRINT,
         "gates": gates,
     }
+    if coolant is not None:
+        out["coolant"] = _sanitize(coolant)
+    if targets_info is not None:
+        out["targets"] = _sanitize(targets_info)
+    if project is not None:
+        out["project"] = {"id": project.get("id"), "name": project.get("name"),
+                          "builtin": bool(project.get("builtin")),
+                          "families": project.get("families")}
+    return out
+
+
+def catalog_payload() -> dict:
+    """GET /api/catalog — the GB202 die-coverage default (V1 view, unchanged).
+
+    `cases` and `basis` carry the input geometry (the results JSON has only
+    outputs) so the 3D viewer can reconstruct each design's implicit body.
+    """
+    cases_cfg = json.loads(CASES_JSON.read_text(encoding="utf-8"))
+    return _build_catalog(DIE_COVERAGE_STACK, DIE_COVERAGE_ARCH,
+                          cases_cfg.get("operating", {}))
+
+
+def project_catalog_payload(payload: dict) -> dict:
+    """POST /api/catalog — the catalog rescored against a project.
+
+    payload = { "project": <full project object> | "<project id>" }. Resolves
+    the project (coolant + derived gate) and re-scores every candidate against
+    it, so a stricter T_j or a glycol coolant flips PASS/FAIL app-wide.
+    """
+    proj = payload.get("project")
+    if isinstance(proj, str):
+        proj = STORE.load(proj)
+    if not proj:
+        raise ValueError("project not found (pass a full project object or a known id)")
+    r = projects.resolve_project(proj)
+    return _build_catalog(r["stack"], r["architecture"], r["operating"],
+                          coolant=r["coolant"], targets_info=r["targets"], project=proj)
+
+
+# --- V2.2 project store route helpers --------------------------------------
+def projects_list_payload() -> dict:
+    return {"projects": STORE.list()}
+
+
+def project_get_payload(project_id: str) -> dict:
+    proj = STORE.load(project_id)
+    if proj is None:
+        raise KeyError(project_id)
+    return proj
+
+
+def project_save_payload(payload: dict) -> dict:
+    proj = payload.get("project") if "project" in payload else payload
+    stored = STORE.save(proj, _now_iso())
+    return {"saved": True, "project": stored}
+
+
+def project_delete_payload(project_id: str) -> dict:
+    existed = STORE.delete(project_id)
+    return {"deleted": existed, "id": project_id}
 
 
 # Geometry-family pedigree for the wizard (spec §19C). Kept here (not in the
@@ -478,12 +567,18 @@ _ROUTES_GET = {
     "/api/health": lambda: {"status": "ok"},
     "/api/catalog": catalog_payload,
     "/api/schema": schema_payload,
+    "/api/projects": projects_list_payload,
 }
 _ROUTES_POST = {
     "/api/evaluate": evaluate_payload,
     "/api/solve": solve_payload,
     "/api/sweep": sweep_payload,
+    "/api/catalog": project_catalog_payload,   # V2.2: rescore against a project
+    "/api/projects": project_save_payload,      # V2.2: save a user project
 }
+
+# Prefix for the per-id project routes: GET/DELETE /api/projects/<id>
+_PROJECT_ID_PREFIX = "/api/projects/"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -492,7 +587,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _send(self, code, body: bytes, ctype: str):
@@ -520,10 +615,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001 — surface to the UI
                 self._json(500, {"error": str(exc)})
             return
+        # GET /api/projects/<id> — one project (built-in or saved)
+        if path.startswith(_PROJECT_ID_PREFIX):
+            pid = path[len(_PROJECT_ID_PREFIX):]
+            try:
+                self._json(200, project_get_payload(pid))
+            except KeyError:
+                self._json(404, {"error": f"project not found: {pid}"})
+            except Exception as exc:  # noqa: BLE001
+                self._json(500, {"error": str(exc)})
+            return
         if path.startswith("/api/"):
             self._json(404, {"error": f"not found: {path}"})
             return
         self._serve_static(path)
+
+    def do_DELETE(self):  # noqa: N802 — DELETE /api/projects/<id>
+        path = self.path.split("?", 1)[0]
+        if path.startswith(_PROJECT_ID_PREFIX):
+            pid = path[len(_PROJECT_ID_PREFIX):]
+            try:
+                self._json(200, project_delete_payload(pid))
+            except Exception as exc:  # noqa: BLE001
+                self._json(400, {"error": str(exc)})
+            return
+        self._json(404, {"error": f"not found: {path}"})
 
     def _serve_static(self, path):
         """Serve the built frontend (production single-origin) with SPA fallback."""
@@ -568,8 +684,8 @@ def main() -> int:
     print("=" * 64)
     print(f"  This machine:  http://127.0.0.1:{PORT}")
     print(f"  Same LAN/WiFi: http://{_lan_ip()}:{PORT}")
-    print("  GET  /api/health   /api/catalog")
-    print("  POST /api/evaluate /api/solve /api/sweep")
+    print("  GET  /api/health /api/catalog /api/schema /api/projects[/<id>]")
+    print("  POST /api/evaluate /api/solve /api/sweep /api/catalog /api/projects")
     print("  Ctrl+C to stop.")
     try:
         server.serve_forever()

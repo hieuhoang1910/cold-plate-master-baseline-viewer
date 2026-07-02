@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { evaluate, getCatalog, getSchema } from './api'
+import { evaluate, getProject, getProjects, getSchema, projectCatalog, saveProject, deleteProject } from './api'
 import { milliKW } from './format'
-import { evalPayload, initDesign, isViewable } from './design'
-import type { AppSchema, BaselineResult, Catalog, DesignState } from './types'
+import { evalPayload, initDesign, isViewable, type ProblemOpts } from './design'
+import type { AppSchema, BaselineResult, Catalog, DesignState, Project, ProjectSummary } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
 import { DesignControls } from './components/DesignControls'
 import { ProblemControls } from './components/ProblemControls'
+import { DesignStudio } from './components/DesignStudio'
 import { OptimizerPanel } from './components/OptimizerPanel'
 import { About } from './components/About'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
+const DEFAULT_PROJECT_ID = 'gb202-gpu'
 
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
@@ -21,64 +23,88 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>(HERO_ID)
 
-  // V2.1 — problem knobs (coolant + max junction temp) shared across the app.
-  const [coolant, setCoolant] = useState<string>('water')
-  const [tjMaxC, setTjMaxC] = useState<number>(100)
+  // V2.2 — the active project scopes the whole app (basis, gates, coolant).
+  const [activeProject, setActiveProject] = useState<Project | null>(null)
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [dirty, setDirty] = useState(false)
+  const [showStudio, setShowStudio] = useState(false)
 
-  // Live editable design (fin families only) + its recomputed result.
+  // Live editable design (fin/gyroid families) + its recomputed result.
   const [design, setDesign] = useState<DesignState | null>(null)
   const [live, setLive] = useState<BaselineResult | null>(null)
   const [evaluating, setEvaluating] = useState(false)
   const [bottomTab, setBottomTab] = useState<'compare' | 'optimize'>('compare')
   const [showAbout, setShowAbout] = useState(false)
 
+  // Boot: schema + project list + the default project.
   useEffect(() => {
-    getCatalog()
-      .then((c) => {
-        setCatalog(c)
-        if (!c.candidates.some((x) => x.design_id === HERO_ID)) {
-          setSelectedId(c.candidates[0]?.design_id ?? '')
-        }
-      })
+    getSchema().then(setSchema).catch(() => { /* optional */ })
+    getProjects().then((r) => setProjects(r.projects)).catch(() => { /* optional */ })
+    getProject(DEFAULT_PROJECT_ID)
+      .then((p) => { setActiveProject(p); setDirty(false) })
       .catch((e) => setError(String(e.message ?? e)))
-    getSchema()
-      .then((s) => {
-        setSchema(s)
-        const def = s.targets?.T_j_max_C?.default
-        if (def != null) setTjMaxC(def)
-      })
-      .catch(() => { /* schema is optional; V1 UI still works without it */ })
   }, [])
+
+  // Whenever the active project changes, re-resolve the catalog (candidates
+  // rescored against its coolant + gate). Debounced so live knob-twiddling in
+  // ProblemControls doesn't spam the API.
+  useEffect(() => {
+    if (!activeProject) return
+    const h = setTimeout(() => {
+      projectCatalog(activeProject)
+        .then((cat) => {
+          setCatalog(cat)
+          setSelectedId((prev) =>
+            cat.candidates.some((c) => c.design_id === prev)
+              ? prev
+              : (cat.candidates.find((c) => c.design_id === HERO_ID)?.design_id
+                 ?? cat.candidates[0]?.design_id ?? ''))
+        })
+        .catch((e) => setError(String(e.message ?? e)))
+    }, 150)
+    return () => clearTimeout(h)
+  }, [activeProject])
 
   const selected = useMemo(
     () => catalog?.candidates.find((c) => c.design_id === selectedId) ?? null,
     [catalog, selectedId],
   )
 
-  // Seed the editable design when the selected candidate changes (fin families).
+  // Seed the editable design when the selected candidate changes.
   useEffect(() => {
     if (!catalog) return
     const c = catalog.cases.find((x) => x.design_id === selectedId)
-    if (c && isViewable(c.family)) {
-      setDesign(initDesign(c, catalog.basis))
-    } else {
-      setDesign(null)
-    }
+    setDesign(c && isViewable(c.family) ? initDesign(c, catalog.basis) : null)
     setLive(null)
   }, [catalog, selectedId])
 
-  // Debounced live recompute as the design (or problem knobs) change.
+  // The problem knobs the live design inherits from the active project.
+  const liveOpts = useMemo((): ProblemOpts => {
+    const p = activeProject
+    if (!p) return {}
+    const t = p.targets ?? {}
+    const opts: ProblemOpts = {
+      coolant: p.problem?.coolant,
+      limitDeltaPPa: t.limit_deltaP_Pa,
+      limitPumpW: t.limit_pump_W,
+    }
+    if (t.R_jc_gate_override != null) opts.rjcGateOverride = t.R_jc_gate_override
+    else if (t.T_j_max_C != null) opts.tjMaxC = t.T_j_max_C
+    return opts
+  }, [activeProject])
+
+  // Debounced live recompute as the design / project change.
   useEffect(() => {
     if (!design || !catalog) return
     const h = setTimeout(() => {
       setEvaluating(true)
-      evaluate(evalPayload(design, catalog.basis, { coolant, tjMaxC }))
+      evaluate(evalPayload(design, catalog.basis, liveOpts))
         .then(setLive)
         .catch(() => {})
         .finally(() => setEvaluating(false))
     }, 150)
     return () => clearTimeout(h)
-  }, [design, catalog, coolant, tjMaxC])
+  }, [design, catalog, liveOpts])
 
   const geom = useMemo(
     () => (design && catalog ? geomFromCase(design, catalog.basis) : null),
@@ -93,7 +119,34 @@ export default function App() {
     if (c && isViewable(c.family)) setDesign(initDesign(c, catalog.basis))
   }
 
-  // KPI panel + viewer follow the live design when editing a fin family.
+  // --- Project actions -----------------------------------------------------
+  const patchProject = (upd: (p: Project) => Project) =>
+    setActiveProject((p) => (p ? upd(p) : p))
+  const setCoolant = (c: string) => { patchProject((p) => ({ ...p, problem: { ...p.problem, coolant: c } })); setDirty(true) }
+  // Editing the target activates gate derivation (drops any pinned override).
+  const setTjMax = (v: number) => { patchProject((p) => ({ ...p, targets: { ...p.targets, T_j_max_C: v, R_jc_gate_override: null } })); setDirty(true) }
+
+  const loadProject = (id: string) => {
+    getProject(id).then((p) => { setActiveProject(p); setDirty(false); setShowStudio(false) })
+      .catch((e) => setError(String(e.message ?? e)))
+  }
+  const applyProjectDraft = (p: Project) => { setActiveProject(p); setDirty(true); setShowStudio(false) }
+  const saveProjectDraft = async (p: Project) => {
+    const { project: stored } = await saveProject(p)
+    const r = await getProjects(); setProjects(r.projects)
+    setActiveProject(stored); setDirty(false); setShowStudio(false)
+  }
+  const removeProject = (id: string) => {
+    deleteProject(id).then(async () => {
+      const r = await getProjects(); setProjects(r.projects)
+      loadProject(DEFAULT_PROJECT_ID)
+    }).catch((e) => setError(String(e.message ?? e)))
+  }
+
+  const coolant = activeProject?.problem?.coolant ?? 'water'
+  const tjMaxC = activeProject?.targets?.T_j_max_C ?? 100
+
+  // KPI panel + viewer follow the live design when editing.
   const kpiResult = design ? (live ?? selected) : selected
 
   return (
@@ -102,17 +155,28 @@ export default function App() {
         <h1>Cold Plate — Master Baseline Viewer</h1>
         <span className="sub">internal engineering review · live from the validated solvers</span>
         <span className="spacer" />
+        {activeProject && (
+          <button className="proj-chip" onClick={() => setShowStudio(true)}
+            title="Open the Design Studio to edit or switch the problem">
+            ◆ {activeProject.name}{activeProject.builtin ? '' : ''}{dirty ? ' *' : ''}
+          </button>
+        )}
         {error
           ? <span className="api-bad">API error: {error}</span>
           : catalog
-            ? <span className="api-ok">● Solver connected · {catalog.candidates.length} candidates</span>
+            ? <span className="api-ok">● {catalog.candidates.length} candidates</span>
             : <span className="sub">connecting…</span>}
         <button className="about-btn" onClick={() => setShowAbout(true)}>About</button>
       </header>
 
       {showAbout && <About onClose={() => setShowAbout(false)} />}
+      {showStudio && schema && activeProject && (
+        <DesignStudio schema={schema} current={activeProject} projects={projects}
+          onApply={applyProjectDraft} onSave={saveProjectDraft}
+          onLoad={loadProject} onDelete={removeProject} onClose={() => setShowStudio(false)} />
+      )}
 
-      {!catalog && !error && <div className="center-msg">Loading catalog…</div>}
+      {!catalog && !error && <div className="center-msg">Loading…</div>}
 
       {error && (
         <div className="center-msg">
@@ -126,7 +190,7 @@ export default function App() {
       {catalog && (
         <>
           <div className="main">
-            {/* LEFT: candidate selector + live design sliders */}
+            {/* LEFT: candidate selector + problem knobs + live design sliders */}
             <div className="col">
               <div className="card">
                 <h2>Candidates</h2>
@@ -151,7 +215,7 @@ export default function App() {
 
               {schema && (
                 <ProblemControls schema={schema} coolant={coolant} tjMaxC={tjMaxC}
-                  live={design ? live : null} onCoolant={setCoolant} onTjMax={setTjMaxC} />
+                  live={design ? live : null} onCoolant={setCoolant} onTjMax={setTjMax} />
               )}
 
               {design

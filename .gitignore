@@ -26,3 +26,7 @@ Thumbs.db
 
 # Local user snapshots (spec §15 Q4 — server-side save is deferred)
 snapshots/
+
+# Server-local user projects (V2.2 — LAN-shared via the API, not git-tracked;
+# the GB202 built-in preset lives in code and is always available)
+projects/

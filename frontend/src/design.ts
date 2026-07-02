@@ -84,11 +84,15 @@ export function familyPatch(newFamily: string, design: DesignState): Partial<Des
   return { family: newFamily } // gyroid — fields already populated
 }
 
-// V2.1 — the problem knobs the user sets outside the geometry (coolant + target
-// junction temperature). Optional so V1 call sites keep working unchanged.
+// V2.1/2.2 — the problem knobs set outside the geometry (coolant + gate). All
+// optional so V1 call sites keep working unchanged. `rjcGateOverride` pins the
+// gate directly (audit / built-in preset); otherwise `tjMaxC` derives it.
 export interface ProblemOpts {
   coolant?: string
   tjMaxC?: number
+  rjcGateOverride?: number | null
+  limitDeltaPPa?: number
+  limitPumpW?: number
 }
 
 /** Build the /api/evaluate request body — family-aware so fin params don't leak
@@ -117,7 +121,12 @@ export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}
     architecture: basis.architecture,
   }
   if (opts.coolant) payload.coolant = opts.coolant
-  if (opts.tjMaxC != null) payload.targets = { T_j_max_C: opts.tjMaxC }
+  const t: Record<string, unknown> = {}
+  if (opts.rjcGateOverride != null) t.R_jc_gate_K_W = opts.rjcGateOverride
+  else if (opts.tjMaxC != null) t.T_j_max_C = opts.tjMaxC
+  if (opts.limitDeltaPPa != null) t.limit_deltaP_Pa = opts.limitDeltaPPa
+  if (opts.limitPumpW != null) t.limit_pump_W = opts.limitPumpW
+  if (Object.keys(t).length) payload.targets = t
   return payload
 }
 

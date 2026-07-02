@@ -130,11 +130,23 @@ single process runs the whole app — ready to host on any Python-capable host.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | liveness probe |
-| GET | `/api/catalog` | parameter registry + candidates + gate limits |
+| GET | `/api/catalog` | parameter registry + candidates + gate limits (GB202 default view) |
 | GET | `/api/schema` | **V2** wizard schema: coolant presets, target defaults/bounds, family pedigree, layouts |
+| GET | `/api/projects` | **V2.2** list projects (built-in GB202 + saved) |
+| GET | `/api/projects/<id>` | **V2.2** one project (built-in or saved) |
+| POST | `/api/catalog` | **V2.2** catalog rescored against a project (`{project}`) |
+| POST | `/api/projects` | **V2.2** save a user project (`{project}`) |
+| DELETE | `/api/projects/<id>` | **V2.2** delete a saved project |
 | POST | `/api/evaluate` | master `evaluate_case()` for arbitrary parameters (all families) |
 | POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
 | POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
+
+**V2.2 projects (Design Studio).** A *project* scopes the app to a problem
+(die + envelope, operating point, coolant, target junction temp → R_jc gate,
+architecture, families). The built-in **GB202 GPU** preset reproduces the V1
+catalog view exactly (gate pinned to the historical 0.078 K/W). User projects
+persist under `07_WebApp/projects/` (server-local, LAN-shared, git-ignored).
+Physics is `engine/projects.py` (webapp-native), reusing `coolants` + `targets`.
 
 **V2.1 `/api/evaluate` extras (additive, optional).** Add `"coolant"` (a preset
 name like `"water"`/`"pg50"`, or `{name, rho_kg_m3?, ...}` for custom) to swap
