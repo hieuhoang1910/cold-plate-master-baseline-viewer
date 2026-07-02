@@ -87,7 +87,8 @@ select {
 select:focus, select:hover { outline: none; border-color: var(--accent); }
 
 /* ---- App shell ---- */
-.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; }
+/* Rows: header · main (fills) · row-splitter · bottom (height = --bottom-h). */
+.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; height: 100vh; }
 
 header {
   padding: 14px 24px; border-bottom: 1px solid var(--line);
@@ -106,10 +107,16 @@ header .api-ok { color: var(--pass); font-size: 12px; font-weight: 550; }
 header .api-bad { color: var(--fail); font-size: 12px; }
 
 .main {
-  display: grid; grid-template-columns: 268px minmax(0, 1fr) 384px;
+  display: grid;
+  /* left · col-splitter · centre (fills) · col-splitter · right — widths are
+     drag-driven CSS vars (set inline) so the media query below can still win. */
+  grid-template-columns: var(--left, 268px) 6px minmax(0, 1fr) 6px var(--right, 384px);
   gap: 16px; padding: 16px 20px; min-height: 0; overflow: hidden;
 }
-@media (max-width: 1100px) { .main { grid-template-columns: 230px 1fr; } .center { display: none; } }
+@media (max-width: 1100px) {
+  .main { grid-template-columns: var(--left, 230px) minmax(0, 1fr); }
+  .center, .main > .splitter.col { display: none; }
+}
 
 .col { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 2px; }
 
@@ -273,7 +280,25 @@ header .api-bad { color: var(--fail); font-size: 12px; }
 .viewer-ph .big { font-size: 15px; color: var(--text); font-weight: 600; letter-spacing: -0.01em; }
 
 /* ---- Bottom panel (tabs: comparison / optimizer) ---- */
-.bottom { border-top: 1px solid var(--line); padding: 10px 20px 16px; overflow: auto; max-height: 48vh; }
+.bottom { border-top: 1px solid var(--line); padding: 10px 20px 16px; overflow: auto; height: var(--bottom-h, 300px); }
+
+/* ---- Resizable panel splitters (VS Code–style) ---- */
+.splitter { position: relative; z-index: 5; touch-action: none; }
+.splitter::before {
+  content: ''; position: absolute; background: var(--line);
+  border-radius: 2px; transition: background 0.12s ease;
+}
+.splitter.col { cursor: col-resize; }
+.splitter.col::before { top: 10px; bottom: 10px; left: 50%; width: 2px; transform: translateX(-50%); }
+.splitter.row { cursor: row-resize; height: 9px; margin-top: -5px; }
+.splitter.row::before { left: 20px; right: 20px; top: 50%; height: 2px; transform: translateY(-50%); }
+.splitter:hover::before { background: var(--accent); }
+body.resizing-col .splitter.col::before, body.resizing-row .splitter.row::before { background: var(--accent); }
+
+/* While dragging, keep the resize cursor everywhere and stop text/canvas from
+   hijacking the pointer or selecting content. */
+body.resizing-col, body.resizing-col * { cursor: col-resize !important; -webkit-user-select: none !important; user-select: none !important; }
+body.resizing-row, body.resizing-row * { cursor: row-resize !important; -webkit-user-select: none !important; user-select: none !important; }
 .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .tabs button {
   background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent;

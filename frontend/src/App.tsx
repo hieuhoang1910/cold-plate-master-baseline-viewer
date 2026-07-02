@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { evaluate, getProject, getProjects, getSchema, projectCatalog, saveProject, deleteProject } from './api'
 import { milliKW } from './format'
 import { evalPayload, initDesign, isViewable, type ProblemOpts } from './design'
@@ -13,6 +13,8 @@ import { DesignStudio } from './components/DesignStudio'
 import { OptimizerPanel } from './components/OptimizerPanel'
 import { About } from './components/About'
 import { Report } from './components/Report'
+import { Splitter } from './components/Splitter'
+import { usePanels } from './panels'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
@@ -191,8 +193,13 @@ export default function App() {
   // KPI panel + viewer follow the live design when editing.
   const kpiResult = design ? (live ?? selected) : selected
 
+  // Resizable panels (VS Code–style drag handles); persisted to localStorage.
+  const panels = usePanels()
+  const appVars = { '--bottom-h': `${panels.sizes.bottom}px` } as CSSProperties
+  const mainVars = { '--left': `${panels.sizes.left}px`, '--right': `${panels.sizes.right}px` } as CSSProperties
+
   return (
-    <div className="app">
+    <div className="app" style={appVars}>
       <header>
         <h1>Cold Plate — Master Baseline Viewer</h1>
         <span className="sub">internal engineering review · live from the validated solvers</span>
@@ -236,7 +243,7 @@ export default function App() {
 
       {catalog && (
         <>
-          <div className="main">
+          <div className="main" style={mainVars}>
             {/* LEFT: candidate selector + problem knobs + live design sliders */}
             <div className="col">
               <div className="card">
@@ -287,12 +294,16 @@ export default function App() {
               )}
             </div>
 
+            <Splitter dir="col" onResize={panels.resizeLeft} onReset={panels.resetLeft} />
+
             {/* CENTER: implicit-body viewer (fins) or placeholder (gyroid/pin) */}
             <div className="center col">
               {geom && design
                 ? <SdfViewer g={geom} designId={design.design_id} family={design.family} />
                 : <ViewerPlaceholder r={selected} />}
             </div>
+
+            <Splitter dir="col" onResize={panels.resizeRight} onReset={panels.resetRight} />
 
             {/* RIGHT: KPI panel (follows the live design when tuning) */}
             <div className="col">
@@ -301,6 +312,8 @@ export default function App() {
                 : <div className="card muted">Select a candidate.</div>}
             </div>
           </div>
+
+          <Splitter dir="row" onResize={panels.resizeBottom} onReset={panels.resetBottom} />
 
           {/* BOTTOM: comparison table / optimizer */}
           <div className="bottom">
