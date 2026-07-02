@@ -515,11 +515,35 @@ def solve_payload(payload: dict) -> dict:
     return out
 
 
-# Variables the sweep can vary (all live on GeometryCase, in mm).
+# Variables the sweep can vary. Geometry vars live on GeometryCase (mm); flow
+# rate lives on the operating point (L/min) — the strongest thermal-hydraulic
+# lever, so it earns a sweep axis (spec optimizer tier 1).
 _SWEEP_VARS = {
     "fin_thickness_mm", "channel_gap_mm", "fin_height_mm",
     "wave_amplitude_mm", "wavelength_mm",
 }
+_SWEEP_OP_VARS = {"flow_lpm"}
+
+# Objectives the heatmap/optimum can rank by, with the "better" direction.
+# (The Pareto axes stay R_jc vs pump — the canonical thermal-hydraulic trade.)
+_OBJECTIVE_DIR = {
+    "R_jc_K_W": "min", "DeltaP_Pa": "min", "pump_power_W": "min",
+    "mass_g": "min", "cop": "max",
+}
+_RHO_CU_KG_M3 = 8960.0        # bulk copper (printed Cu ~8900; screening)
+
+
+def _sweep_mass_g(result: dict, stack_d=None) -> float:
+    """Copper mass (g) of the core solid + base slab, from the open-volume
+    fraction — a screening material-cost/print-mass proxy (spec §23)."""
+    s = {**DIE_COVERAGE_STACK, **(stack_d or {})}
+    cw = s["core_width_mm"] * 1e-3
+    cl = s["core_length_mm"] * 1e-3
+    ch = s["core_height_mm"] * 1e-3
+    bt = s["base_thickness_mm"] * 1e-3
+    open_frac = result.get("open_volume_fraction") or 0.0
+    core_solid = max(1.0 - open_frac, 0.0) * (cw * cl * ch)
+    return (core_solid + cw * cl * bt) * _RHO_CU_KG_M3 * 1000.0
 
 
 def _axis(spec: dict, default_lo: float, default_hi: float, default_n: int = 21):
@@ -554,37 +578,53 @@ def sweep_payload(payload: dict) -> dict:
     x_spec.setdefault("var", "fin_thickness_mm")
     y_spec.setdefault("var", "channel_gap_mm")
     objective = payload.get("objective", "R_jc_K_W")
+    if objective not in _OBJECTIVE_DIR:
+        raise ValueError(f"objective {objective!r} not in {sorted(_OBJECTIVE_DIR)}")
 
+    allowed = _SWEEP_VARS | _SWEEP_OP_VARS
     for spec in (x_spec, y_spec):
-        if spec["var"] not in _SWEEP_VARS:
-            raise ValueError(
-                f"sweep var {spec['var']!r} not in {sorted(_SWEEP_VARS)}")
+        if spec["var"] not in allowed:
+            raise ValueError(f"sweep var {spec['var']!r} not in {sorted(allowed)}")
 
     x_name, xs = _axis(x_spec, 0.05, 0.30)
     y_name, ys = _axis(y_spec, 0.05, 0.30)
+    base_op = dict(base.get("operating") or {})
+    stack_d = base.get("stack")
+    Q = float(base_op.get("heat_load_W", 450.0))
+
+    def _apply(var, val, case_in, op_in):
+        (op_in if var in _SWEEP_OP_VARS else case_in)[var] = val
 
     grid = []
     for xv in xs:
         for yv in ys:
             case_in = dict(base_case)
-            case_in[x_name] = xv
-            case_in[y_name] = yv
+            op_in = dict(base_op)
+            _apply(x_name, xv, case_in, op_in)
+            _apply(y_name, yv, case_in, op_in)
             r = evaluate_payload({
                 "case": case_in,
-                "stack": base.get("stack"),
-                "operating": base.get("operating"),
+                "stack": stack_d,
+                "operating": op_in,
                 "architecture": base.get("architecture"),
                 "relative_roughness": base.get("relative_roughness", 0.03),
             })
             status = r.get("kpi_status") or ""
-            grid.append({
-                "x": xv,
-                "y": yv,
-                "objective": r.get(objective),
+            pump = r.get("pump_power_W")
+            mass = _sweep_mass_g(r, stack_d)
+            cop = (Q / pump) if pump else None
+            metrics = {
                 "R_jc_K_W": r.get("R_jc_K_W"),
                 "R_th_conv_K_W": r.get("R_th_conv_K_W"),
                 "DeltaP_Pa": r.get("DeltaP_Pa"),
-                "pump_power_W": r.get("pump_power_W"),
+                "pump_power_W": pump,
+                "mass_g": mass,
+                "cop": cop,
+            }
+            grid.append({
+                "x": xv, "y": yv,
+                "objective": metrics.get(objective),
+                **metrics,
                 "kpi_status": status,
                 "feasible": "FAIL" not in status,
             })
@@ -603,18 +643,33 @@ def sweep_payload(payload: dict) -> dict:
             pareto.append(c)
     pareto.sort(key=lambda g: g["R_jc_K_W"])
 
-    # Prefer the best *feasible* point (all gates pass); fall back to best overall.
-    feasible = [g for g in pts if g["feasible"]]
-    opt_pool = feasible or pts
-    optimum = min(opt_pool, key=lambda g: g["R_jc_K_W"]) if opt_pool else None
+    # Optimum = best objective among feasible (fall back to best overall).
+    maximise = _OBJECTIVE_DIR[objective] == "max"
+    scored = [g for g in grid if g.get("objective") is not None]
+    feasible = [g for g in scored if g["feasible"]]
+    pool = feasible or scored
+    optimum = None
+    if pool:
+        optimum = (max if maximise else min)(pool, key=lambda g: g["objective"])
+
+    # R_jc floor = R_base + R_TIM (fixed; convection can't beat it). Constant
+    # across the sweep, so read it off any finite point as R_jc - R_conv.
+    floor = None
+    for g in grid:
+        if g["R_jc_K_W"] is not None and g["R_th_conv_K_W"] is not None:
+            floor = g["R_jc_K_W"] - g["R_th_conv_K_W"]
+            break
 
     return {
         "x_var": x_name,
         "y_var": y_name,
         "objective": objective,
+        "objective_dir": _OBJECTIVE_DIR[objective],
         "grid": grid,
         "pareto": pareto,
         "optimum": optimum,
+        "r_jc_floor_K_W": floor,
+        "r_jc_gate_K_W": base_op.get("limit_R_jc_K_W"),
     }
 
 

@@ -217,6 +217,8 @@ export interface SweepPoint {
   R_th_conv_K_W: number | null
   DeltaP_Pa: number | null
   pump_power_W: number | null
+  mass_g: number | null
+  cop: number | null
   kpi_status: string
   feasible: boolean
 }
@@ -225,9 +227,12 @@ export interface SweepResult {
   x_var: string
   y_var: string
   objective: string
+  objective_dir: 'min' | 'max'
   grid: SweepPoint[]
   pareto: SweepPoint[]
   optimum: SweepPoint | null
+  r_jc_floor_K_W: number | null
+  r_jc_gate_K_W: number | null
 }
 
 // Editable live-design parameters (Phase 4 sliders; Phase 6 adds gyroid fields).

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { sweep } from '../api'
 import { fmt } from '../format'
-import { SWEEP_VARS, buildSweepRequest, varLabel } from '../optimizer'
+import { OBJECTIVES, SWEEP_VARS, buildSweepRequest, objectiveOf, varLabel, varUnit } from '../optimizer'
 import type { Basis, BaselineResult, DesignState, SweepResult } from '../types'
 import { Heatmap } from './Heatmap'
 import { Pareto } from './Pareto'
@@ -17,6 +17,7 @@ export function OptimizerPanel({
 }) {
   const [xVar, setXVar] = useState('fin_thickness_mm')
   const [yVar, setYVar] = useState('channel_gap_mm')
+  const [objective, setObjective] = useState('R_jc_K_W')
   const [result, setResult] = useState<SweepResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -25,17 +26,17 @@ export function OptimizerPanel({
     if (!design) return
     setLoading(true)
     setErr(null)
-    sweep(buildSweepRequest(design, basis, xVar, yVar))
+    sweep(buildSweepRequest(design, basis, xVar, yVar, objective))
       .then(setResult)
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setLoading(false))
   }
 
-  // Re-sweep on open, variable change, or when a different design is selected.
+  // Re-sweep on open, variable/objective change, or when a different design is selected.
   useEffect(() => {
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xVar, yVar, design?.design_id])
+  }, [xVar, yVar, objective, design?.design_id])
 
   if (!design) {
     return <div className="muted" style={{ padding: 14 }}>The optimizer works on wavy/straight fin designs — select one.</div>
@@ -60,16 +61,27 @@ export function OptimizerPanel({
             {SWEEP_VARS.map((v) => <option key={v.key} value={v.key} disabled={v.key === xVar}>{v.label}</option>)}
           </select>
         </label>
+        <label>Optimize&nbsp;
+          <select value={objective} onChange={(e) => setObjective(e.target.value)}>
+            {OBJECTIVES.map((o) => <option key={o.key} value={o.key}>{o.dir === 'max' ? 'max ' : 'min '}{o.label}</option>)}
+          </select>
+        </label>
         <button className="opt-run" onClick={run}>{loading ? 'sweeping…' : '↻ refresh'}</button>
-        <span className="opt-note muted">swept around current H / A / λ / flow · minimize R_jc</span>
-        {o && (
-          <>
-            <span className="opt-optval">
-              optimum <b>{fmt(o.R_jc_K_W! * 1000, 2)}</b> mK/W · {varLabel(result!.x_var)} {fmt(o.x, 3)} · {varLabel(result!.y_var)} {fmt(o.y, 3)} · pump {fmt(o.pump_power_W!, 3)} W
-            </span>
-            <button className="opt-load" onClick={loadOpt}>load optimum → sliders</button>
-          </>
-        )}
+        {o && (() => {
+          const ob = objectiveOf(result!.objective)
+          return (
+            <>
+              <span className="opt-optval">
+                best <b>{fmt((o.objective ?? 0) * ob.scale, ob.digits)}</b> {ob.unit} ·{' '}
+                {varLabel(result!.x_var)} {fmt(o.x, 3)} {varUnit(result!.x_var)} ·{' '}
+                {varLabel(result!.y_var)} {fmt(o.y, 3)} {varUnit(result!.y_var)}
+                {result!.objective !== 'R_jc_K_W' && o.R_jc_K_W != null &&
+                  <> · R_jc {fmt(o.R_jc_K_W * 1000, 2)} mK/W</>}
+              </span>
+              <button className="opt-load" onClick={loadOpt}>load optimum → sliders</button>
+            </>
+          )
+        })()}
       </div>
 
       {err && <div className="error" style={{ padding: 8 }}>sweep error: {err}</div>}
@@ -78,15 +90,15 @@ export function OptimizerPanel({
         <div className="opt-charts">
           <div className="opt-chart">
             <div className="opt-cap">
-              R_jc heatmap · {varLabel(result.x_var)} × {varLabel(result.y_var)}{' '}
-              <span className="muted">green = lower R_jc · ★ optimum · dim = gate fail</span>
+              {objectiveOf(result.objective).label} heatmap · {varLabel(result.x_var)} × {varLabel(result.y_var)}{' '}
+              <span className="muted">green = better · ★ optimum · dim = gate fail</span>
             </div>
             <Heatmap result={result} />
           </div>
           <div className="opt-chart">
             <div className="opt-cap">
               Pareto · R_jc vs pump{' '}
-              <span className="muted">● grid · ◆ candidates · ○ current · ★ optimum</span>
+              <span className="muted">● grid · ◆ candidates · ○ current · ★ optimum · — floor/gate</span>
             </div>
             <Pareto result={result} candidates={candidates} current={current} />
           </div>

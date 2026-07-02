@@ -19,10 +19,14 @@ export function Pareto({
   const rjcs = [...pts.map((p) => p.R_jc_K_W! * 1000), ...candidates.map((c) => c.R_jc_K_W * 1000)]
   if (current) { pumps.push(current.pump_power_W); rjcs.push(current.R_jc_K_W * 1000) }
 
+  const floor = result.r_jc_floor_K_W != null ? result.r_jc_floor_K_W * 1000 : null
+  const gate = result.r_jc_gate_K_W != null ? result.r_jc_gate_K_W * 1000 : null
+
   const xlo = 0
   const xhi = Math.max(...pumps) * 1.06 || 1
-  const ylo = Math.min(...rjcs) * 0.985
-  const yhi = Math.max(...rjcs) * 1.015
+  // extend the y-range down to the floor so the "can't beat this" line shows.
+  const ylo = Math.min(...rjcs, floor ?? Infinity) * 0.985
+  const yhi = Math.max(...rjcs, gate ?? -Infinity) * 1.015
 
   const W = 360, H = 300, ml = 46, mb = 34, mt = 10, mr = 12
   const pw = W - ml - mr, ph = H - mt - mb
@@ -38,6 +42,19 @@ export function Pareto({
     <svg viewBox={`0 0 ${W} ${H}`} className="opt-svg">
       <line x1={ml} y1={mt} x2={ml} y2={mt + ph} stroke={AXIS} />
       <line x1={ml} y1={mt + ph} x2={ml + pw} y2={mt + ph} stroke={AXIS} />
+
+      {floor != null && floor >= ylo && floor <= yhi && (
+        <g>
+          <line x1={ml} y1={Y(floor)} x2={ml + pw} y2={Y(floor)} stroke="#3fb950" strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
+          <text x={ml + pw} y={Y(floor) - 3} textAnchor="end" fontSize="8.5" fill="#3fb950">R_jc floor (TIM+base) {fmt(floor, 1)}</text>
+        </g>
+      )}
+      {gate != null && gate >= ylo && gate <= yhi && (
+        <g>
+          <line x1={ml} y1={Y(gate)} x2={ml + pw} y2={Y(gate)} stroke="#e3b341" strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
+          <text x={ml + pw} y={Y(gate) - 3} textAnchor="end" fontSize="8.5" fill="#e3b341">gate {fmt(gate, 1)}</text>
+        </g>
+      )}
 
       {pts.map((p, i) => (
         <circle key={i} cx={X(p.pump_power_W!)} cy={Y(p.R_jc_K_W! * 1000)} r={1.6}
