@@ -1,8 +1,11 @@
 """
-06_MASTER_BASELINE/python/targets.py
-====================================
-Targets translator for the Master Baseline / web-app "Design Studio"
-(V2.1, spec §19A + §20 S5).
+07_WebApp/engine/targets.py  (webapp-native)
+============================================
+Targets translator for the web-app "Design Studio" (V2.1, spec §19A + §20 S5).
+
+Webapp-native module: authored and maintained here in engine/, NOT synced from
+the parent project (sync_engine.py deliberately excludes it) so the webapp stays
+self-contained and independent.
 
 Users think in degrees Celsius ("keep the die under 100 C"); the solvers gate
 in K/W. This module is the pure, tested bridge between them:

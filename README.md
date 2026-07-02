@@ -145,7 +145,8 @@ gains `coolant` and `targets` blocks (the latter carries the exact junction
 temperature). With neither key the output is unchanged — the water preset is
 anchored to the master defaults so the GB202 golden results are reproduced
 bit-for-bit. Physics lives in `engine/coolants.py` (S4) and `engine/targets.py`
-(S5), vendored from `06_MASTER_BASELINE/python/` via `sync_engine.py`.
+(S5) — **webapp-native** modules authored here in `engine/`, not synced from the
+parent project, so the webapp stays fully self-contained.
 
 ## Test (acceptance gate)
 

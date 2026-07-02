@@ -1,8 +1,11 @@
 """
-06_MASTER_BASELINE/python/coolants.py
-=====================================
-Coolant property library for the Master Baseline / web-app "Design Studio"
-(V2.1, spec §20 S4).
+07_WebApp/engine/coolants.py  (webapp-native)
+=============================================
+Coolant property library for the web-app "Design Studio" (V2.1, spec §20 S4).
+
+Webapp-native module: authored and maintained here in engine/, NOT synced from
+the parent project (sync_engine.py deliberately excludes it) so the webapp stays
+self-contained and independent.
 
 The master `OperatingPoint` carries four fluid properties (rho, mu, k_fluid,
 cp). Until V2 those were hard-coded to 25 C water. This module turns a coolant
