@@ -8,7 +8,7 @@ umbrella: "[[R&D Projects]]"
 status: Draft
 priority: High
 date_created: 2026-07-01
-date_updated: 2026-07-01
+date_updated: 2026-07-02
 document_role: webapp_design_spec
 tags:
   - vinnotek/projects
@@ -281,3 +281,235 @@ These do not block the build; they refine inputs as real data arrives.
 - `06_MASTER_BASELINE/README.md`, `master_design_parameters.json`, `outputs/master_baseline_results.json`, `python/master_baseline_calculator.py`.
 - `06_MASTER_BASELINE/nTop_MASTER_INPUTS.md`, `05_nTop_parameter_schema.md` — nTop input/output contract.
 - `02_Code/cold_plate_v6/` — `solver.py`, `geometry.py`, `sweep.py`, `webapp.py`, `README.md`, `master_constants.py`.
+
+---
+
+## V2 — "Design Studio" update (DRAFT for review)
+
+> **Status: DRAFT 2026-07-02. Nothing implemented.** V1 (§1–§17) shipped: viewer, live tuning,
+> optimizer, STL export, LAN serving. V2 turns the app from a *viewer of our problem* into a
+> *design tool for a user-defined problem*: on entry the user states **targets** and the
+> **problem definition** in a Design tab, picks geometry families / correlations / layout, and the
+> whole app (candidates, gates, optimizer, viewer) re-scores against *their* problem.
+> We iterate on this section before writing code.
+
+## 18. V2 concept & user flow
+
+```
+DESIGN (new, entry tab) ──▶ EXPLORE (V1 viewer+sliders) ──▶ OPTIMIZE (V1 sweep) ──▶ REPORT (new)
+   define targets +             tune the chosen                sweep vs USER          export MD
+   problem + families           family live                    gates                  + STL
+```
+
+- The Design tab is a **4-step wizard** (§19). Completing it produces a **Project** — one JSON
+  object `{targets, basis, selections}` that scopes everything downstream (gates, defaults,
+  which families/layouts are offered).
+- V1 behaviour is preserved as the built-in **"GB202 GPU cold plate" preset project** — loading
+  it reproduces today's app exactly (golden fixtures still pass).
+- Projects save server-side to `07_WebApp/projects/<slug>.json` (plain files, no DB) so anyone
+  on the LAN opens the same problem. Browser localStorage keeps per-user pins as in V1.
+
+## 19. Design tab — the wizard
+
+### 19A. Step 1 — Targets (what "good" means)
+
+Three tiers, mirrored from how the solvers already gate (§6A) but now user-defined:
+
+| Tier | Target | Symbol / unit | Default (GB202 preset) | Notes |
+|---|---|---|---|---|
+| **T1 hard gates** | Max junction temp | T_j,max °C | 90 | Primary thermal input. The app derives the R_jc gate from it (below) — users think in °C, solvers in K/W. |
+| | Heat load nominal / margin | Q / Q_m W | 450 / 575 | Margin drives sizing honesty. |
+| | Coolant inlet temp | T_in °C | 25 | Loop-level input. |
+| | Max pressure drop | ΔP_max Pa | 50 000 | Pump/loop budget. |
+| | Max pump power | W_pump,max W | 5 | Ideal hydraulic. |
+| **T2 design rules** | Coverage | ≥ 1 | 1 | Keeps the 1-D stack model honest (no spreading model). |
+| | Open-volume band | ε ∈ [lo, hi] | [0.35, 0.75] | Depowdering / clog floor, metal-mass ceiling. |
+| | Process route | — | LMM | Sets wall/gap floors (§6B table) → clamps sliders. |
+| | Envelope | W×L×H mm | 28×35×6.2 | Max footprint & height; base thickness. |
+| **T3 objectives** | Pareto pair | — | R_jc vs pump | Pick 2 of {R_jc, ΔP, pump, mass}; the rest stay diagnostics. |
+
+**Derived R_jc gate** (replaces the hard-coded 0.078):
+
+```
+R_jc_gate = (T_j,max − T_in − ΔT_caloric/2) / Q_nominal
+```
+
+with `ΔT_caloric = Q/(ṁ·cp)` (already computed). Show the derivation live in the wizard —
+"your 90 °C at 450 W and 25 °C water means R_jc ≤ 0.142 K/W" — so the gate is never a magic
+number. Users may still override the gate directly (audit mode).
+
+### 19B. Step 2 — Problem definition (physics inputs)
+
+| Input | Options / range | Default | Notes |
+|---|---|---|---|
+| Die footprint | W×L mm, free | 24 × 31 | Warn if die > cooled footprint (coverage < 1). |
+| TIM areal resistance | K·cm²/W | 0.05 | Preset list: solder 0.008 · liquid metal 0.02 · premium grease 0.05 · pad 0.10 · custom. |
+| Solid material | k_solid W/m·K | Cu-AM 340 | Band selector (250/340/400) per §15 Q7 + Al-AM 130 + custom. KPI panel shows the conservative case alongside nominal. |
+| Coolant | preset + custom | water | **New property library** (§20 S4): water · PG25 · PG50 · EG50 · custom(ρ, μ, k, cp). Props evaluated at T_in. |
+| Flow rate | L/min | 2.65 | Or "find required flow" helper (solve flow for gates at chosen geometry — v6 flow sweep already exists). |
+
+### 19C. Step 3 — Geometry families & correlation sets
+
+The wizard lists every family with its **model pedigree** so choosing a family is also choosing
+how much to trust it (never hide screening status):
+
+| Family | Correlation set (user-visible) | Status after V2 |
+|---|---|---|
+| Straight fin | Shah–London H1 laminar Nu + fRe (+ optional thermal-entry, roughness) | ANALYTICAL (validated for hero) |
+| Wavy fin | Shah–London × wavy multiplier (χ, Re) — v6 depth available | ANALYTICAL (validated hero) |
+| Pin fin (inline / staggered) | **NEW solver S1** — Khan–Culham–Yovanovich Nu + Gaddis–Gnielinski bank ΔP | ANALYTICAL_LIT (new) |
+| TPMS gyroid / diamond / Schwarz-P | **NEW solver S2** — literature Nu(Re,Pr), f(Re) power laws + numeric geometry | ANALYTICAL_LIT (new) |
+| TPMS lidinoid / split-P / I-WP / neovius / Fischer-Koch | generic surface model (unchanged) | SCREENING_ONLY (viewer-accurate, physics placeholder) |
+| Generic surface (SA/V + ε entered by hand) | current `_evaluate_generic_surface` | SCREENING_ONLY |
+
+Turbulent extension (Gnielinski Nu + Blasius f when Re > 2300) is offered as an **opt-in flag**
+for all duct families — off by default because every current design point is deeply laminar.
+
+### 19D. Step 4 — Layout (flow architecture)
+
+**Current layouts** (what exists today, to be listed in the UI):
+
+| Layout | Where it lives today | Model |
+|---|---|---|
+| `single_pass` | master engine, `n_parallel_paths = 1` (degenerate) | path = core_length |
+| `center_feed_bidirectional` | master engine **default**, `n_parallel_paths = 2` | path = L/2, header_K 1.5 |
+| `top_jet_slot_centre_rib_bidirectional` | v6 hero solver | + jet Nu enhancement, slot dims |
+
+**New layouts in V2** (all resolve to the same 5 knobs the solvers already consume —
+`n_paths, path_length, header_K, flow_uniformity, jet_enhancement` — via resolver S3):
+
+| Layout | Resolves to | Honest caveat shown in UI |
+|---|---|---|
+| `serpentine_n_pass` (n = 2…6) | path = n·L, velocity ×n (flow through 1/n of the width), + K_bend ≈ 2.2 per 180° bend | In deep laminar flow Nu is ~constant, so serpentine mostly buys ΔP, not h — useful mainly at low available flow. |
+| `u_flow_side_feed` | path = L, uniformity 0.85–0.95, header_K higher (default 2.5) | Maldistribution defaults pending CFD (TD-10). |
+| `multi_jet_array` | **deferred** | Needs Martin (1977) correlation + CFD anchor; listed greyed-out. |
+
+Layout availability is family-aware (jet slot: fin families only; TPMS: single-pass and
+center-feed only for now).
+
+## 20. New solvers (the V2 physics work)
+
+All implemented in the **main solver home** (`06_MASTER_BASELINE/python/` + `02_Code/`), then
+re-vendored into `07_WebApp/engine/` via `sync_engine.py` — the webapp never gets private physics
+(V1 rule D8 stands). Each solver ships with golden fixtures + a literature-anchor test.
+
+### S1 — Pin-fin solver (`_evaluate_pin_fin_family`)
+
+Replaces the generic-surface fallback for `family = pin_fin`. Inputs: `pin_diameter_mm d`,
+`pin_pitch_mm S` (transverse = longitudinal to start), `pin_pattern` inline|staggered,
+`fin_height_mm H`.
+
+- Pin count from footprint/pitch (same logic as the viewer/STL — one geometry source).
+- Constriction velocity: `v_max = v_approach · S/(S − d)`; `Re_d = ρ·v_max·d/μ`.
+- **Nu:** Khan–Culham–Yovanovich (2006) closed-form for pin-fin heat sinks,
+  `Nu_d = C1(S_T/d, S_L/d, arrangement) · Re_d^0.5 · Pr^(1/3)` — chosen over raw Zukauskas
+  because it is continuous (no Re-band patchwork) and was fitted for heat sinks with endwall;
+  Zukauskas retained as a cross-check in tests. Coefficients pinned from the paper at
+  implementation time.
+- **Pin efficiency:** `m = √(4h/(k_solid·d))`, corrected length `H_c = H + d/4`,
+  `η_pin = tanh(m·H_c)/(m·H_c)`; areas `A_pins = N·π·d·H`, `A_end = A_cooled − N·π·d²/4`;
+  standard η_o.
+- **ΔP:** Gaddis–Gnielinski (1985) tube-bank correlation (valid Re 1…3×10⁵, inline &
+  staggered), per-row Euler number × N_rows × ½ρv_max², + header_K term.
+- **Warnings:** Re_d outside fit range, S/d < 1.25, H/d > 8 (endwall model degrades).
+
+### S2 — TPMS solver (`_evaluate_tpms_family`, gyroid/diamond/schwarz_p)
+
+Replaces the generic fallback for the three types with published correlations.
+
+- **Geometry from the implicit field, not hand-entered numbers:** SA/V(type, w/c), ε(type, w/c)
+  and tortuosity τ(type) are **pre-tabulated numerically from the exact same level-set the
+  viewer renders and the STL exporter meshes** (the V1.1 surface-nets mesher already computes
+  watertight area/volume — run it offline over a (type, w/c) grid, bake a small JSON table).
+  This kills the current inconsistency where `surface_area_density_m2_m3` is typed by hand.
+- `D_h = 4ε/ (SA/V)`; velocity from frontal area × ε.
+- **Nu / f:** power laws `Nu = a·Re^b·Pr^c`, `f = d·Re^e` per type from Renon & Jeanningros
+  (2025) (gyroid & diamond sheet, already reference [2] in the About tab) and Chouhan et al.
+  (2025) [1] for cross-check; coefficients + validity Re range pinned from the papers at
+  implementation. Below the fitted Re range → fall back to conservative Nu = 3.66 **with a
+  warning**, never extrapolate silently.
+- **Sheet-wall efficiency:** treat the sheet as a meandering fin: `m = √(2h/(k_solid·w))`,
+  effective conduction length `H_eff = τ·H/2` (τ from the geometry table), η_o over sheet area.
+  Labelled a model assumption in warnings until CFD.
+- Status: gyroid/diamond/Schwarz-P move `SCREENING_ONLY → ANALYTICAL_LIT` (literature-anchored,
+  still not test-validated). The other five TPMS types stay screening.
+
+### S3 — Layout resolver (`resolve_architecture(layout, params, stack)`)
+
+Pure function mapping a named layout + its parameters to the `FlowArchitecture` fields
+(`n_paths, path_length, header_K, flow_uniformity, jet_*`). Adds serpentine bend losses as
+`header_K += 2.2·(n_pass − 1)`. Defaults per layout carry "pending CFD" warnings (TD-10/11).
+
+### S4 — Coolant property library (`coolants.py`)
+
+Presets (water, PG25, PG50, EG50) with ρ, μ, k, cp at 20/25/40/60 °C + linear interpolation at
+T_in; custom fluid entry. Warning when μ(T_in) is extrapolated. Single-phase only (non-goal:
+boiling/two-phase).
+
+### S5 — Targets translator (`targets.py`)
+
+`{T_j_max, T_in, Q, flow, coolant} → {R_jc_gate, caloric ΔT, warnings}` (equation in §19A) +
+validation (die ≤ envelope, floors vs route, band sanity). Pure, tested, shared by API and
+report.
+
+## 21. API v2 additions
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/schema` | Wizard schema: families + pedigree, layouts + knobs, coolant presets, target defaults/bounds — so the UI never hard-codes options. |
+| GET/POST | `/api/projects` | List / save project JSONs under `07_WebApp/projects/` (LAN-shared, no auth — same trust model as V1.1 LAN serving). |
+| POST | `/api/evaluate` (extended) | Accepts the **full basis** (stack + operating + architecture + coolant + gates) instead of merging into the fixed GB202 basis. V1 payloads keep working (defaults = preset project). |
+| POST | `/api/sweep` (extended) | Same basis extension; constraints come from **user gates**. |
+
+Candidate table re-scores against user gates: same 5 catalog designs, PASS/FAIL recomputed per
+project (a candidate that passes GB202 gates may fail a stricter T_j,max).
+
+## 22. V2 UI changes
+
+- **Design tab first** on entry when no project is loaded; afterwards a header chip
+  (`project: GB202 GPU ▾`) switches/edits projects. Explore/Optimize/Compare stay as in V1.
+- Wizard = 4 steps (§19A–D) with live derived readouts (R_jc gate derivation, floors, coverage)
+  and a preview card ("your problem: 450 W into 24×31 mm, water 2.65 L/min, gate 0.142 K/W").
+- KPI panel gains a **mass estimate** row (§23-2) and shows gates from the project.
+- **Report tab (new, small):** print-friendly Markdown export of {project inputs, chosen design,
+  KPI table, warnings, references} + the STL button — the design-review artifact.
+
+## 23. Also recommended for V2 (gaps the request didn't mention)
+
+1. **Correlation-validity guardrails everywhere.** Once inputs are user-defined, every
+   correlation must declare its fitted range and warn outside it (Re bands, α range of
+   Shah–London table, A/λ band, KCY pitch ratios). This is the single biggest honesty feature.
+2. **Mass & material-cost estimate.** `(1−ε)·V_core·ρ_Cu + base + walls` → g and $ (route-dependent
+   $/kg constant in `master_constants`). Nearly free to compute; AM quoting cares.
+3. **Uncertainty banner.** Run each evaluate at k_solid = {250, 340, 400} and show R_jc as a band,
+   not a point (three solver calls, ms each). Matches §15 Q7 discipline.
+4. **Flow-envelope mini-plot.** R_jc & ΔP vs flow rate at the current geometry (v6 flow sweep
+   already exists) — answers "what if the pump is weaker" instantly.
+5. **Parity + fixtures discipline.** Extend `test_api_parity.py`: golden fixtures for pin/TPMS
+   solvers, a literature-anchor test each (reproduce one datapoint from the source paper), and
+   the V1 GB202 preset must reproduce today's 5 candidates bit-for-bit.
+6. **Problem templates.** "GB202 GPU" (V1), "generic ASIC 300 W", "blank". Templates are just
+   pre-filled projects.
+7. **Deferred (explicit non-goals for V2):** pump-curve intersection solver, spreading-resistance
+   model for coverage < 1, two-phase coolants, multi-jet arrays, auth/user accounts.
+
+## 24. V2 roadmap (proposed)
+
+| Phase | Deliverable | Acceptance |
+|---|---|---|
+| V2.1 | S4 coolants + S5 targets + extended `/api/evaluate` basis | GB202 preset reproduces V1 golden results exactly |
+| V2.2 | Design tab wizard + projects API + gate re-scoring | New project changes gates/KPIs app-wide; V1 preset unchanged |
+| V2.3 | S1 pin-fin solver + fixtures + lit-anchor test | Pin candidate leaves SCREENING_ONLY; parity green |
+| V2.4 | S2 TPMS solver + numeric geometry table (from the STL mesher) | Gyroid/diamond/Schwarz-P → ANALYTICAL_LIT; SA/V matches meshed geometry ≤ 2% |
+| V2.5 | S3 layouts (serpentine, U-flow) + layout-aware optimizer | Sweep respects layout; caveats shown |
+| V2.6 | Report tab + mass/cost + uncertainty band + validity guardrails | Exported MD review-ready |
+
+## 25. V2 open questions (answer before V2.2)
+
+1. T_j,max default 90 °C or 85 °C for the GB202 preset? (Marketing vs engineering margin.)
+2. Should the derived R_jc gate subtract the full caloric rise or half (mean coolant temp)? §19A
+   currently says half — confirm against how the v6 report defines R_jc reference temperature.
+3. Pin KCY vs Zukauskas as primary — confirm after pulling both papers' validity tables.
+4. Renon & Jeanningros coefficients: sheet-TPMS only. Do we offer solid-network TPMS with the
+   generic model, or hide solid variants from the solver path (viewer-only) in V2?
+5. Projects folder: flat files fine, or do we want a tiny index.json for rename/delete UX?
