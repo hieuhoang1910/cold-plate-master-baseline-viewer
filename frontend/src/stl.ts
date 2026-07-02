@@ -259,9 +259,16 @@ function makeTpmsSdf(g: ViewerGeom, zLo: number, zHi: number): (x: number, y: nu
 }
 
 // ---------------------------------------------------------------------------
-// Surface nets: watertight mesh of an SDF's zero level set.
+// Manifold surface nets: watertight mesh of an SDF's zero level set.
 // Streams two z-slabs at a time so memory stays flat regardless of grid size.
 // The caller must size the grid so all boundary samples are outside (> 0).
+//
+// Unlike plain surface nets (one vertex per mixed cell), each cell gets one
+// vertex PER CONNECTED COMPONENT of its inside corners. A thin TPMS sheet
+// passing twice through one cell previously collapsed both sides onto a single
+// shared vertex — a pinch that slicers report as thousands of non-manifold
+// edges. With per-component vertices the two sheet sides stay separate, at any
+// voxel resolution.
 // ---------------------------------------------------------------------------
 
 function surfaceNets(
@@ -274,9 +281,12 @@ function surfaceNets(
   const sliceLen = sx * sy
   let sliceA = new Float32Array(sliceLen) // samples at level k
   let sliceB = new Float32Array(sliceLen) // samples at level k+1
-  // cell-vertex index per cell in the previous / current slab (-1 = no vertex)
-  let cellsP = new Int32Array(nx * ny).fill(-1)
-  let cellsQ = new Int32Array(nx * ny).fill(-1)
+  // per cell: first vertex id (-1 = none) + packed 4-bit map corner -> local
+  // component (15 = outside corner). Component c's vertex id = base + c.
+  let baseP = new Int32Array(nx * ny).fill(-1)
+  let baseQ = new Int32Array(nx * ny).fill(-1)
+  let compP = new Uint32Array(nx * ny)
+  let compQ = new Uint32Array(nx * ny)
   const verts: number[] = [] // xyz triples, indexed by cell-vertex id
 
   const fillSlice = (dst: Float32Array, k: number) => {
@@ -288,75 +298,153 @@ function surfaceNets(
         const v = f(x0 + i * h, y, z)
         // nudge exact zeros off the surface: crossings that land precisely on
         // shared grid corners collapse neighbouring cell vertices into
-        // degenerate triangles otherwise
-        dst[p++] = v === 0 ? 1e-6 : v
+        // degenerate triangles otherwise (guard again after Float32 rounding)
+        dst[p] = v === 0 ? 1e-6 : v
+        if (dst[p] === 0) dst[p] = 1e-6
+        p++
       }
     }
   }
 
-  const quadFromCells = (a: number, b: number, c: number, d: number, flip: boolean) => {
-    if (a < 0 || b < 0 || c < 0 || d < 0) return
-    const A = a * 3, B = b * 3, C = c * 3, D = d * 3
-    if (flip) {
-      s.quad(verts[D], verts[D + 1], verts[D + 2], verts[C], verts[C + 1], verts[C + 2],
-        verts[B], verts[B + 1], verts[B + 2], verts[A], verts[A + 1], verts[A + 2])
-    } else {
-      s.quad(verts[A], verts[A + 1], verts[A + 2], verts[B], verts[B + 1], verts[B + 2],
-        verts[C], verts[C + 1], verts[C + 2], verts[D], verts[D + 1], verts[D + 2])
-    }
+  /** Vertex id for `corner` (bit order x|y<<1|z<<2) of cell `ci`, or -1. */
+  const vertOf = (bases: Int32Array, comps: Uint32Array, ci: number, corner: number): number => {
+    const b = bases[ci]
+    if (b < 0) return -1
+    const c = (comps[ci] >>> (corner * 4)) & 15
+    return c === 15 ? -1 : b + c
   }
+
+  // Triangles are buffered as vertex ids so disconnected micro-fragments
+  // (under-resolved sheet dust — unprintable, and flagged by mesh checkers)
+  // can be dropped before anything reaches the sink.
+  let triBuf = new Int32Array(3 * 4096)
+  let triUsed = 0
+  const pushTri = (a: number, b: number, c: number) => {
+    if (triUsed + 3 > triBuf.length) {
+      const next = new Int32Array(Math.ceil(triBuf.length * 1.8 / 3) * 3)
+      next.set(triBuf)
+      triBuf = next
+    }
+    triBuf[triUsed++] = a; triBuf[triUsed++] = b; triBuf[triUsed++] = c
+  }
+
+  const quadFromVerts = (a: number, b: number, c: number, d: number, flip: boolean) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return
+    if (flip) { pushTri(d, c, b); pushTri(d, b, a) }
+    else { pushTri(a, b, c); pushTri(a, c, d) }
+  }
+
+  // scratch buffers reused per cell
+  const v = new Float64Array(8)
+  const root = new Int32Array(8)
+  const compOf = new Int32Array(8)
+  const px = new Float64Array(8), py = new Float64Array(8)
+  const pz = new Float64Array(8), cnt = new Int32Array(8)
+  const qx = new Float64Array(8), qy = new Float64Array(8)
+  const qz = new Float64Array(8), qn = new Int32Array(8)
 
   fillSlice(sliceA, 0)
   for (let k = 0; k < nz; k++) {
     fillSlice(sliceB, k + 1)
-    cellsQ.fill(-1)
+    baseQ.fill(-1)
     const zA = z0 + k * h
 
-    // 1. place a vertex in every mixed-sign cell of slab k
+    // 1. vertices: one per connected inside-corner component of each mixed cell
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
         const i00 = j * sx + i
-        const v = [
-          sliceA[i00], sliceA[i00 + 1], sliceA[i00 + sx], sliceA[i00 + sx + 1],
-          sliceB[i00], sliceB[i00 + 1], sliceB[i00 + sx], sliceB[i00 + sx + 1],
-        ]
+        v[0] = sliceA[i00]; v[1] = sliceA[i00 + 1]
+        v[2] = sliceA[i00 + sx]; v[3] = sliceA[i00 + sx + 1]
+        v[4] = sliceB[i00]; v[5] = sliceB[i00 + 1]
+        v[6] = sliceB[i00 + sx]; v[7] = sliceB[i00 + sx + 1]
         let inside = 0
         for (let m = 0; m < 8; m++) if (v[m] < 0) inside++
         if (inside === 0 || inside === 8) continue
 
-        // average of the sign-change edge crossings (corner bit order: x|y<<1|z<<2)
-        let px = 0, py = 0, pz = 0, cnt = 0
-        const EDGES = SN_EDGES
+        // union inside corners along cube edges (corner bits: x|y<<1|z<<2)
+        for (let m = 0; m < 8; m++) root[m] = m
+        const find = (m: number): number => {
+          while (root[m] !== m) { root[m] = root[root[m]]; m = root[m] }
+          return m
+        }
         for (let e = 0; e < 24; e += 2) {
-          const a = EDGES[e], b = EDGES[e + 1]
+          const a = SN_EDGES[e], b = SN_EDGES[e + 1]
+          if (v[a] < 0 && v[b] < 0) root[find(a)] = find(b)
+        }
+        // assign component ids in first-seen order
+        let nComp = 0
+        for (let m = 0; m < 8; m++) compOf[m] = -1
+        for (let m = 0; m < 8; m++) {
+          if (v[m] >= 0) continue
+          const r = find(m)
+          if (compOf[r] < 0) compOf[r] = nComp++
+          compOf[m] = compOf[r]
+        }
+
+        // average the crossing edges into their inside-corner's component
+        px.fill(0); py.fill(0); pz.fill(0); cnt.fill(0)
+        qx.fill(0); qy.fill(0); qz.fill(0); qn.fill(0)
+        for (let e = 0; e < 24; e += 2) {
+          const a = SN_EDGES[e], b = SN_EDGES[e + 1]
           const va = v[a], vb = v[b]
           if ((va < 0) === (vb < 0)) continue
           const t = va / (va - vb)
-          px += (a & 1) + t * ((b & 1) - (a & 1))
-          py += ((a >> 1) & 1) + t * (((b >> 1) & 1) - ((a >> 1) & 1))
-          pz += ((a >> 2) & 1) + t * (((b >> 2) & 1) - ((a >> 2) & 1))
-          cnt++
+          const c = compOf[va < 0 ? a : b]
+          px[c] += (a & 1) + t * ((b & 1) - (a & 1))
+          py[c] += ((a >> 1) & 1) + t * (((b >> 1) & 1) - ((a >> 1) & 1))
+          pz[c] += ((a >> 2) & 1) + t * (((b >> 2) & 1) - ((a >> 2) & 1))
+          cnt[c]++
         }
-        if (cnt === 0) continue
-        cellsQ[j * nx + i] = verts.length / 3
-        verts.push(x0 + (i + px / cnt) * h, y0 + (j + py / cnt) * h, zA + (pz / cnt) * h)
+        // inside-corner centroid per component (for the two-sheet bias below)
+        for (let m = 0; m < 8; m++) {
+          if (v[m] >= 0) continue
+          const c = compOf[m]
+          qx[c] += m & 1; qy[c] += (m >> 1) & 1; qz[c] += (m >> 2) & 1
+          qn[c]++
+        }
+        const ci = j * nx + i
+        baseQ[ci] = verts.length / 3
+        for (let c = 0; c < nComp; c++) {
+          // every maximal inside component in a mixed cell has >= 1 crossing
+          const n = cnt[c] || 1
+          let vx = px[c] / n, vy = py[c] / n, vz = pz[c] / n
+          if (nComp > 1) {
+            // two sheet sides in one cell: pull each vertex slightly toward its
+            // own inside corners so the sides can't land on coincident points
+            // (position-welded coincident vertices read as non-manifold)
+            const m = qn[c] || 1
+            vx = 0.85 * vx + 0.15 * (qx[c] / m)
+            vy = 0.85 * vy + 0.15 * (qy[c] / m)
+            vz = 0.85 * vz + 0.15 * (qz[c] / m)
+          }
+          verts.push(x0 + (i + vx) * h, y0 + (j + vy) * h, zA + (vz) * h)
+        }
+        let packed = 0
+        for (let m = 0; m < 8; m++) packed |= (v[m] < 0 ? compOf[m] : 15) << (m * 4)
+        compQ[ci] = packed >>> 0
       }
     }
 
-    // 2. z-edges of level k..k+1: 4 surrounding cells all live in slab k
+    // 2. z-edges of level k..k+1: 4 surrounding cells all live in slab k.
+    // Each cell's vertex is the one owning the edge's INSIDE corner, so the
+    // two sides of a thin sheet stitch to their own vertices.
     for (let j = 1; j < ny; j++) {
       for (let i = 1; i < nx; i++) {
         const a = sliceA[j * sx + i], b = sliceB[j * sx + i]
         if ((a < 0) === (b < 0)) continue
-        quadFromCells(
-          cellsQ[(j - 1) * nx + (i - 1)], cellsQ[(j - 1) * nx + i],
-          cellsQ[j * nx + i], cellsQ[j * nx + (i - 1)],
+        const zin = a < 0 ? 0 : 4 // z-bit of the inside sample
+        quadFromVerts(
+          vertOf(baseQ, compQ, (j - 1) * nx + (i - 1), 3 + zin), // local x=1 y=1
+          vertOf(baseQ, compQ, (j - 1) * nx + i, 2 + zin),       // local x=0 y=1
+          vertOf(baseQ, compQ, j * nx + i, 0 + zin),             // local x=0 y=0
+          vertOf(baseQ, compQ, j * nx + (i - 1), 1 + zin),       // local x=1 y=0
           b < 0, // inside above -> normal points -z -> flip
         )
       }
     }
 
-    // 3. x- and y-edges at sample level k: cells from slabs k-1 and k
+    // 3. x- and y-edges at sample level k: cells from slabs k-1 (P, z-bit 1)
+    // and k (Q, z-bit 0)
     if (k > 0) {
       // cell order below gives an outward normal when the +side sample is
       // inside, so these two flip on a<0 (unlike the z-edges above)
@@ -364,9 +452,12 @@ function surfaceNets(
         for (let i = 0; i < nx; i++) {
           const a = sliceA[j * sx + i], b = sliceA[j * sx + i + 1]
           if ((a < 0) === (b < 0)) continue
-          quadFromCells(
-            cellsP[(j - 1) * nx + i], cellsQ[(j - 1) * nx + i],
-            cellsQ[j * nx + i], cellsP[j * nx + i],
+          const xin = a < 0 ? 0 : 1 // x-bit of the inside sample
+          quadFromVerts(
+            vertOf(baseP, compP, (j - 1) * nx + i, xin + 2 + 4), // y=1 z=1
+            vertOf(baseQ, compQ, (j - 1) * nx + i, xin + 2),     // y=1 z=0
+            vertOf(baseQ, compQ, j * nx + i, xin),               // y=0 z=0
+            vertOf(baseP, compP, j * nx + i, xin + 4),           // y=0 z=1
             a < 0,
           )
         }
@@ -375,9 +466,12 @@ function surfaceNets(
         for (let i = 1; i < nx; i++) {
           const a = sliceA[j * sx + i], b = sliceA[(j + 1) * sx + i]
           if ((a < 0) === (b < 0)) continue
-          quadFromCells(
-            cellsP[j * nx + (i - 1)], cellsP[j * nx + i],
-            cellsQ[j * nx + i], cellsQ[j * nx + (i - 1)],
+          const yin = a < 0 ? 0 : 2 // y-bit of the inside sample
+          quadFromVerts(
+            vertOf(baseP, compP, j * nx + (i - 1), 1 + yin + 4), // x=1 z=1
+            vertOf(baseP, compP, j * nx + i, yin + 4),           // x=0 z=1
+            vertOf(baseQ, compQ, j * nx + i, yin),               // x=0 z=0
+            vertOf(baseQ, compQ, j * nx + (i - 1), 1 + yin),     // x=1 z=0
             a < 0,
           )
         }
@@ -386,7 +480,37 @@ function surfaceNets(
 
     // rotate the window
     const tmpS = sliceA; sliceA = sliceB; sliceB = tmpS
-    const tmpC = cellsP; cellsP = cellsQ; cellsQ = tmpC
+    const tmpB = baseP; baseP = baseQ; baseQ = tmpB
+    const tmpM = compP; compP = compQ; compQ = tmpM
+  }
+
+  // Drop disconnected micro-shells (< MIN_SHELL_TRIS triangles): sub-voxel
+  // sheet dust from under-resolution — unprintable, and each fragment shows up
+  // in mesh checkers. Union-find over shared vertex ids, then emit the rest.
+  const MIN_SHELL_TRIS = 32
+  const nV = verts.length / 3
+  const parent = new Int32Array(nV)
+  for (let i = 0; i < nV; i++) parent[i] = i
+  const findV = (m: number): number => {
+    while (parent[m] !== m) { parent[m] = parent[parent[m]]; m = parent[m] }
+    return m
+  }
+  for (let t = 0; t < triUsed; t += 3) {
+    const ra = findV(triBuf[t])
+    parent[findV(triBuf[t + 1])] = ra
+    parent[findV(triBuf[t + 2])] = ra
+  }
+  const shellTris = new Map<number, number>()
+  for (let t = 0; t < triUsed; t += 3) {
+    const r = findV(triBuf[t])
+    shellTris.set(r, (shellTris.get(r) ?? 0) + 1)
+  }
+  for (let t = 0; t < triUsed; t += 3) {
+    if ((shellTris.get(findV(triBuf[t])) ?? 0) < MIN_SHELL_TRIS) continue
+    const A = triBuf[t] * 3, B = triBuf[t + 1] * 3, C = triBuf[t + 2] * 3
+    s.tri(verts[A], verts[A + 1], verts[A + 2],
+      verts[B], verts[B + 1], verts[B + 2],
+      verts[C], verts[C + 1], verts[C + 2])
   }
 }
 
