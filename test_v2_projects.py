@@ -130,6 +130,40 @@ errs2 = projects.validate({"name": "hot", "problem": {"coolant": "water"},
 check(any("inlet" in e or "budget" in e for e in errs2), "T_j <= inlet flagged")
 
 # --------------------------------------------------------------------------
+print("designs-as-candidates — saved designs appear as named, evaluated candidates")
+proj_with_designs = {
+    "id": "dz-test", "name": "Designs test",
+    "problem": {**server.DIE_COVERAGE_STACK, "coolant": "water"},
+    "operating": {"heat_load_W": 450.0, "flow_lpm": 2.65, "T_inlet_C": 25.0},
+    "targets": {"R_jc_gate_override": 0.078},
+    "architecture": dict(server.DIE_COVERAGE_ARCH),
+    "designs": [
+        {"name": "My wavy A", "design": {"family": "wavy_fin", "process_route": "LMM",
+            "fin_thickness_mm": 0.1, "channel_gap_mm": 0.1, "fin_height_mm": 5.5,
+            "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5, "flow_lpm": 2.65}},
+        {"name": "Pin idea", "design": {"family": "gyroid_tpms", "tpms_type": "pin_fins",
+            "process_route": "LMM", "pin_diameter_mm": 0.8, "pin_pitch_mm": 1.4,
+            "pin_pattern": "staggered", "fin_height_mm": 5.5, "flow_lpm": 2.65}},
+    ],
+}
+dc = server.project_catalog_payload({"project": proj_with_designs})
+saved = [c for c in dc["candidates"] if c.get("saved")]
+check(len(dc["candidates"]) == 7 and len(saved) == 2,
+      f"5 baseline + 2 saved = 7 candidates (got {len(dc['candidates'])}, {len(saved)} saved)")
+check(all(c.get("name") for c in saved), "saved candidates carry their name")
+pin_c = next((c for c in saved if c["name"] == "Pin idea"), None)
+check(pin_c is not None and pin_c["family"] == "pin_fin" and "SCREENING" not in pin_c["kpi_status"],
+      "pin design evaluated via the pin_fin solver (mapped from the gyroid sub-type)")
+# the viewer/slider case keeps the ORIGINAL shape so the 3-D view + tuning work
+pin_case = next((x for x in dc["cases"] if x.get("design_id") == "saved_pin-idea"), None)
+check(pin_case is not None and pin_case.get("family") == "gyroid_tpms"
+      and pin_case.get("tpms_type") == "pin_fins",
+      "saved case keeps gyroid_tpms+pin_fins so the viewer renders + sliders seed")
+# empty / absent designs must not change the 5-candidate baseline
+check(len(server.project_catalog_payload({"project": "gb202-gpu"})["candidates"]) == 5,
+      "a project with no designs still yields exactly the 5 baseline candidates")
+
+# --------------------------------------------------------------------------
 print("-" * 60)
 if _fails == 0:
     print(f"OK: {_passes} checks passed.")

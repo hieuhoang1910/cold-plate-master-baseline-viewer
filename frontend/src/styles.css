@@ -453,3 +453,21 @@ th {
 }
 .ds2-save:disabled { opacity: 0.6; cursor: default; }
 @media (max-width: 900px) { .ds2-cols { grid-template-columns: 1fr; } }
+
+/* saved designs surfaced as candidates */
+.cand-item .name { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.cand-del {
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 4px;
+}
+.cand-del:hover { color: var(--fail); background: rgba(255,255,255,0.06); }
+.cand-saved {
+  background: var(--accent-soft); color: var(--accent); border-radius: 4px;
+  padding: 0 5px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
+}
+.save-cand {
+  width: 100%; margin-top: 4px; padding: 8px; border-radius: 9px; cursor: pointer;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+  font-size: 12px; font-weight: 600; transition: filter 0.12s ease;
+}
+.save-cand:hover { filter: brightness(1.15); }

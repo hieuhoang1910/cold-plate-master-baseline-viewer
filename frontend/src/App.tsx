@@ -143,6 +143,32 @@ export default function App() {
     }).catch((e) => setError(String(e.message ?? e)))
   }
 
+  // --- Designs as candidates (V2.2) ---------------------------------------
+  const slug = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'design'
+
+  // Persist the current live design as a named candidate on the active project.
+  // Built-in projects can't be written, so the first save forks a "(custom)" copy.
+  const saveAsCandidate = async () => {
+    if (!design || !activeProject) return
+    const name = window.prompt('Name this design (it becomes a candidate):', design.design_id)?.trim()
+    if (!name) return
+    let proj = activeProject
+    if (proj.builtin) proj = { ...proj, id: undefined, name: `${proj.name} (custom)`, builtin: false }
+    const designs = [...(proj.designs ?? []).filter((d) => d.name !== name), { name, design }]
+    try {
+      await saveProjectDraft({ ...proj, designs })
+      setSelectedId('saved_' + slug(name))
+    } catch (e) { setError(String((e as Error).message ?? e)) }
+  }
+
+  const removeSavedDesign = async (name: string) => {
+    if (!activeProject) return
+    const designs = (activeProject.designs ?? []).filter((d) => d.name !== name)
+    try { await saveProjectDraft({ ...activeProject, designs }) }
+    catch (e) { setError(String((e as Error).message ?? e)) }
+  }
+
   const coolant = activeProject?.problem?.coolant ?? 'water'
   const tjMaxC = activeProject?.targets?.T_j_max_C ?? 100
 
@@ -200,8 +226,15 @@ export default function App() {
                     <div key={c.design_id}
                       className={`cand-item ${c.design_id === selectedId ? 'sel' : ''}`}
                       onClick={() => setSelectedId(c.design_id)}>
-                      <div className="name">{c.design_id}</div>
+                      <div className="name">
+                        {c.name ?? c.design_id}
+                        {c.saved && (
+                          <button className="cand-del" title="delete saved design"
+                            onClick={(e) => { e.stopPropagation(); removeSavedDesign(c.name!) }}>×</button>
+                        )}
+                      </div>
                       <div className="meta">
+                        {c.saved && <span className="cand-saved">saved</span>}
                         <span>{c.family}</span><span>·</span><span>{c.process_route}</span>
                       </div>
                       <div className="rjc">
@@ -224,6 +257,13 @@ export default function App() {
                 : <div className="card muted" style={{ fontSize: 12 }}>
                     Live tuning covers wavy / straight fin and gyroid designs.
                   </div>}
+
+              {design && (
+                <button className="save-cand" onClick={saveAsCandidate}
+                  title="Save the current tuned design as a named candidate (optimize first in the Optimizer tab, then load into the sliders)">
+                  + Save current design as candidate
+                </button>
+              )}
             </div>
 
             {/* CENTER: implicit-body viewer (fins) or placeholder (gyroid/pin) */}

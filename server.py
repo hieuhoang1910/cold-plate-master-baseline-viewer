@@ -245,12 +245,44 @@ def catalog_payload() -> dict:
                           cases_cfg.get("operating", {}))
 
 
+def _case_from_design(ds: dict, design_id: str) -> dict:
+    """V2.2 designs-as-candidates: turn a saved design (a DesignState-shaped
+    dict) into a master GeometryCase dict, mirroring the frontend evalPayload
+    family routing (pin-fins drawn as a gyroid sub-type -> family=pin_fin)."""
+    fam = ds.get("family", "wavy_fin")
+    base = {"design_id": design_id, "process_route": ds.get("process_route", "LMM")}
+    if fam == "gyroid_tpms" and ds.get("tpms_type") == "pin_fins":
+        return {**base, "family": "pin_fin",
+                "pin_diameter_mm": ds.get("pin_diameter_mm"),
+                "pin_pitch_mm": ds.get("pin_pitch_mm"),
+                "pin_pattern": ds.get("pin_pattern", "staggered"),
+                "fin_height_mm": ds.get("fin_height_mm")}
+    if fam == "gyroid_tpms":
+        return {**base, "family": "gyroid_tpms",
+                "void_fraction": ds.get("void_fraction"),
+                "surface_area_density_m2_m3": ds.get("surface_area_density_m2_m3"),
+                "hydraulic_diameter_mm": ds.get("hydraulic_diameter_mm"),
+                "heat_transfer_multiplier": ds.get("heat_transfer_multiplier", 1.0),
+                "pressure_loss_multiplier": ds.get("pressure_loss_multiplier", 1.0)}
+    return {**base, "family": fam,
+            "fin_thickness_mm": ds.get("fin_thickness_mm"),
+            "channel_gap_mm": ds.get("channel_gap_mm"),
+            "fin_height_mm": ds.get("fin_height_mm"),
+            "side_margin_mm": ds.get("side_margin_mm", 0.9),
+            "wave_amplitude_mm": ds.get("wave_amplitude_mm", 0.0),
+            "wavelength_mm": ds.get("wavelength_mm", 2.5)}
+
+
 def project_catalog_payload(payload: dict) -> dict:
     """POST /api/catalog — the catalog rescored against a project.
 
     payload = { "project": <full project object> | "<project id>" }. Resolves
     the project (coolant + derived gate) and re-scores every candidate against
     it, so a stricter T_j or a glycol coolant flips PASS/FAIL app-wide.
+
+    A project's saved `designs` (spec §9 "pin designs") are appended as named
+    candidates — each re-evaluated against the project basis — so an optimized /
+    hand-tuned design shows up in the candidate list and can be fine-tuned.
     """
     proj = payload.get("project")
     if isinstance(proj, str):
@@ -258,8 +290,30 @@ def project_catalog_payload(payload: dict) -> dict:
     if not proj:
         raise ValueError("project not found (pass a full project object or a known id)")
     r = projects.resolve_project(proj)
-    return _build_catalog(r["stack"], r["architecture"], r["operating"],
-                          coolant=r["coolant"], targets_info=r["targets"], project=proj)
+    cat = _build_catalog(r["stack"], r["architecture"], r["operating"],
+                         coolant=r["coolant"], targets_info=r["targets"], project=proj)
+
+    designs = proj.get("designs") or []
+    if designs:
+        stack = mbc.StackBasis(**_filtered(r["stack"], _STACK_FIELDS))
+        arch = mbc.FlowArchitecture(**_filtered(r["architecture"], _ARCH_FIELDS))
+        for entry in designs:
+            ds = entry.get("design") or {}
+            name = entry.get("name") or "design"
+            did = "saved_" + projects.slugify(name)
+            case = mbc.GeometryCase(**_filtered(_case_from_design(ds, did), _CASE_FIELDS))
+            op_over = dict(r["operating"])
+            if ds.get("flow_lpm"):
+                op_over["flow_lpm"] = float(ds["flow_lpm"])
+            op2 = mbc.OperatingPoint(**_filtered(op_over, _OP_FIELDS))
+            res = _sanitize(asdict(mbc.evaluate_case(case, stack, op2, arch)))
+            res["saved"] = True
+            res["name"] = name
+            cat["candidates"].append(res)
+            # the case for the viewer/sliders keeps the ORIGINAL design shape
+            # (e.g. gyroid_tpms+pin_fins) so the 3-D view + tuning work.
+            cat["cases"].append({**ds, "design_id": did})
+    return cat
 
 
 # --- V2.2 project store route helpers --------------------------------------

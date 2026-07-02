@@ -61,6 +61,9 @@ export interface BaselineResult {
   // V2.1 — present only when the request included coolant / targets.
   coolant?: CoolantInfo
   targets?: TargetsInfo
+  // V2.2 — set on saved user designs surfaced as candidates.
+  saved?: boolean
+  name?: string
 }
 
 // V2.1 — /api/schema (wizard metadata). Only the parts the viewer uses today.
@@ -185,9 +188,16 @@ export interface Project {
     flow_uniformity?: number
   }
   families?: string[]
+  designs?: SavedDesign[]
   physical_footprint?: { width_mm: number; length_mm: number }
   created?: string | null
   modified?: string | null
+}
+
+// V2.2 — a design saved onto a project; surfaces as a named candidate.
+export interface SavedDesign {
+  name: string
+  design: DesignState
 }
 
 export interface ProjectSummary {

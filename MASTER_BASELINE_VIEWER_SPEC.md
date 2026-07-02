@@ -637,3 +637,7 @@ project (a candidate that passes GB202 gates may fail a stricter T_j,max).
    entry dominates the Nu (entry model is now load-bearing), slot/turning losses dominate ΔP —
    CFD anchor required before quoting numbers. **To confirm with Hieu:** which compartments are
    feed vs return (the LMM base/manifold mesh defines it), and slot widths.
+
+## 26. Designs as candidates (V2.2 addendum, 2026-07-02)
+
+The Design Studio flow is a pipeline, not just problem definition: **choose inputs (Studio) -> optimize (Optimizer tab: sweep -> optimum -> "load into sliders") -> fine-tune (left sliders) -> "Save current design as candidate" (named)**. A saved design is stored on the project (`project.designs[] = {name, design}`) and re-evaluated against the project basis, so it appears in the Candidates list with its name (a `saved` tag), selectable + further tunable + deletable. Built-in projects (GB202) can't be written, so the first save forks a `"<name> (custom)"` copy. Pin designs (drawn as a gyroid sub-type) map to `family=pin_fin` for evaluation (S1 solver) while the stored case keeps the gyroid+pin shape so the 3-D viewer still renders them.
