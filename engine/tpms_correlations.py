@@ -83,64 +83,84 @@ def evaluate_tpms(
     header_K_total: float = 1.5,
     flow_uniformity: float = 1.0,
     surface_access_factor: float = 1.0,
+    cell_grading: float = 0.0,
 ) -> Dict[str, Any]:
     """Screening thermal-hydraulics for a Gyroid/Diamond sheet TPMS core.
-    Returns the same result-dict shape the fin/pin evaluators do."""
+
+    Radial cell grading (jet-adaptive: dense at the centre, coarser outward,
+    matching the viewer's law c(r) = cell*(1 + grade*clamp(r/R, 0, 1.5)),
+    R = 0.5*min(W,L)) is integrated over annular footprint zones: each zone has
+    its own local cell size -> local SA/V, void, D_h, Re, Nu and sheet
+    efficiency, combined as parallel conductances (UA = sum). At grade = 0 this
+    reduces exactly to the uniform single-zone model. Returns the same
+    result-dict shape the fin/pin evaluators do.
+    """
     if tpms_type not in CORR_TYPES:
         raise ValueError(f"tpms_correlations covers {sorted(CORR_TYPES)}, not {tpms_type!r}")
 
-    g = tpms_geometry.geometry(tpms_type, unit_cell_mm, wall_thickness_mm)
-    warnings: List[str] = list(g["warnings"])
-    porosity = g["void_fraction"]
-    sav = g["surface_area_density_m2_m3"]         # m^2/m^3
-    Dh = g["hydraulic_diameter_mm"] * 1e-3        # m
-    wall_m = wall_thickness_mm * 1e-3
-
-    # interstitial (pore) velocity through the open frontal area, per Renon's
-    # Re definition; frontal area = width x height.
-    flow_per_path = flow_m3_s / max(n_parallel_paths, 1)
-    frontal = core_width_mm * 1e-3 * core_height_mm * 1e-3
-    open_frontal = frontal * porosity
-    v = flow_per_path / open_frontal if open_frontal > 0 else 0.0
-    Re = rho * v * Dh / mu if mu > 0 else 0.0
     Pr = mu * cp / k_fluid if k_fluid > 0 else 0.0
+    wall_m = wall_thickness_mm * 1e-3
+    flow_per_path = flow_m3_s / max(n_parallel_paths, 1)
+    frontal = core_width_mm * 1e-3 * core_height_mm * 1e-3        # W x H (flow along L)
+    v_superficial = flow_per_path / frontal if frontal > 0 else 0.0
+    Lc = core_height_mm * 1e-3 * 0.5                              # sheet conduction half-length
 
-    Nu = nusselt(Re, Pr)
-    h = Nu * k_fluid / Dh if Dh > 0 else 0.0
+    grade = max(float(cell_grading), 0.0)
+    R_ref = 0.5 * min(core_width_mm, core_length_mm)              # grading reference radius (mm)
+    zones = (_radial_zones(core_width_mm, core_length_mm)
+             if grade > 0 and R_ref > 0 else [(0.0, 1.0)])
 
-    # wetted area from SA/V; sheet-wall efficiency treats the sheet as a fin of
-    # thickness = wall (conservative: half-cell conduction length).
-    A_wet = sav * core_volume_m3
-    if h > 0 and k_solid > 0 and wall_m > 0:
-        m = math.sqrt(2.0 * h / (k_solid * wall_m))
-        Lc = core_height_mm * 1e-3 * 0.5           # half the core height (meander)
-        mLc = m * Lc
-        eta_o = 1.0 / mLc if mLc > 25.0 else math.tanh(mLc) / mLc
-    else:
-        eta_o = 1.0
-    useful = eta_o * flow_uniformity * surface_access_factor
-    UA = h * A_wet * useful
+    UA = A_wet_tot = A_wet_eff = dP_core = 0.0
+    Re_m = Nu_m = v_m = Dh_m = eps_m = f_m = 0.0
+    for r_mid, w in zones:
+        c_i = unit_cell_mm * (1.0 + grade * min(max(r_mid / R_ref, 0.0), 1.5)) if R_ref > 0 else unit_cell_mm
+        gz = tpms_geometry.geometry(tpms_type, c_i, wall_thickness_mm)
+        eps = gz["void_fraction"]
+        sav = gz["surface_area_density_m2_m3"]
+        Dh = gz["hydraulic_diameter_mm"] * 1e-3
+        v = v_superficial / eps if eps > 0 else 0.0
+        Re = rho * v * Dh / mu if mu > 0 else 0.0
+        Nu = nusselt(Re, Pr)
+        h = Nu * k_fluid / Dh if Dh > 0 else 0.0
+        A_wet_i = sav * (w * core_volume_m3)
+        if h > 0 and k_solid > 0 and wall_m > 0:
+            m = math.sqrt(2.0 * h / (k_solid * wall_m))
+            mLc = m * Lc
+            eta_o = 1.0 / mLc if mLc > 25.0 else math.tanh(mLc) / mLc
+        else:
+            eta_o = 1.0
+        UA += h * A_wet_i * eta_o
+        A_wet_tot += A_wet_i
+        A_wet_eff += A_wet_i * eta_o
+        f = fanning_friction(Re, tpms_type)
+        dP_core += w * (4.0 * f * (path_length_m / Dh) * 0.5 * rho * v * v if Dh > 0 else 0.0)
+        Re_m += w * Re; Nu_m += w * Nu; v_m += w * v
+        Dh_m += w * Dh; eps_m += w * eps; f_m += w * f
+
+    useful_extra = flow_uniformity * surface_access_factor
+    UA *= useful_extra
     R_conv = 1.0 / UA if UA > 0 else float("inf")
+    delta_p = dP_core + 0.5 * rho * v_m * v_m * header_K_total
+    eta_o_mean = A_wet_eff / A_wet_tot if A_wet_tot > 0 else 1.0
 
-    # pressure drop from the Fanning friction factor over the flow path.
-    f = fanning_friction(Re, tpms_type)
-    dP_core = 4.0 * f * (path_length_m / Dh) * 0.5 * rho * v * v if Dh > 0 else 0.0
-    dP_header = 0.5 * rho * v * v * header_K_total
-    delta_p = dP_core + dP_header
-
-    flow_area = open_frontal
-    raw_sa_v = sav
-    eff_sa_v = sav * useful
-
-    # regime guardrails (spec §27): we are ~15x below the fitted Re floor.
-    if Re < _RE_FIT_LO or Re > _RE_FIT_HI:
+    # base geometry warnings from the densest (centre) cell = nominal unit cell.
+    warnings: List[str] = list(tpms_geometry.geometry(tpms_type, unit_cell_mm, wall_thickness_mm)["warnings"])
+    if Re_m < _RE_FIT_LO or Re_m > _RE_FIT_HI:
         warnings.append(
-            f"{tpms_type}: Re_Dh = {Re:.0f} is OUTSIDE the Renon & Jeanningros fit "
+            f"{tpms_type}: Re_Dh = {Re_m:.0f} is OUTSIDE the Renon & Jeanningros fit "
             f"({_RE_FIT_LO:.0f}-{_RE_FIT_HI:.0f}); Nu/f are EXTRAPOLATED (deep-laminar "
             "here vs the turbulent fit). Screening only.")
     if Pr < _PR_FIT_LO or Pr > _PR_FIT_HI:
+        warnings.append(f"{tpms_type}: Pr = {Pr:.1f} is outside the fitted 3-5 range; extrapolated.")
+    if grade > 0:
+        c_edge = unit_cell_mm * (1.0 + grade * 1.5)
         warnings.append(
-            f"{tpms_type}: Pr = {Pr:.1f} is outside the fitted 3-5 range; extrapolated.")
+            f"radial cell grading g={grade:.2f}: {len(zones)} zones, cell "
+            f"{unit_cell_mm:.2f}-{c_edge:.2f} mm (dense centre, jet-adaptive); parallel-zone "
+            "integration over the footprint (screening; Renon's fit is per uniform cell). "
+            "NOTE: modelled under UNIFORM base flux, so grading only trades centre density "
+            "for coarser (larger-area) edges here -> slightly less net area; the jet-adaptive "
+            "BENEFIT needs a centre-peaked impingement flux, coupled to the jet layout (V2.5).")
     warnings.append(
         "TPMS Nu/f from Renon & Jeanningros (2025), gyroid=diamond; ANALYTICAL_LIT "
         "screening (turbulent fit extrapolated to laminar), not CFD/coupon-validated.")
@@ -148,19 +168,38 @@ def evaluate_tpms(
     return {
         "R_conv": R_conv,
         "delta_p": delta_p,
-        "velocity": v,
-        "reynolds": Re,
-        "hydraulic_diameter_m": Dh,
-        "open_volume_fraction": porosity,
-        "raw_SA_V_m2_m3": raw_sa_v,
-        "effective_SA_V_m2_m3": eff_sa_v,
-        "wetted_area": A_wet,
-        "flow_area": flow_area,
+        "velocity": v_m,
+        "reynolds": Re_m,
+        "hydraulic_diameter_m": Dh_m,
+        "open_volume_fraction": eps_m,
+        "raw_SA_V_m2_m3": A_wet_tot / core_volume_m3 if core_volume_m3 > 0 else 0.0,
+        "effective_SA_V_m2_m3": A_wet_eff * useful_extra / core_volume_m3 if core_volume_m3 > 0 else 0.0,
+        "wetted_area": A_wet_tot,
+        "flow_area": frontal * eps_m,
         "UA": UA,
-        "eta_f": eta_o,
-        "eta_o": eta_o,
+        "eta_f": eta_o_mean,
+        "eta_o": eta_o_mean,
         "warnings": warnings,
-        "Nu": Nu,
+        "Nu": Nu_m,
         "Pr": Pr,
-        "fanning_f": f,
+        "fanning_f": f_m,
     }
+
+
+def _radial_zones(core_width_mm: float, core_length_mm: float,
+                  n_zones: int = 12, samples: int = 40):
+    """Area weights of concentric radial zones over the rectangular footprint.
+    Returns [(r_mid_mm, area_weight), ...] with weights summing to 1."""
+    r_max = 0.5 * math.hypot(core_width_mm, core_length_mm)
+    if r_max <= 0:
+        return [(0.0, 1.0)]
+    counts = [0] * n_zones
+    for ix in range(samples):
+        x = (-0.5 + (ix + 0.5) / samples) * core_width_mm
+        for iy in range(samples):
+            y = (-0.5 + (iy + 0.5) / samples) * core_length_mm
+            k = min(int(math.hypot(x, y) / r_max * n_zones), n_zones - 1)
+            counts[k] += 1
+    tot = float(samples * samples)
+    return [((i + 0.5) / n_zones * r_max, counts[i] / tot)
+            for i in range(n_zones) if counts[i]]

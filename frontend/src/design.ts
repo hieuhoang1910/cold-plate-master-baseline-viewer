@@ -118,6 +118,7 @@ export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}
       tpms_type: d.tpms_type,
       unit_cell_mm: d.unit_cell_mm,
       wall_thickness_mm: d.wall_thickness_mm,
+      cell_grading: d.cell_grading,
       void_fraction: d.void_fraction,
       surface_area_density_m2_m3: d.surface_area_density_m2_m3,
       hydraulic_diameter_mm: d.hydraulic_diameter_mm,

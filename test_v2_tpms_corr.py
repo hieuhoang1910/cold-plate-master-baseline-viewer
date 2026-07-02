@@ -70,6 +70,42 @@ check(3.0 < r["Nu"] < 60.0,
 check(r["R_conv"] > 0 and r["UA"] > 0 and r["delta_p"] > 0, "produces positive R_conv, UA, dP")
 
 # --------------------------------------------------------------------------
+print("radial cell grading (jet-adaptive) — option 2 zone integration")
+_gk = dict(tpms_type="gyroid", unit_cell_mm=2.5, wall_thickness_mm=0.12,
+           core_width_mm=35, core_length_mm=28, core_height_mm=5.5,
+           core_volume_m3=35e-3 * 28e-3 * 5.5e-3, flow_m3_s=2.65 / 60000.0,
+           n_parallel_paths=2, path_length_m=14e-3,
+           rho=997.0, mu=0.00089, k_fluid=0.60, cp=4181.0, k_solid=340.0, header_K_total=1.5)
+uni = tc.evaluate_tpms(**_gk, cell_grading=0.0)
+uni2 = tc.evaluate_tpms(**_gk)                         # default grading = 0
+check(approx(uni["R_conv"], uni2["R_conv"]) and approx(uni["Nu"], uni2["Nu"]),
+      "grade=0 default == explicit 0 (single-zone)")
+graded = tc.evaluate_tpms(**_gk, cell_grading=0.6)
+check(not approx(graded["R_conv"], uni["R_conv"], rel=1e-3),
+      "grading changes R_conv (no longer viewer-only)")
+# This grading law coarsens the outer (larger-area) zones, so under the model's
+# uniform-base-flux assumption it nets LESS surface area -> higher R_conv. The
+# jet-adaptive BENEFIT needs a centre-peaked impingement flux (V2.5 layout).
+check(graded["R_conv"] > uni["R_conv"],
+      f"grading raises R_conv under uniform flux (net-area; jet benefit is V2.5) "
+      f"({graded['R_conv']:.4f} > {uni['R_conv']:.4f})")
+check(graded["raw_SA_V_m2_m3"] < uni["raw_SA_V_m2_m3"],
+      "grading nets less surface area (coarse outer zones dominate the footprint)")
+check(any("radial cell grading" in w and "zones" in w for w in graded["warnings"]),
+      "graded result explains the zone integration")
+# through evaluate_case, grading flows end-to-end and moves R_jc
+gc = mbc.GeometryCase(design_id="g", family="gyroid_tpms", tpms_type="gyroid",
+                      unit_cell_mm=2.5, wall_thickness_mm=0.12, cell_grading=0.6)
+gc0 = mbc.GeometryCase(design_id="g0", family="gyroid_tpms", tpms_type="gyroid",
+                       unit_cell_mm=2.5, wall_thickness_mm=0.12, cell_grading=0.0)
+stack0 = mbc.StackBasis(**{k: server.DIE_COVERAGE_STACK[k] for k in server.DIE_COVERAGE_STACK})
+op0 = mbc.OperatingPoint()
+arch0 = mbc.FlowArchitecture(name="center_feed_bidirectional", n_parallel_paths=2,
+                             path_length_mm=14.0, header_K_total=1.5, flow_uniformity=1.0)
+check(not approx(mbc.evaluate_case(gc, stack0, op0, arch0).R_jc_K_W,
+                 mbc.evaluate_case(gc0, stack0, op0, arch0).R_jc_K_W, rel=1e-4),
+      "evaluate_case: grading moves R_jc end-to-end (no longer viewer-only)")
+
 print("dispatch — gyroid/diamond leave SCREENING_ONLY; Schwarz-P stays")
 stack = mbc.StackBasis(**{k: server.DIE_COVERAGE_STACK[k] for k in server.DIE_COVERAGE_STACK})
 op = mbc.OperatingPoint()

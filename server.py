@@ -262,6 +262,7 @@ def _case_from_design(ds: dict, design_id: str) -> dict:
                 "tpms_type": ds.get("tpms_type"),
                 "unit_cell_mm": ds.get("unit_cell_mm"),
                 "wall_thickness_mm": ds.get("wall_thickness_mm"),
+                "cell_grading": ds.get("cell_grading", 0.0),
                 "void_fraction": ds.get("void_fraction"),
                 "surface_area_density_m2_m3": ds.get("surface_area_density_m2_m3"),
                 "hydraulic_diameter_mm": ds.get("hydraulic_diameter_mm"),

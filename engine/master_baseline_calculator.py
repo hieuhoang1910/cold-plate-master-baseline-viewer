@@ -129,6 +129,7 @@ class GeometryCase:
     tpms_type: Optional[str] = None
     unit_cell_mm: Optional[float] = None
     wall_thickness_mm: Optional[float] = None
+    cell_grading: float = 0.0        # radial jet-adaptive grading (0 = uniform)
     notes: str = ""
 
 
@@ -486,6 +487,7 @@ def _evaluate_tpms_family(
         header_K_total=arch.header_K_total,
         flow_uniformity=arch.flow_uniformity,
         surface_access_factor=case.surface_access_factor,
+        cell_grading=case.cell_grading,
     )
 
 
