@@ -8,41 +8,33 @@ the browser never runs a second physics model.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
 - **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), and an About tab with nomenclature + cited references.
 
-## Quick start
+## Quick start (easiest — one command)
 
-Need **Python 3.10+** and **Node.js 18+ (LTS)**. Run every command from the
-`07_WebApp/` folder. Development uses **two terminals**.
+The UI is pre-built into `frontend/dist`, so a single Python process serves the
+whole app. You only need **Python 3.10+** for this.
 
-1. **Start the solver API** — terminal 1 (standard-library Python, nothing to install):
+1. Open a terminal in the `07_WebApp/` folder.
+2. Run:
 
    ```bash
    python server.py
    ```
 
-   Leave it running. It listens on `http://127.0.0.1:8000`.
+3. Open **http://127.0.0.1:8000** in your browser.
+4. Press `Ctrl+C` in the terminal to stop.
 
-2. **Install frontend dependencies** — terminal 2, first time only:
+**If it won't start / "address already in use":** an old server is still holding
+port 8000. Close it, then run `python server.py` again. On Windows (PowerShell):
 
-   ```bash
-   cd frontend
-   npm install
-   ```
+```powershell
+Get-NetTCPConnection -LocalPort 8000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
 
-3. **Start the frontend** — terminal 2:
+> Fresh clone with no `frontend/dist` yet? Build the UI once first:
+> `cd frontend && npm install && npm run build`, then `cd .. && python server.py`.
 
-   ```bash
-   npm run dev
-   ```
-
-4. **Open the app:** visit **http://localhost:5173** in your browser.
-
-5. **Stop:** press `Ctrl+C` in each terminal when finished.
-
-> **Windows note:** if `node`/`npm` are "not found" right after installing Node,
-> open a **new** terminal so the PATH refreshes (`node -v` should print a version).
-
-Prefer a single process? Build once and let Python serve everything — see
-**Production** under [Running the app](#running-the-app).
+For live-reload development (editing the UI), use the two-terminal setup under
+[Running the app](#running-the-app).
 
 ## Layout
 
