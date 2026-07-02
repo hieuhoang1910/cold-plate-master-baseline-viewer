@@ -41,7 +41,7 @@ import json
 import mimetypes
 import socket
 import sys
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -58,6 +58,8 @@ if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
 
 import master_baseline_calculator as mbc             # noqa: E402  (path set above)
+import coolants                                       # noqa: E402  (V2 fluid library)
+import targets                                        # noqa: E402  (V2 targets->gate)
 
 from cold_plate_v6.architecture import FlowArchitecture as V6Arch   # noqa: E402
 from cold_plate_v6.geometry import Geometry                          # noqa: E402
@@ -194,6 +196,55 @@ def catalog_payload() -> dict:
     }
 
 
+# Geometry-family pedigree for the wizard (spec §19C). Kept here (not in the
+# engine) because it is UI metadata, not physics.
+_FAMILY_PEDIGREE = [
+    {"family": "straight_fin", "label": "Straight fin",
+     "model": "Shah-London H1 laminar Nu + fRe", "status": "ANALYTICAL", "viewable": True},
+    {"family": "wavy_fin", "label": "Wavy fin",
+     "model": "Shah-London x wavy multiplier (chi, Re); v6 depth available",
+     "status": "ANALYTICAL", "viewable": True},
+    {"family": "pin_fin", "label": "Pin fin (inline / staggered)",
+     "model": "generic surface (S1 KCY + Gaddis-Gnielinski planned V2.3)",
+     "status": "SCREENING_ONLY", "viewable": True},
+    {"family": "gyroid_tpms", "label": "TPMS lattice",
+     "model": "generic surface (S2 literature Nu/f planned V2.4 for gyroid/diamond/schwarz_p)",
+     "status": "SCREENING_ONLY", "viewable": True},
+    {"family": "generic_surface", "label": "Generic surface (SA/V + porosity)",
+     "model": "generic surface model", "status": "SCREENING_ONLY", "viewable": False},
+]
+
+# Flow layouts (spec §19D). Only the first three have engine support today;
+# the rest are declared so the wizard can show them (greyed) with their status.
+_LAYOUTS = [
+    {"layout": "single_pass", "label": "Single pass", "status": "SUPPORTED",
+     "resolves": "n_parallel_paths = 1, path = core_length"},
+    {"layout": "center_feed_bidirectional", "label": "Center-feed bidirectional",
+     "status": "SUPPORTED", "resolves": "n_parallel_paths = 2, path = L/2, header_K 1.5"},
+    {"layout": "top_jet_slot_centre_rib_bidirectional", "label": "Top-jet + centre rib (v6 hero)",
+     "status": "SUPPORTED", "resolves": "+ jet Nu enhancement, slot dims (v6 solver)"},
+    {"layout": "distributed_jet_compartments", "label": "Distributed-jet compartments (ICE Proto2)",
+     "status": "PLANNED_V2_5", "resolves": "rib array -> n_paths = 2*(n_ribs-1), path = pitch/2"},
+    {"layout": "serpentine_n_pass", "label": "Serpentine (n-pass)",
+     "status": "PLANNED_V2_5", "resolves": "path = n*L, +K_bend per 180deg bend"},
+    {"layout": "u_flow_side_feed", "label": "U-flow side feed",
+     "status": "PLANNED_V2_5", "resolves": "path = L, uniformity 0.85-0.95, higher header_K"},
+    {"layout": "multi_jet_array", "label": "Multi-jet array (free grid)",
+     "status": "DEFERRED", "resolves": "Martin (1977) + CFD anchor"},
+]
+
+
+def schema_payload() -> dict:
+    """Wizard schema (spec §21): coolant presets, target defaults/bounds,
+    family pedigree, layouts. Read-only and additive; never affects parity."""
+    return {
+        "coolants": coolants.schema(),
+        "targets": targets.target_schema(),
+        "families": _FAMILY_PEDIGREE,
+        "layouts": _LAYOUTS,
+    }
+
+
 def evaluate_payload(payload: dict) -> dict:
     """Run the master engine evaluate_case() on an arbitrary design.
 
@@ -202,11 +253,22 @@ def evaluate_payload(payload: dict) -> dict:
         "stack":        { ...StackBasis overrides... },
         "operating":    { ...OperatingPoint overrides... },
         "architecture": { ...FlowArchitecture overrides... },
+        "coolant":      "water" | {name?, rho_kg_m3?, mu_Pa_s?, ...},   # V2
+        "targets":      { T_j_max_C?, R_jc_gate_K_W?, limit_deltaP_Pa?,  # V2
+                          limit_pump_W? },
         "relative_roughness": 0.03
     }
 
     Omitted groups fall back to the master defaults, which equal the 450/575 W
     die-coverage basis — so posting just a case reproduces the golden results.
+
+    V2 additions are purely additive: when "coolant"/"targets" are absent the
+    result is byte-identical to V1 (this is what test_api_parity.py guards).
+      * coolant -> resolves fluid properties (rho, mu, k_fluid, cp) at the inlet
+        temperature and fills them into the operating point (explicit operating
+        overrides still win).
+      * targets -> derives the R_jc gate from T_j,max (spec §19A), injects it as
+        the R_jc limit, and attaches the exact junction temperature to the result.
     """
     case_in = dict(payload.get("case") or {})
     case_in.setdefault("design_id", "live_design")
@@ -214,12 +276,63 @@ def evaluate_payload(payload: dict) -> dict:
 
     case = mbc.GeometryCase(**_filtered(case_in, _CASE_FIELDS))
     stack = mbc.StackBasis(**_filtered(payload.get("stack"), _STACK_FIELDS))
-    op = mbc.OperatingPoint(**_filtered(payload.get("operating"), _OP_FIELDS))
     arch = mbc.FlowArchitecture(**_filtered(payload.get("architecture"), _ARCH_FIELDS))
     rr = float(payload.get("relative_roughness", 0.03))
 
+    op_overrides = dict(payload.get("operating") or {})
+
+    # --- V2: coolant preset -> fluid properties (skipped when absent) --------
+    coolant_info = None
+    if payload.get("coolant") is not None:
+        T_in = op_overrides.get("T_inlet_C")
+        if T_in is None and isinstance(payload["coolant"], dict):
+            T_in = payload["coolant"].get("T_inlet_C")
+        if T_in is None:
+            T_in = mbc.OperatingPoint().T_inlet_C
+        coolant_info = coolants.resolve(payload["coolant"], float(T_in))
+        for k in ("rho_kg_m3", "mu_Pa_s", "k_fluid_W_mK", "cp_J_kgK"):
+            op_overrides.setdefault(k, coolant_info[k])   # explicit op wins
+        op_overrides.setdefault("T_inlet_C", float(T_in))
+
+    op = mbc.OperatingPoint(**_filtered(op_overrides, _OP_FIELDS))
+
+    # --- V2: targets -> derived R_jc gate (skipped when absent) --------------
+    target_info = None
+    tgt = payload.get("targets")
+    if tgt is not None:
+        target_info = targets.derive_thermal_gate(
+            T_j_max_C=tgt.get("T_j_max_C"),
+            T_in_C=op.T_inlet_C,
+            Q_W=op.heat_load_W,
+            flow_lpm=op.flow_lpm,
+            rho_kg_m3=op.rho_kg_m3,
+            cp_J_kgK=op.cp_J_kgK,
+            override_R_jc_gate=tgt.get("R_jc_gate_K_W"),
+        )
+        gate_overrides = {"limit_R_jc_K_W": target_info["R_jc_gate_K_W"]}
+        if tgt.get("limit_deltaP_Pa") is not None:
+            gate_overrides["limit_deltaP_Pa"] = float(tgt["limit_deltaP_Pa"])
+        if tgt.get("limit_pump_W") is not None:
+            gate_overrides["limit_pump_W"] = float(tgt["limit_pump_W"])
+        op = replace(op, **gate_overrides)
+
     result = mbc.evaluate_case(case, stack, op, arch, relative_roughness=rr)
-    return _sanitize(asdict(result))
+    out = _sanitize(asdict(result))
+
+    # --- V2: attach coolant + exact junction temperature (when requested) ----
+    if coolant_info is not None:
+        out["coolant"] = _sanitize(coolant_info)
+    if target_info is not None:
+        tj = targets.junction_temperature(
+            T_in_C=op.T_inlet_C, Q_W=op.heat_load_W, UA_W_K=result.UA_W_K,
+            mdot_cp_W_K=target_info["mdot_cp_W_K"],
+            R_tim_K_W=result.R_TIM_K_W, R_base_K_W=result.R_base_K_W)
+        tj_max = target_info["T_j_max_C"]
+        out["targets"] = _sanitize({
+            **target_info, **tj,
+            "T_j_pass": (tj["T_j_C"] <= tj_max) if tj_max is not None else None,
+        })
+    return out
 
 
 def solve_payload(payload: dict) -> dict:
@@ -364,6 +477,7 @@ def sweep_payload(payload: dict) -> dict:
 _ROUTES_GET = {
     "/api/health": lambda: {"status": "ok"},
     "/api/catalog": catalog_payload,
+    "/api/schema": schema_payload,
 }
 _ROUTES_POST = {
     "/api/evaluate": evaluate_payload,

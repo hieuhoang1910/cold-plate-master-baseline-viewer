@@ -131,14 +131,27 @@ single process runs the whole app — ready to host on any Python-capable host.
 |---|---|---|
 | GET | `/api/health` | liveness probe |
 | GET | `/api/catalog` | parameter registry + candidates + gate limits |
+| GET | `/api/schema` | **V2** wizard schema: coolant presets, target defaults/bounds, family pedigree, layouts |
 | POST | `/api/evaluate` | master `evaluate_case()` for arbitrary parameters (all families) |
 | POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
 | POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
 
+**V2.1 `/api/evaluate` extras (additive, optional).** Add `"coolant"` (a preset
+name like `"water"`/`"pg50"`, or `{name, rho_kg_m3?, ...}` for custom) to swap
+fluid properties at the inlet temperature, and/or `"targets"`
+(`{T_j_max_C, R_jc_gate_K_W?, limit_deltaP_Pa?, limit_pump_W?}`) to derive the
+R_jc gate from a max junction temperature (spec §19A). When present the response
+gains `coolant` and `targets` blocks (the latter carries the exact junction
+temperature). With neither key the output is unchanged — the water preset is
+anchored to the master defaults so the GB202 golden results are reproduced
+bit-for-bit. Physics lives in `engine/coolants.py` (S4) and `engine/targets.py`
+(S5), vendored from `06_MASTER_BASELINE/python/` via `sync_engine.py`.
+
 ## Test (acceptance gate)
 
 ```bash
-python test_api_parity.py    # exit 0 = API reproduces the 5 golden results
+python test_api_parity.py            # exit 0 = API reproduces the 5 golden results
+python test_v2_targets_coolants.py   # exit 0 = V2.1 coolants + targets + wiring
 ```
 
 ## The `engine/` snapshot

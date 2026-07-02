@@ -30,6 +30,13 @@ PROJECT = HERE.parent                           # Cold Plate project root (if pr
 # (source relative to the project root) -> (destination under engine/)
 V6_SRC = PROJECT / "02_Code" / "cold_plate_v6"
 MASTER_CALC_SRC = PROJECT / "06_MASTER_BASELINE" / "python" / "master_baseline_calculator.py"
+
+# Top-level master-layer modules vendored next to master_baseline_calculator.py
+# (V2 "Design Studio": coolant property library + targets->gate translator).
+MASTER_MODULE_SRCS = {
+    "coolants.py": PROJECT / "06_MASTER_BASELINE" / "python" / "coolants.py",
+    "targets.py": PROJECT / "06_MASTER_BASELINE" / "python" / "targets.py",
+}
 DATA_SRCS = {
     "master_design_parameters.json": PROJECT / "06_MASTER_BASELINE" / "master_design_parameters.json",
     "master_baseline_results.json": PROJECT / "06_MASTER_BASELINE" / "outputs" / "master_baseline_results.json",
@@ -68,6 +75,12 @@ def main() -> int:
             print(f"  WARNING: expected module missing in source: {name}")
     shutil.copy2(MASTER_CALC_SRC, engine / "master_baseline_calculator.py")
     n += 1
+    for name, src in MASTER_MODULE_SRCS.items():
+        if src.exists():
+            shutil.copy2(src, engine / name)
+            n += 1
+        else:
+            print(f"  WARNING: expected master module missing in source: {name}")
     for name, src in DATA_SRCS.items():
         shutil.copy2(src, data_dst / name)
         n += 1
