@@ -479,6 +479,23 @@ def evaluate_payload(payload: dict) -> dict:
             **target_info, **tj,
             "T_j_pass": (tj["T_j_C"] <= tj_max) if tj_max is not None else None,
         })
+
+    # --- V2.6: mass/material (always) + k-solid R_jc uncertainty band (on ask) --
+    mass = _mass_estimate(out, payload.get("stack"))
+    out["mass_g"] = mass["mass_g"]
+    out["material_cost_usd"] = mass["material_cost_usd"]
+    if payload.get("uncertainty"):
+        lo_k, hi_k = _K_BAND_W_MK
+        band = {
+            kv: mbc.evaluate_case(case, replace(stack, k_solid_W_mK=kv), op, arch,
+                                  relative_roughness=rr).R_jc_K_W
+            for kv in (lo_k, hi_k)
+        }
+        out["r_jc_band"] = _sanitize({
+            "conservative_k": lo_k, "R_jc_conservative_K_W": band[lo_k],
+            "optimistic_k": hi_k, "R_jc_optimistic_K_W": band[hi_k],
+            "nominal_k": stack.k_solid_W_mK, "R_jc_nominal_K_W": result.R_jc_K_W,
+        })
     return out
 
 
@@ -531,11 +548,14 @@ _OBJECTIVE_DIR = {
     "mass_g": "min", "cop": "max",
 }
 _RHO_CU_KG_M3 = 8960.0        # bulk copper (printed Cu ~8900; screening)
+_CU_POWDER_USD_PER_KG = 60.0  # copper powder, MATERIAL only (excludes AM machine time)
+# Cu-AM conductivity band for the uncertainty estimate (spec §15 Q7).
+_K_BAND_W_MK = (250.0, 400.0)  # (conservative, optimistic); nominal is the design's own k
 
 
-def _sweep_mass_g(result: dict, stack_d=None) -> float:
-    """Copper mass (g) of the core solid + base slab, from the open-volume
-    fraction — a screening material-cost/print-mass proxy (spec §23)."""
+def _mass_estimate(result: dict, stack_d=None) -> dict:
+    """Copper mass (g) + material cost of the core solid + base slab, from the
+    open-volume fraction — a screening print-mass/material proxy (spec §23)."""
     s = {**DIE_COVERAGE_STACK, **(stack_d or {})}
     cw = s["core_width_mm"] * 1e-3
     cl = s["core_length_mm"] * 1e-3
@@ -543,7 +563,12 @@ def _sweep_mass_g(result: dict, stack_d=None) -> float:
     bt = s["base_thickness_mm"] * 1e-3
     open_frac = result.get("open_volume_fraction") or 0.0
     core_solid = max(1.0 - open_frac, 0.0) * (cw * cl * ch)
-    return (core_solid + cw * cl * bt) * _RHO_CU_KG_M3 * 1000.0
+    mass_kg = (core_solid + cw * cl * bt) * _RHO_CU_KG_M3
+    return {"mass_g": mass_kg * 1000.0, "material_cost_usd": mass_kg * _CU_POWDER_USD_PER_KG}
+
+
+def _sweep_mass_g(result: dict, stack_d=None) -> float:
+    return _mass_estimate(result, stack_d)["mass_g"]
 
 
 def _axis(spec: dict, default_lo: float, default_hi: float, default_n: int = 21):

@@ -12,6 +12,7 @@ import { ProblemControls } from './components/ProblemControls'
 import { DesignStudio } from './components/DesignStudio'
 import { OptimizerPanel } from './components/OptimizerPanel'
 import { About } from './components/About'
+import { Report } from './components/Report'
 import { geomFromCase } from './viewerGeom'
 
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
@@ -35,6 +36,7 @@ export default function App() {
   const [evaluating, setEvaluating] = useState(false)
   const [bottomTab, setBottomTab] = useState<'compare' | 'optimize'>('compare')
   const [showAbout, setShowAbout] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   // Boot: schema + project list + the default project.
   useEffect(() => {
@@ -98,7 +100,7 @@ export default function App() {
     if (!design || !catalog) return
     const h = setTimeout(() => {
       setEvaluating(true)
-      evaluate(evalPayload(design, catalog.basis, liveOpts))
+      evaluate({ ...evalPayload(design, catalog.basis, liveOpts), uncertainty: true })
         .then(setLive)
         .catch(() => {})
         .finally(() => setEvaluating(false))
@@ -206,10 +208,15 @@ export default function App() {
           : catalog
             ? <span className="api-ok">● {catalog.candidates.length} candidates</span>
             : <span className="sub">connecting…</span>}
+        {catalog && <button className="about-btn" onClick={() => setShowReport(true)}>Report</button>}
         <button className="about-btn" onClick={() => setShowAbout(true)}>About</button>
       </header>
 
       {showAbout && <About onClose={() => setShowAbout(false)} />}
+      {showReport && catalog && (
+        <Report project={activeProject} catalog={catalog} live={design ? live : selected}
+          design={design} onClose={() => setShowReport(false)} />
+      )}
       {showStudio && schema && activeProject && (
         <DesignStudio schema={schema} current={activeProject} projects={projects}
           onApply={applyProjectDraft} onSave={saveProjectDraft}

@@ -62,6 +62,13 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
         </div>
         <LimitBar label={t ? 'R_jc vs derived gate' : 'R_jc vs gate'} value={r.R_jc_K_W}
           limit={rjcGate} display={milliKW(r.R_jc_K_W)} unit="mK/W" />
+        {r.r_jc_band && (
+          <div className="rjc-band muted">
+            k-solid band: <b>{milliKW(r.r_jc_band.R_jc_optimistic_K_W)}–{milliKW(r.r_jc_band.R_jc_conservative_K_W)}</b> mK/W
+            {' '}over k {fmt(r.r_jc_band.optimistic_k, 0)}–{fmt(r.r_jc_band.conservative_k, 0)} W/mK
+            {' '}(nominal {fmt(r.r_jc_band.nominal_k, 0)})
+          </div>
+        )}
         {t && <JunctionTemp t={t} />}
         <div style={{ marginTop: 12 }}>
           <ResistanceStackup r={r} />
@@ -93,6 +100,8 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
           <Metric label="Coverage" value={fmt(r.coverage, 3)} />
           <Metric label="ΔT @450W" value={`${fmt(r.heat_load_deltaT_K, 2)} K`} />
           <Metric label="ΔT @575W" value={`${fmt(r.margin_heat_load_deltaT_K, 2)} K`} />
+          {r.mass_g != null && <Metric label="Cu mass" value={`${fmt(r.mass_g, 1)} g`} />}
+          {r.material_cost_usd != null && <Metric label="Material $" value={`$${fmt(r.material_cost_usd, 2)}`} />}
         </div>
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className="badge stage">{r.validation_stage}</span>

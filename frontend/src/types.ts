@@ -64,6 +64,17 @@ export interface BaselineResult {
   // V2.2 — set on saved user designs surfaced as candidates.
   saved?: boolean
   name?: string
+  // V2.6 — mass/material (always) + k-solid R_jc uncertainty band (on request).
+  mass_g?: number
+  material_cost_usd?: number
+  r_jc_band?: {
+    conservative_k: number
+    R_jc_conservative_K_W: number
+    optimistic_k: number
+    R_jc_optimistic_K_W: number
+    nominal_k: number
+    R_jc_nominal_K_W: number
+  }
 }
 
 // V2.1 — /api/schema (wizard metadata). Only the parts the viewer uses today.
