@@ -246,7 +246,8 @@ function makeTpmsSdf(g: ViewerGeom, zLo: number, zHi: number): (x: number, y: nu
         + Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(dzAbs, 0))
     }
     const rr = Math.hypot(x, y)
-    const cLocal = g.unitCell * (1 + grade * Math.min(Math.max(rr / Math.max(R, 1e-3), 0), 1.5))
+    // jet-adaptive grading: finer than nominal at the centre, coarser at the edges
+    const cLocal = g.unitCell * (1 + grade * (Math.min(Math.max(rr / Math.max(R, 1e-3), 0), 1.5) - 0.5))
     const c = Math.max(cLocal, 0.3)
     const k = TAU / c
     const f = tpmsField(x, y, z, k, ty)

@@ -113,8 +113,9 @@ float mapScene(vec3 p) {
       core = max(max(dRad, dz), clip);
     } else {
       float rr = length(p.xy);
-      // radially graded cell — denser at the center (jet-adaptive) when uGrade > 0
-      float cLocal = uUnitCell * (1.0 + uGrade * clamp(rr / max(R, 1e-3), 0.0, 1.5));
+      // radially graded cell — jet-adaptive: finer than nominal at the centre,
+      // coarser at the edges (crossover at r = 0.5 R) when uGrade > 0
+      float cLocal = uUnitCell * (1.0 + uGrade * (clamp(rr / max(R, 1e-3), 0.0, 1.5) - 0.5));
       float c = max(cLocal, 0.3);
       float k = 2.0 * PI / c;
       float f = tpmsField(p, k, uTpms);

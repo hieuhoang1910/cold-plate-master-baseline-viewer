@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import coolants
+import layouts
 import targets
 
 SCHEMA_VERSION = 1
@@ -60,7 +61,23 @@ def resolve_project(project: Dict[str, Any]) -> Dict[str, Any]:
     prob = dict(project.get("problem") or {})
     op_in = dict(project.get("operating") or {})
     tgt = dict(project.get("targets") or {})
-    arch = dict(project.get("architecture") or {})
+    arch_in = dict(project.get("architecture") or {})
+
+    # V2.5: the named layout is authoritative — it resolves n_paths / path /
+    # header_K / flow_uniformity / jet_flux_peaking (S3). Layout parameters
+    # (n_pass, n_jets) ride in `arch_in`. GB202's center-feed at core_length 28
+    # resolves to exactly its historical knobs (n=2, path=14, header=1.5), so the
+    # preset is unchanged.
+    layout_name = arch_in.get("name", "center_feed_bidirectional")
+    core_length = float(prob.get("core_length_mm", 28.0))
+    layout_warnings: List[str] = []
+    try:
+        resolved = layouts.resolve(layout_name, core_length, arch_in)
+    except ValueError as exc:
+        resolved = layouts.resolve("center_feed_bidirectional", core_length)
+        layout_warnings.append(str(exc))
+    layout_warnings += resolved.pop("warnings", [])
+    arch = {"name": layout_name, **resolved}
 
     T_in = float(op_in.get("T_inlet_C", 25.0))
     cool = coolants.resolve(prob.get("coolant", "water"), T_in)
@@ -108,7 +125,8 @@ def resolve_project(project: Dict[str, Any]) -> Dict[str, Any]:
         "gates": gates,
         "coolant": cool,
         "targets": gate_info,
-        "warnings": list(cool.get("warnings", [])) + list(gate_info.get("warnings", [])),
+        "warnings": (list(cool.get("warnings", [])) + list(gate_info.get("warnings", []))
+                     + layout_warnings),
     }
 
 

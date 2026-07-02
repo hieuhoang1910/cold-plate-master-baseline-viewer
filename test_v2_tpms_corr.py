@@ -83,14 +83,14 @@ check(approx(uni["R_conv"], uni2["R_conv"]) and approx(uni["Nu"], uni2["Nu"]),
 graded = tc.evaluate_tpms(**_gk, cell_grading=0.6)
 check(not approx(graded["R_conv"], uni["R_conv"], rel=1e-3),
       "grading changes R_conv (no longer viewer-only)")
-# This grading law coarsens the outer (larger-area) zones, so under the model's
-# uniform-base-flux assumption it nets LESS surface area -> higher R_conv. The
-# jet-adaptive BENEFIT needs a centre-peaked impingement flux (V2.5 layout).
+# Under UNIFORM flux (no jet layout), concentrating conductance at the centre is
+# a mismatch, so grading raises R_conv — you should only grade under a jet layout
+# (test_v2_layouts checks the jet payoff).
 check(graded["R_conv"] > uni["R_conv"],
-      f"grading raises R_conv under uniform flux (net-area; jet benefit is V2.5) "
+      f"grading raises R_conv under uniform flux (mismatch; grade only under a jet) "
       f"({graded['R_conv']:.4f} > {uni['R_conv']:.4f})")
 check(graded["raw_SA_V_m2_m3"] < uni["raw_SA_V_m2_m3"],
-      "grading nets less surface area (coarse outer zones dominate the footprint)")
+      "centre-densifying grading nets slightly less surface area at this grade")
 check(any("radial cell grading" in w and "zones" in w for w in graded["warnings"]),
       "graded result explains the zone integration")
 # through evaluate_case, grading flows end-to-end and moves R_jc

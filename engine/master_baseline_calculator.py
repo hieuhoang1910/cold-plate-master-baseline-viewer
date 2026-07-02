@@ -92,6 +92,7 @@ class FlowArchitecture:
     path_length_mm: Optional[float] = None
     header_K_total: float = 1.5
     flow_uniformity: float = 1.0
+    jet_flux_peaking: float = 0.0        # V2.5: 0 = uniform base flux, 1 = central jet
 
     def resolved_path_length_m(self, stack: StackBasis) -> float:
         if self.path_length_mm is not None and self.path_length_mm > 0:
@@ -488,6 +489,7 @@ def _evaluate_tpms_family(
         flow_uniformity=arch.flow_uniformity,
         surface_access_factor=case.surface_access_factor,
         cell_grading=case.cell_grading,
+        jet_flux_peaking=arch.jet_flux_peaking,
     )
 
 

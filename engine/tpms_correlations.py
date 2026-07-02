@@ -84,16 +84,20 @@ def evaluate_tpms(
     flow_uniformity: float = 1.0,
     surface_access_factor: float = 1.0,
     cell_grading: float = 0.0,
+    jet_flux_peaking: float = 0.0,
 ) -> Dict[str, Any]:
     """Screening thermal-hydraulics for a Gyroid/Diamond sheet TPMS core.
 
-    Radial cell grading (jet-adaptive: dense at the centre, coarser outward,
-    matching the viewer's law c(r) = cell*(1 + grade*clamp(r/R, 0, 1.5)),
-    R = 0.5*min(W,L)) is integrated over annular footprint zones: each zone has
-    its own local cell size -> local SA/V, void, D_h, Re, Nu and sheet
-    efficiency, combined as parallel conductances (UA = sum). At grade = 0 this
-    reduces exactly to the uniform single-zone model. Returns the same
-    result-dict shape the fin/pin evaluators do.
+    Radial cell grading (jet-adaptive: finer than nominal at the centre, coarser
+    at the edges, matching the viewer's law
+    c(r) = cell*(1 + grade*(clamp(r/R, 0, 1.5) - 0.5)), R = 0.5*min(W,L)) is
+    integrated over annular footprint zones: each zone has its own local cell
+    size -> SA/V, void, D_h, Re, Nu, sheet efficiency and conductance UA_i.
+    R_conv is the heat-weighted mean wall-to-fluid dT (sum f_i^2 / UA_i), where
+    the heat fraction f_i is centre-peaked under a jet layout (jet_flux_peaking>0)
+    or area-proportional otherwise — so dense centre cells matched to a central
+    jet lower R_conv. At grade = 0 and jet_flux_peaking = 0 this reduces exactly
+    to the uniform 1/UA model. Returns the fin/pin result-dict shape.
     """
     if tpms_type not in CORR_TYPES:
         raise ValueError(f"tpms_correlations covers {sorted(CORR_TYPES)}, not {tpms_type!r}")
@@ -106,14 +110,23 @@ def evaluate_tpms(
     Lc = core_height_mm * 1e-3 * 0.5                              # sheet conduction half-length
 
     grade = max(float(cell_grading), 0.0)
-    R_ref = 0.5 * min(core_width_mm, core_length_mm)              # grading reference radius (mm)
+    peak = max(float(jet_flux_peaking), 0.0)
+    R_ref = 0.5 * min(core_width_mm, core_length_mm)              # grading/flux reference radius
     zones = (_radial_zones(core_width_mm, core_length_mm)
-             if grade > 0 and R_ref > 0 else [(0.0, 1.0)])
+             if (grade > 0 or peak > 0) and R_ref > 0 else [(0.0, 1.0)])
 
-    UA = A_wet_tot = A_wet_eff = dP_core = 0.0
+    useful_extra = flow_uniformity * surface_access_factor
+    ua_i: List[float] = []
+    wt_i: List[float] = []
+    rr_i: List[float] = []
+    A_wet_tot = A_wet_eff = dP_core = 0.0
     Re_m = Nu_m = v_m = Dh_m = eps_m = f_m = 0.0
     for r_mid, w in zones:
-        c_i = unit_cell_mm * (1.0 + grade * min(max(r_mid / R_ref, 0.0), 1.5)) if R_ref > 0 else unit_cell_mm
+        # centre-densifying grading: finer than nominal at the centre (dense under
+        # the jet), coarser at the edges, crossover at r = 0.5 R (roughly area-
+        # neutral). c(r) = cell*(1 + grade*(clamp(r/R,0,1.5) - 0.5)).
+        c_i = (unit_cell_mm * (1.0 + grade * (min(max(r_mid / R_ref, 0.0), 1.5) - 0.5))
+               if R_ref > 0 else unit_cell_mm)
         gz = tpms_geometry.geometry(tpms_type, c_i, wall_thickness_mm)
         eps = gz["void_fraction"]
         sav = gz["surface_area_density_m2_m3"]
@@ -129,7 +142,9 @@ def evaluate_tpms(
             eta_o = 1.0 / mLc if mLc > 25.0 else math.tanh(mLc) / mLc
         else:
             eta_o = 1.0
-        UA += h * A_wet_i * eta_o
+        ua_i.append(h * A_wet_i * eta_o * useful_extra)
+        wt_i.append(w)
+        rr_i.append(r_mid)
         A_wet_tot += A_wet_i
         A_wet_eff += A_wet_i * eta_o
         f = fanning_friction(Re, tpms_type)
@@ -137,9 +152,19 @@ def evaluate_tpms(
         Re_m += w * Re; Nu_m += w * Nu; v_m += w * v
         Dh_m += w * Dh; eps_m += w * eps; f_m += w * f
 
-    useful_extra = flow_uniformity * surface_access_factor
-    UA *= useful_extra
-    R_conv = 1.0 / UA if UA > 0 else float("inf")
+    # Base heat-flux fraction per zone: centre-peaked under a jet (peak>0),
+    # area-proportional (uniform flux) otherwise. R_conv is the heat-weighted
+    # mean wall-to-fluid dT / Q = sum(f_i^2 / UA_i) — so putting conductance
+    # (dense cells -> high UA_i) where the flux is high LOWERS R_conv. This is
+    # the jet-adaptive grading payoff, and it reduces to 1/UA when uniform.
+    s = 2.5 * peak
+    raw = [w * math.exp(-s * (r / R_ref) ** 2) if R_ref > 0 else w
+           for r, w in zip(rr_i, wt_i)]
+    tot = sum(raw) or 1.0
+    fl = [x / tot for x in raw]
+    R_conv = sum((fl[i] * fl[i]) / ua_i[i] for i in range(len(ua_i)) if ua_i[i] > 0)
+    R_conv = R_conv if R_conv > 0 else float("inf")
+    UA = 1.0 / R_conv if 0.0 < R_conv < float("inf") else 0.0
     delta_p = dP_core + 0.5 * rho * v_m * v_m * header_K_total
     eta_o_mean = A_wet_eff / A_wet_tot if A_wet_tot > 0 else 1.0
 
@@ -153,14 +178,24 @@ def evaluate_tpms(
     if Pr < _PR_FIT_LO or Pr > _PR_FIT_HI:
         warnings.append(f"{tpms_type}: Pr = {Pr:.1f} is outside the fitted 3-5 range; extrapolated.")
     if grade > 0:
-        c_edge = unit_cell_mm * (1.0 + grade * 1.5)
+        c_ctr = unit_cell_mm * (1.0 - grade * 0.5)
+        c_edge = unit_cell_mm * (1.0 + grade * 1.0)
+        if peak > 0:
+            warnings.append(
+                f"radial cell grading g={grade:.2f} under a jet layout (peaking={peak:.2f}): "
+                f"{len(zones)} zones, cell {c_ctr:.2f}(centre)-{c_edge:.2f}(edge) mm; the dense centre is "
+                "matched to the centre-peaked jet flux, lowering R_conv (jet-adaptive payoff). "
+                "Screening — flux profile pending CFD.")
+        else:
+            warnings.append(
+                f"radial cell grading g={grade:.2f}: {len(zones)} zones, cell "
+                f"{unit_cell_mm:.2f}-{c_edge:.2f} mm. NOTE: uniform base flux here, so grading only "
+                "trades centre density for coarser (larger-area) edges -> slightly less net area; "
+                "pick a jet layout (top-jet or distributed-jet) to engage the jet-adaptive benefit.")
+    elif peak > 0:
         warnings.append(
-            f"radial cell grading g={grade:.2f}: {len(zones)} zones, cell "
-            f"{unit_cell_mm:.2f}-{c_edge:.2f} mm (dense centre, jet-adaptive); parallel-zone "
-            "integration over the footprint (screening; Renon's fit is per uniform cell). "
-            "NOTE: modelled under UNIFORM base flux, so grading only trades centre density "
-            "for coarser (larger-area) edges here -> slightly less net area; the jet-adaptive "
-            "BENEFIT needs a centre-peaked impingement flux, coupled to the jet layout (V2.5).")
+            f"jet layout (peaking={peak:.2f}) with a UNIFORM cell: the centre-peaked flux over "
+            "uniform conductance raises R_conv — grade the cells (dense centre) to match the jet.")
     warnings.append(
         "TPMS Nu/f from Renon & Jeanningros (2025), gyroid=diamond; ANALYTICAL_LIT "
         "screening (turbulent fit extrapolated to laminar), not CFD/coupon-validated.")
