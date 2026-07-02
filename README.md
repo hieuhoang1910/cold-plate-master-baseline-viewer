@@ -8,6 +8,42 @@ the browser never runs a second physics model.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
 - **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), and an About tab with nomenclature + cited references.
 
+## Quick start
+
+Need **Python 3.10+** and **Node.js 18+ (LTS)**. Run every command from the
+`07_WebApp/` folder. Development uses **two terminals**.
+
+1. **Start the solver API** — terminal 1 (standard-library Python, nothing to install):
+
+   ```bash
+   python server.py
+   ```
+
+   Leave it running. It listens on `http://127.0.0.1:8000`.
+
+2. **Install frontend dependencies** — terminal 2, first time only:
+
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+3. **Start the frontend** — terminal 2:
+
+   ```bash
+   npm run dev
+   ```
+
+4. **Open the app:** visit **http://localhost:5173** in your browser.
+
+5. **Stop:** press `Ctrl+C` in each terminal when finished.
+
+> **Windows note:** if `node`/`npm` are "not found" right after installing Node,
+> open a **new** terminal so the PATH refreshes (`node -v` should print a version).
+
+Prefer a single process? Build once and let Python serve everything — see
+**Production** under [Running the app](#running-the-app).
+
 ## Layout
 
 ```text
