@@ -29,12 +29,13 @@ PROJECT = HERE.parent                           # Cold Plate project root (if pr
 
 # (source relative to the project root) -> (destination under engine/)
 V6_SRC = PROJECT / "02_Code" / "cold_plate_v6"
-MASTER_CALC_SRC = PROJECT / "06_MASTER_BASELINE" / "python" / "master_baseline_calculator.py"
 
-# NOTE: the V2 "Design Studio" modules engine/coolants.py and engine/targets.py
-# are WEBAPP-NATIVE — authored and maintained here in engine/, not synced from
-# the parent project. They are deliberately absent from this manifest so a sync
-# never overwrites them. Keeping the webapp self-contained is the point.
+# WEBAPP-NATIVE modules — authored and maintained here in engine/, NOT synced
+# from the parent project, so a sync never reverts them. Keeping the webapp
+# self-contained is the point:
+#   * coolants.py, targets.py, projects.py, pin_fin.py  (V2 Design Studio)
+#   * master_baseline_calculator.py  — FORKED at V2.3 to dispatch the pin_fin
+#     family to pin_fin.py; the parent copy no longer flows in.
 DATA_SRCS = {
     "master_design_parameters.json": PROJECT / "06_MASTER_BASELINE" / "master_design_parameters.json",
     "master_baseline_results.json": PROJECT / "06_MASTER_BASELINE" / "outputs" / "master_baseline_results.json",
@@ -52,7 +53,7 @@ V6_KEEP = {
 
 
 def main() -> int:
-    if not V6_SRC.exists() or not MASTER_CALC_SRC.exists():
+    if not V6_SRC.exists():
         print("Source project not found next to this repo — nothing to sync.")
         print(f"  expected: {V6_SRC}")
         return 1
@@ -71,8 +72,8 @@ def main() -> int:
             n += 1
         else:
             print(f"  WARNING: expected module missing in source: {name}")
-    shutil.copy2(MASTER_CALC_SRC, engine / "master_baseline_calculator.py")
-    n += 1
+    # master_baseline_calculator.py is a webapp-native fork (see note above) —
+    # intentionally not synced.
     for name, src in DATA_SRCS.items():
         shutil.copy2(src, data_dst / name)
         n += 1

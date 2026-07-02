@@ -7,6 +7,11 @@ nTop work to compare candidate families on the same terms:
     R_base, R_TIM, R_jc, pressure drop, pump power.
 
 It does not replace CFD/CHT or supplier coupon testing.
+
+WEBAPP-NATIVE FORK (V2.3): this engine/ copy has diverged from the parent
+06_MASTER_BASELINE source — it dispatches the pin_fin family to the S1 solver
+(pin_fin.py). It is therefore excluded from sync_engine.py so a sync never
+reverts the fork. Keep the webapp self-contained (see sync_engine.py notes).
 """
 
 from __future__ import annotations
@@ -18,6 +23,8 @@ import argparse
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+
+import pin_fin  # V2.3 S1 pin-fin solver (webapp-native, co-located in engine/)
 
 
 @dataclass
@@ -112,6 +119,10 @@ class GeometryCase:
     surface_access_factor: float = 1.0
     heat_transfer_multiplier: float = 1.0
     pressure_loss_multiplier: float = 1.0
+    # V2.3 pin-fin family (S1) — cylinder array geometry.
+    pin_diameter_mm: Optional[float] = None
+    pin_pitch_mm: Optional[float] = None
+    pin_pattern: str = "staggered"
     notes: str = ""
 
 
@@ -266,6 +277,8 @@ def evaluate_case(
 
     if family in {"straight_fin", "wavy_fin"}:
         result = _evaluate_fin_family(case, stack, op, arch, path_length_m, flow_per_path, relative_roughness)
+    elif family == "pin_fin":
+        result = _evaluate_pin_fin_family(case, stack, op, arch)
     else:
         result = _evaluate_generic_surface(case, stack, op, arch, path_length_m, flow_per_path)
 
@@ -283,7 +296,7 @@ def evaluate_case(
         status_reasons.append("DeltaP")
     if pump > op.limit_pump_W:
         status_reasons.append("pump")
-    screening_only = family not in {"straight_fin", "wavy_fin"}
+    screening_only = family not in {"straight_fin", "wavy_fin", "pin_fin"}
     if screening_only:
         warnings.append("Generic-surface pressure and heat-transfer model is screening only; use nTop measurements plus CFD.")
 
@@ -385,6 +398,38 @@ def _evaluate_fin_family(
         "eta_o": eta_o,
         "warnings": [],
     }
+
+
+def _evaluate_pin_fin_family(
+    case: GeometryCase,
+    stack: StackBasis,
+    op: OperatingPoint,
+    arch: FlowArchitecture,
+) -> Dict[str, float]:
+    """V2.3 (S1): dispatch a pin_fin case to the webapp-native pin_fin solver."""
+    if case.pin_diameter_mm is None or case.pin_pitch_mm is None:
+        raise ValueError(f"{case.design_id}: pin_diameter_mm and pin_pitch_mm are required for pin_fin")
+    H_mm = case.fin_height_mm if case.fin_height_mm is not None else stack.core_height_mm
+    return pin_fin.evaluate_pin_fin(
+        pin_diameter_mm=case.pin_diameter_mm,
+        pin_pitch_mm=case.pin_pitch_mm,
+        fin_height_mm=H_mm,
+        pattern=case.pin_pattern,
+        core_width_mm=stack.core_width_mm,
+        core_length_mm=stack.core_length_mm,
+        core_volume_m3=stack.core_volume_m3,
+        cooled_area_m2=stack.cooled_area_m2,
+        flow_m3_s=op.flow_m3_s,
+        n_parallel_paths=arch.n_parallel_paths,
+        rho=op.rho_kg_m3, mu=op.mu_Pa_s, k_fluid=op.k_fluid_W_mK, cp=op.cp_J_kgK,
+        k_solid=stack.k_solid_W_mK,
+        header_K_total=arch.header_K_total,
+        flow_uniformity=arch.flow_uniformity,
+        surface_access_factor=case.surface_access_factor,
+        wetted_area_multiplier=case.wetted_area_multiplier,
+        heat_transfer_multiplier=case.heat_transfer_multiplier,
+        pressure_loss_multiplier=case.pressure_loss_multiplier,
+    )
 
 
 def _evaluate_generic_surface(

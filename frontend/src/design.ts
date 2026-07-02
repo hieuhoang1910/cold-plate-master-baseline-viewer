@@ -99,21 +99,33 @@ export interface ProblemOpts {
  *  into the gyroid generic-surface model (and vice-versa). `opts` adds the V2.1
  *  coolant + target blocks (omitted when not provided, so behaviour is V1). */
 export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}) {
-  const caseObj = isGyroid(d.family)
-    ? {
-        design_id: 'live', family: d.family, process_route: d.process_route,
-        void_fraction: d.void_fraction,
-        surface_area_density_m2_m3: d.surface_area_density_m2_m3,
-        hydraulic_diameter_mm: d.hydraulic_diameter_mm,
-        heat_transfer_multiplier: d.heat_transfer_multiplier,
-        pressure_loss_multiplier: d.pressure_loss_multiplier,
-      }
-    : {
-        design_id: 'live', family: d.family, process_route: d.process_route,
-        fin_thickness_mm: d.fin_thickness_mm, channel_gap_mm: d.channel_gap_mm,
-        fin_height_mm: d.fin_height_mm, side_margin_mm: d.side_margin_mm,
-        wave_amplitude_mm: d.wave_amplitude_mm, wavelength_mm: d.wavelength_mm,
-      }
+  // Pin-fins are drawn as a gyroid sub-type in the viewer but have their own
+  // analytical solver (S1) — route them to family=pin_fin so the KPIs use it.
+  const isPin = isGyroid(d.family) && isPinStructure(d.tpms_type)
+  let caseObj: Record<string, unknown>
+  if (isPin) {
+    caseObj = {
+      design_id: 'live', family: 'pin_fin', process_route: d.process_route,
+      pin_diameter_mm: d.pin_diameter_mm, pin_pitch_mm: d.pin_pitch_mm,
+      pin_pattern: d.pin_pattern, fin_height_mm: d.fin_height_mm,
+    }
+  } else if (isGyroid(d.family)) {
+    caseObj = {
+      design_id: 'live', family: d.family, process_route: d.process_route,
+      void_fraction: d.void_fraction,
+      surface_area_density_m2_m3: d.surface_area_density_m2_m3,
+      hydraulic_diameter_mm: d.hydraulic_diameter_mm,
+      heat_transfer_multiplier: d.heat_transfer_multiplier,
+      pressure_loss_multiplier: d.pressure_loss_multiplier,
+    }
+  } else {
+    caseObj = {
+      design_id: 'live', family: d.family, process_route: d.process_route,
+      fin_thickness_mm: d.fin_thickness_mm, channel_gap_mm: d.channel_gap_mm,
+      fin_height_mm: d.fin_height_mm, side_margin_mm: d.side_margin_mm,
+      wave_amplitude_mm: d.wave_amplitude_mm, wavelength_mm: d.wavelength_mm,
+    }
+  }
   const payload: Record<string, unknown> = {
     case: caseObj,
     stack: basis.stack,
