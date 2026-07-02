@@ -24,8 +24,9 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-import pin_fin        # V2.3 S1 pin-fin solver (webapp-native, co-located in engine/)
-import tpms_geometry  # V2.4 S2 TPMS sheet geometry (webapp-native)
+import pin_fin           # V2.3 S1 pin-fin solver (webapp-native, co-located in engine/)
+import tpms_geometry     # V2.4 S2 part 1 — TPMS sheet geometry (webapp-native)
+import tpms_correlations  # V2.4 S2 part 2 — TPMS Nu/f correlation (webapp-native)
 
 
 @dataclass
@@ -280,12 +281,14 @@ def evaluate_case(
     flow_per_path = op.flow_m3_s / max(arch.n_parallel_paths, 1)
     path_length_m = arch.resolved_path_length_m(stack)
 
-    # V2.4 (S2): for literature TPMS sheet types, derive SA/V, void fraction and
-    # D_h from the minimal-surface geometry (cell + wall) instead of hand-entered
-    # values, so the geometry is consistent with what the viewer/STL draw. (The
-    # heat-transfer model stays the generic-surface screening one until the TPMS
-    # Nu/f correlations land — see spec §20 S2.)
-    if (family not in {"straight_fin", "wavy_fin", "pin_fin"}
+    # V2.4 (S2): TPMS sheet families. Gyroid & Diamond get the Renon & Jeanningros
+    # Nu/f correlation (part 2 -> ANALYTICAL_LIT). Schwarz-P (and any other lit
+    # geometry type) keeps the generic screening Nu but with minimal-surface
+    # geometry derived from cell + wall (part 1), instead of hand-entered SA/V.
+    _is_surface = family not in {"straight_fin", "wavy_fin", "pin_fin"}
+    use_tpms_corr = (_is_surface and case.tpms_type in tpms_correlations.CORR_TYPES
+                     and case.unit_cell_mm and case.wall_thickness_mm)
+    if (_is_surface and not use_tpms_corr
             and case.tpms_type in tpms_geometry.LIT_TYPES
             and case.unit_cell_mm and case.wall_thickness_mm):
         _g = tpms_geometry.geometry(case.tpms_type, case.unit_cell_mm, case.wall_thickness_mm)
@@ -303,6 +306,8 @@ def evaluate_case(
         result = _evaluate_fin_family(case, stack, op, arch, path_length_m, flow_per_path, relative_roughness)
     elif family == "pin_fin":
         result = _evaluate_pin_fin_family(case, stack, op, arch)
+    elif use_tpms_corr:
+        result = _evaluate_tpms_family(case, stack, op, arch, path_length_m)
     else:
         result = _evaluate_generic_surface(case, stack, op, arch, path_length_m, flow_per_path)
 
@@ -320,7 +325,7 @@ def evaluate_case(
         status_reasons.append("DeltaP")
     if pump > op.limit_pump_W:
         status_reasons.append("pump")
-    screening_only = family not in {"straight_fin", "wavy_fin", "pin_fin"}
+    screening_only = family not in {"straight_fin", "wavy_fin", "pin_fin"} and not use_tpms_corr
     if screening_only:
         warnings.append("Generic-surface pressure and heat-transfer model is screening only; use nTop measurements plus CFD.")
 
@@ -453,6 +458,34 @@ def _evaluate_pin_fin_family(
         wetted_area_multiplier=case.wetted_area_multiplier,
         heat_transfer_multiplier=case.heat_transfer_multiplier,
         pressure_loss_multiplier=case.pressure_loss_multiplier,
+    )
+
+
+def _evaluate_tpms_family(
+    case: GeometryCase,
+    stack: StackBasis,
+    op: OperatingPoint,
+    arch: FlowArchitecture,
+    path_length_m: float,
+) -> Dict[str, float]:
+    """V2.4 S2 (part 2): dispatch a Gyroid/Diamond case to the webapp-native
+    TPMS correlation solver (Renon & Jeanningros Nu/f + minimal-surface geometry)."""
+    return tpms_correlations.evaluate_tpms(
+        tpms_type=case.tpms_type,
+        unit_cell_mm=case.unit_cell_mm,
+        wall_thickness_mm=case.wall_thickness_mm,
+        core_width_mm=stack.core_width_mm,
+        core_length_mm=stack.core_length_mm,
+        core_height_mm=stack.core_height_mm,
+        core_volume_m3=stack.core_volume_m3,
+        flow_m3_s=op.flow_m3_s,
+        n_parallel_paths=arch.n_parallel_paths,
+        path_length_m=path_length_m,
+        rho=op.rho_kg_m3, mu=op.mu_Pa_s, k_fluid=op.k_fluid_W_mK, cp=op.cp_J_kgK,
+        k_solid=stack.k_solid_W_mK,
+        header_K_total=arch.header_K_total,
+        flow_uniformity=arch.flow_uniformity,
+        surface_access_factor=case.surface_access_factor,
     )
 
 

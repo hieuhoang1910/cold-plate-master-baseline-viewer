@@ -71,18 +71,21 @@ stack = mbc.StackBasis(**{k: server.DIE_COVERAGE_STACK[k]
 op = mbc.OperatingPoint()
 arch = mbc.FlowArchitecture(name="center_feed_bidirectional", n_parallel_paths=2,
                             path_length_mm=14.0, header_K_total=1.5, flow_uniformity=1.0)
-# deliberately WRONG hand-typed SA/V (9999) — the derived value must win
-case = mbc.GeometryCase(design_id="gyr", family="gyroid_tpms", tpms_type="gyroid",
+# Schwarz-P exercises the geometry-only path (derived geometry + generic Nu,
+# still SCREENING_ONLY): it has a minimal-surface area coefficient but no
+# in-regime Nu/f correlation (gyroid/diamond moved to the correlation solver in
+# part 2). Deliberately WRONG hand-typed SA/V (9999) — the derived value must win.
+case = mbc.GeometryCase(design_id="sp", family="gyroid_tpms", tpms_type="schwarz_p",
                         unit_cell_mm=2.5, wall_thickness_mm=0.12,
                         surface_area_density_m2_m3=9999.0, void_fraction=0.99,
                         hydraulic_diameter_mm=9.9)
 res = mbc.evaluate_case(case, stack, op, arch)
-check(approx(res.raw_SA_V_m2_m3, 2 * 3.0915 / 0.0025, rel=1e-3),
+check(approx(res.raw_SA_V_m2_m3, 2 * 2.3451 / 0.0025, rel=1e-3),
       f"derived SA/V used, not the 9999 hand value (got {res.raw_SA_V_m2_m3:.0f})")
 check(any("minimal-surface area coefficient" in w for w in res.warnings),
       "result explains the geometry was derived")
 check("SCREENING_ONLY" in res.kpi_status,
-      "gyroid stays SCREENING_ONLY (Nu still generic; geometry only)")
+      "Schwarz-P stays SCREENING_ONLY (derived geometry, generic Nu, no correlation)")
 
 # a non-literature TPMS shape keeps the hand-entered geometry
 case2 = mbc.GeometryCase(design_id="lid", family="gyroid_tpms", tpms_type="lidinoid",

@@ -354,8 +354,8 @@ _FAMILY_PEDIGREE = [
      "model": "Zukauskas single-cylinder Nu + Gaddis-Gnielinski laminar ΔP + pin efficiency (S1)",
      "status": "ANALYTICAL_LIT", "viewable": True},
     {"family": "gyroid_tpms", "label": "TPMS lattice",
-     "model": "generic surface (S2 literature Nu/f planned V2.4 for gyroid/diamond/schwarz_p)",
-     "status": "SCREENING_ONLY", "viewable": True},
+     "model": "Gyroid & Diamond: Renon-Jeanningros Nu/f + minimal-surface geometry (S2, turbulent fit extrapolated to laminar); Schwarz-P & others: generic screening w/ derived geometry",
+     "status": "ANALYTICAL_LIT", "viewable": True},
     {"family": "generic_surface", "label": "Generic surface (SA/V + porosity)",
      "model": "generic surface model", "status": "SCREENING_ONLY", "viewable": False},
 ]
