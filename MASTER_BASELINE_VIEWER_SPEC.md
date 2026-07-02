@@ -5,7 +5,7 @@ aliases:
   - Cold Plate Web App Spec
 project: "[[Hieu's Coldplate R&D]]"
 umbrella: "[[R&D Projects]]"
-status: Draft
+status: Active
 priority: High
 date_created: 2026-07-01
 date_updated: 2026-07-02
@@ -22,7 +22,11 @@ tags:
 
 Project: [[Hieu's Coldplate R&D]] | Folder map: `PROJECT_FOLDER_STRUCTURE.md` | Roadmap: [[Cold Plate Milestones]]
 
-> **Status: DRAFT for review.** This spec captures the design agreed during the 2026-07-01 brainstorm. Nothing is built yet. Edit freely; we iterate here before writing code.
+> **Status: V1 SHIPPED · V2 ACCEPTED (2026-07-02).** §1–§17 describe V1, now built and
+> running (viewer, live tuning, optimizer, STL export, LAN serving). §18–§25 are the
+> **official V2 plan** — accepted 2026-07-02 with all open questions resolved (§25);
+> implementation follows the V2 roadmap (§24). Change control: edits to accepted sections
+> should note the date and rationale.
 
 ---
 
@@ -284,14 +288,15 @@ These do not block the build; they refine inputs as real data arrives.
 
 ---
 
-## V2 — "Design Studio" update (DRAFT for review)
+## V2 — "Design Studio" update (ACCEPTED — official V2 plan)
 
-> **Status: DRAFT 2026-07-02. Nothing implemented.** V1 (§1–§17) shipped: viewer, live tuning,
-> optimizer, STL export, LAN serving. V2 turns the app from a *viewer of our problem* into a
-> *design tool for a user-defined problem*: on entry the user states **targets** and the
-> **problem definition** in a Design tab, picks geometry families / correlations / layout, and the
-> whole app (candidates, gates, optimizer, viewer) re-scores against *their* problem.
-> We iterate on this section before writing code.
+> **Status: ACCEPTED 2026-07-02 — official V2 plan; implementation not yet started.**
+> V1 (§1–§17) shipped: viewer, live tuning, optimizer, STL export, LAN serving. V2 turns the
+> app from a *viewer of our problem* into a *design tool for a user-defined problem*: on entry
+> the user states **targets** and the **problem definition** in a Design tab, picks geometry
+> families / correlations / layout, and the whole app (candidates, gates, optimizer, viewer)
+> re-scores against *their* problem. All §25 open questions are resolved; build proceeds per
+> the §24 roadmap, starting at V2.1.
 
 ## 18. V2 concept & user flow
 
@@ -317,7 +322,7 @@ Three tiers, mirrored from how the solvers already gate (§6A) but now user-defi
 
 | Tier | Target | Symbol / unit | Default (GB202 preset) | Notes |
 |---|---|---|---|---|
-| **T1 hard gates** | Max junction temp | T_j,max °C | 90 | Primary thermal input. The app derives the R_jc gate from it (below) — users think in °C, solvers in K/W. |
+| **T1 hard gates** | Max junction temp | T_j,max °C | 100 (silicon ceiling; 90 drawn as a soft design-target line) | Primary thermal input. The app derives the R_jc gate from it (below) — users think in °C, solvers in K/W. |
 | | Heat load nominal / margin | Q / Q_m W | 450 / 575 | Margin drives sizing honesty. |
 | | Coolant inlet temp | T_in °C | 25 | Loop-level input. |
 | | Max pressure drop | ΔP_max Pa | 50 000 | Pump/loop budget. |
@@ -328,15 +333,21 @@ Three tiers, mirrored from how the solvers already gate (§6A) but now user-defi
 | | Envelope | W×L×H mm | 28×35×6.2 | Max footprint & height; base thickness. |
 | **T3 objectives** | Pareto pair | — | R_jc vs pump | Pick 2 of {R_jc, ΔP, pump, mass}; the rest stay diagnostics. |
 
-**Derived R_jc gate** (replaces the hard-coded 0.078):
+**Derived thermal gate** (replaces the hard-coded 0.078). S5 checks T_j with the exact
+inlet-referenced effectiveness form — both engines already expose UA and ṁ·cp:
 
 ```
-R_jc_gate = (T_j,max − T_in − ΔT_caloric/2) / Q_nominal
+T_j = T_in + Q·(R_TIM + R_base) + Q / (ṁ·cp · (1 − e^(−UA/ṁ·cp)))      gate: T_j ≤ T_j,max
 ```
 
-with `ΔT_caloric = Q/(ṁ·cp)` (already computed). Show the derivation live in the wizard —
-"your 90 °C at 450 W and 25 °C water means R_jc ≤ 0.142 K/W" — so the gate is never a magic
-number. Users may still override the gate directly (audit mode).
+shown to the user as the equivalent budget `R_jc ≲ (T_j,max − T_in − ΔT_caloric/2) / Q` with
+`ΔT_caloric = Q/(ṁ·cp)`. Resolved (§25 Q2): v6 references R_conv = 1/UA to the *mean* coolant
+temperature (fluid properties at T_in + ½·ΔT_cal, TD-06), so the half-caloric shortcut is the
+consistent approximation — at the hero point (NTU = UA/ṁcp ≈ 1.6) it is ~0.3 K optimistic where
+full-caloric is ~0.9 K pessimistic; the exact form above costs nothing and settles the debate.
+Show the derivation live in the wizard — "your 100 °C at 450 W and 25 °C water means
+R_jc ≤ 0.166 K/W" — so the gate is never a magic number. Users may still override the gate
+directly (audit mode).
 
 ### 19B. Step 2 — Problem definition (physics inputs)
 
@@ -365,6 +376,11 @@ how much to trust it (never hide screening status):
 Turbulent extension (Gnielinski Nu + Blasius f when Re > 2300) is offered as an **opt-in flag**
 for all duct families — off by default because every current design point is deeply laminar.
 
+Resolved (§25 Q4): **solid-network TPMS variants are hidden from the wizard** — sheet variants
+carry ~2× the area density at equal porosity and the comparative literature finds sheet equal or
+better on heat transfer at matched ΔP in liquid cooling; the S2 correlations are sheet-only.
+Solid stays available in the Explore viewer as a geometry-only screening toggle.
+
 ### 19D. Step 4 — Layout (flow architecture)
 
 **Current layouts** (what exists today, to be listed in the UI):
@@ -382,10 +398,58 @@ for all duct families — off by default because every current design point is d
 |---|---|---|
 | `serpentine_n_pass` (n = 2…6) | path = n·L, velocity ×n (flow through 1/n of the width), + K_bend ≈ 2.2 per 180° bend | In deep laminar flow Nu is ~constant, so serpentine mostly buys ΔP, not h — useful mainly at low available flow. |
 | `u_flow_side_feed` | path = L, uniformity 0.85–0.95, header_K higher (default 2.5) | Maldistribution defaults pending CFD (TD-10). |
-| `multi_jet_array` | **deferred** | Needs Martin (1977) correlation + CFD anchor; listed greyed-out. |
+| `distributed_jet_compartments` (**ICE, Proto2 as-built**) | n_ribs transverse walls at pitch p_c partition the fin field into (n_ribs − 1) compartments with alternating feed/return slots from the manifold ⇒ n_paths = 2·(n_ribs − 1), path = p_c/2 | Mesh-verified from `Heatsink wavy fins mesh_remeshed.stl`: 10 ribs ≈ 0.25 mm at 3.0 mm pitch over the 28 mm axis → 9 compartments, half-path ≈ 1.4 mm. **Thermal-entry-dominated** — the entry model becomes load-bearing; slot/turning losses dominate ΔP; needs the CFD anchor before numbers are quotable. |
+| `multi_jet_array` (free 2-D jet grid) | **deferred** | Martin (1977) correlation + CFD anchor; listed greyed-out. |
 
 Layout availability is family-aware (jet slot: fin families only; TPMS: single-pass and
 center-feed only for now).
+
+### 19E. Centre-rib editor (part of Step 4)
+
+**Current state (V1):** the rib exists in three inconsistent fidelities — v6 models it as
+on/off + width (1.0 mm, Hieu CFD streamline render) whose only physics effect is a **wetted-area
+penalty** (~5–7 % for 1 mm, `solver.py`); it is also the stated justification for
+`flow_uniformity = 1.0`. The master engine has no rib at all, and the viewer draws a fixed
+1.0 mm slab whenever n_paths ≥ 2. V2 unifies this: one rib definition drives viewer, STL,
+and both engines.
+
+| Rib parameter | Options / range | Physics effect in V2 | Status |
+|---|---|---|---|
+| Presence | on/off (tied to layout) | Off in a center-feed layout ⇒ uniformity drops to the no-rib bound (0.70–0.85 sweep, per master_constants) + warning | physics-backed now |
+| Width | 0.5 … 2.0 mm, default 1.0 | Existing wetted-area penalty scales; **new**: path length = (L − w_rib)/2 instead of L/2; mass estimate includes rib | physics-backed now (S3 + small v6 change) |
+| Face credit | off (default) / on | Counts the rib's two faces (2·H·W_trans, η ≈ 1 — a 1 mm rib is a *thick* fin) as wetted area at plain channel h. Conservative opt-in; the faces actually sit in the jet-turning zone where h is higher | opt-in + warning until CFD |
+| Top crown | flat / chamfered / filleted | Viewer + STL geometry; AM overhang benefit noted. Header-K reduction from smoother turning is **annotation only** (no credit) pending CFD | geometry only |
+| Perforation | none / bleed holes (% open) | Viewer + STL; pressure equalisation between halves → uniformity effect pending CFD (TD-10) | geometry only |
+| Segmentation | solid / n gaps along the rib | Viewer + STL; transverse redistribution + depowdering aid | geometry only |
+| Offset | 0 (center) / ± mm | Asymmetric split for off-center hotspots ⇒ unequal path lengths — needs a two-path weighted solver | deferred (V2.5+) |
+
+**What the referenced research says about the rib** (§ About refs):
+
+- **Jet impingement (About refs 8–10):** the rib is the *stagnation target* directly under the slot —
+  the highest-h region of the plate. Martin's slot-jet correlation (ref 9) is written in slot width
+  and slot-to-target spacing, i.e. the rib crown position/shape is part of the jet geometry;
+  the split's turning loss is what header_K lumps. This is the literature hook for eventually
+  crediting rib faces and crown shape — but only via the jet enhancement path (currently held
+  at 1.0 conservative until CFD).
+- **Entry-length theory (About refs 11–12):** the split restarts hydrodynamic + thermal boundary layers
+  in each half-path — the shorter the path, the larger the (favourable) entry fraction. The v6
+  thermal-entry option is physically a *rib consequence*; V2 surfaces that link in the UI.
+- **Fin theory (About ref 13):** at 1.0 mm thick, m·H is small ⇒ η_rib ≈ 1 — the rib is the most
+  efficient "fin" on the plate and sits over the die's hottest zone (center). Subtracting its
+  area with zero credit (current model) is deliberately conservative; the face-credit toggle
+  makes the assumption explicit instead of silent.
+**Rib arrays (Proto2 ICE, resolved §25 Q6):** the `distributed_jet_compartments` layout (§19D)
+generalises the single centre rib into an **array** — count, pitch, and thickness editable, with
+the same face-credit / perforation / crown options per rib. Mesh inspection shows the wavy-fin
+field runs *through* the compartments (walls chop the fins every 3.0 mm), so the rib array is a
+**layout property**, and the V1 single centre rib is its n_ribs = 1 special case. The
+(L − w_rib)/2 path correction generalises to (p_c − w_rib)/2.
+
+- **AM cold-plate practice (About ref 15):** center-feed distribution features double as structural
+  stiffeners for thin AM fin fields (print distortion, HIP, clamping) — the rib's width floor
+  is likely structural, not thermal. No cited paper parametrically optimises the rib itself:
+  rib width/shape beyond the area-penalty model is CFD territory (TD-10/11), so V2 exposes the
+  geometry but credits physics only where a correlation exists.
 
 ## 20. New solvers (the V2 physics work)
 
@@ -411,7 +475,11 @@ Replaces the generic-surface fallback for `family = pin_fin`. Inputs: `pin_diame
   standard η_o.
 - **ΔP:** Gaddis–Gnielinski (1985) tube-bank correlation (valid Re 1…3×10⁵, inline &
   staggered), per-row Euler number × N_rows × ½ρv_max², + header_K term.
-- **Warnings:** Re_d outside fit range, S/d < 1.25, H/d > 8 (endwall model degrades).
+- **Warnings:** Re_d outside fit range, S/d < 1.25, H/d > 8 (endwall model degrades);
+  guardrail Re_d ∈ [40, 1000].
+- **Fixtures (§25 Q3):** KCY and Zukauskas pedigrees are air-heavy, so the acceptance test is a
+  **water** micro-pin literature anchor (candidates: Koşar & Peles 2006; Prasher et al. 2007 —
+  pin the exact datapoint when the papers are pulled at implementation).
 
 ### S2 — TPMS solver (`_evaluate_tpms_family`, gyroid/diamond/schwarz_p)
 
@@ -457,7 +525,7 @@ report.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/schema` | Wizard schema: families + pedigree, layouts + knobs, coolant presets, target defaults/bounds — so the UI never hard-codes options. |
-| GET/POST | `/api/projects` | List / save project JSONs under `07_WebApp/projects/` (LAN-shared, no auth — same trust model as V1.1 LAN serving). |
+| GET/POST | `/api/projects` | List / save project JSONs under `07_WebApp/projects/` + a tiny `index.json` (id → name/file/created/modified/schema-version) for list/rename/delete UX (§25 Q5). LAN-shared, no auth — same trust model as V1.1 LAN serving. |
 | POST | `/api/evaluate` (extended) | Accepts the **full basis** (stack + operating + architecture + coolant + gates) instead of merging into the fixed GB202 basis. V1 payloads keep working (defaults = preset project). |
 | POST | `/api/sweep` (extended) | Same basis extension; constraints come from **user gates**. |
 
@@ -501,15 +569,71 @@ project (a candidate that passes GB202 gates may fail a stricter T_j,max).
 | V2.2 | Design tab wizard + projects API + gate re-scoring | New project changes gates/KPIs app-wide; V1 preset unchanged |
 | V2.3 | S1 pin-fin solver + fixtures + lit-anchor test | Pin candidate leaves SCREENING_ONLY; parity green |
 | V2.4 | S2 TPMS solver + numeric geometry table (from the STL mesher) | Gyroid/diamond/Schwarz-P → ANALYTICAL_LIT; SA/V matches meshed geometry ≤ 2% |
-| V2.5 | S3 layouts (serpentine, U-flow) + layout-aware optimizer | Sweep respects layout; caveats shown |
+| V2.5 | S3 layouts (**distributed-jet compartments**, serpentine, U-flow) + layout-aware optimizer + rib-array editor | Sweep respects layout; ICE V1+2 geometry reproducible in viewer/STL; caveats shown |
 | V2.6 | Report tab + mass/cost + uncertainty band + validity guardrails | Exported MD review-ready |
 
-## 25. V2 open questions (answer before V2.2)
+## 25. V2 decisions (resolved 2026-07-02)
+
+> All questions below are **resolved** — the authoritative answers are in the
+> "§25 resolutions" block at the end of this section. The inline notes are the original
+> discussion; the resolutions block governs.
 
 1. T_j,max default 90 °C or 85 °C for the GB202 preset? (Marketing vs engineering margin.)
+	- ==Lets go for a max of 100 °C just to be safe==
+		  
 2. Should the derived R_jc gate subtract the full caloric rise or half (mean coolant temp)? §19A
    currently says half — confirm against how the v6 report defines R_jc reference temperature.
+	- ==This I need your search to determine, please research on this and see which is better==
+		  
 3. Pin KCY vs Zukauskas as primary — confirm after pulling both papers' validity tables.
+	   ==- I need you to research on this and help me choose on this as well==
+	     
 4. Renon & Jeanningros coefficients: sheet-TPMS only. Do we offer solid-network TPMS with the
    generic model, or hide solid variants from the solver path (viewer-only) in V2?
+	   ==- From your research, would you think solid-network have a better result than sheet? if not, lets hide it. If it is, then yes, we must offer its stay, and see if the solver works for the solid-network, if it is not, I think we can hide it.==
+	     
 5. Projects folder: flat files fine, or do we want a tiny index.json for rename/delete UX?
+	   ==- we definitely need index for it==
+	     
+6. Centre rib (§19E): is 0.5 mm a safe structural lower bound for the width slider (confirm with the print team), and should the face-credit toggle stay default-off until TD-10/11 CFD lands? Also confirm the (L − w_rib)/2 path correction against how Hieu's CFD measured the 7.5 mm half-path.
+	- ==okay, on that center rib, we actually make it into a shape of a jet-impingement, you can inspect the full model within the main Hieu_coldplate project folder, here is the path C:\Vinnotek\2. Projects\01 Active Projects\Hieu - cold plate\04_Analysis_Outputs\ntop\Proto2 meshes\ICE V1+2==
+	  ==-> The team's final mesh is the Heatsink wavy fins mesh_remeshed.stl== 
+	  ==-> so I want to be able to create those type of middle ribs as well. This is the aim for geting better flow from the top down impingement jet layer in the middle to get it wet the surfaces better==
+
+### §25 resolutions (2026-07-02 — code inspection + literature pass)
+
+1. **T_j,max = 100 °C** (user decision, recorded). Consequence to be aware of: with 25 °C water
+   at 450 W the derived budget is ≈ 0.166 K/W — more than 2× looser than the old 0.078 gate, so
+   the thermal gate will almost never bind and the hydraulic gates + Pareto do the
+   discriminating. Mitigation adopted: 100 °C is the hard ceiling; the KPI panel draws a soft
+   design-target line at 90 °C so headroom stays visible.
+2. **Caloric-rise question — settled by code inspection.** v6 evaluates fluid properties at
+   T_in + ½·ΔT_cal (TD-06) and R_conv = 1/UA is mean-coolant-referenced ⇒ *half* is the
+   consistent shortcut. S5 uses the exact inlet-referenced effectiveness form (§19A), which
+   makes the half-vs-full debate moot: at the hero point (NTU ≈ 1.6) "half" is ~0.3 K
+   optimistic, "full" ~0.9 K pessimistic, exact is free.
+3. **Pin-fin correlation — KCY primary, Zukauskas cross-check (confirmed).** KCY: closed-form,
+   heat-sink-specific (endwall + arrangement), single laminar Re^0.5·Pr^(1/3) form — right for
+   the expected Re_d ≈ 100–500. Zukauskas: bank data spanning Pr 0.7–500 (includes water) but
+   band-wise fits and a long-tube assumption (H/d ≫ 1 vs our ≈ 6). Both are air-heavy in
+   pedigree ⇒ the acceptance fixture is a water micro-pin anchor (Koşar & Peles 2006 /
+   Prasher et al. 2007), guardrail Re_d ∈ [40, 1000].
+4. **Sheet vs solid TPMS — sheet wins for this regime; solid hidden from the wizard.**
+   Comparative studies (sheet-vs-solid disturbance structures; 3D-printed sheet/solid TPMS
+   porous structures; modified-gyroid optimisation) find sheet equal or better on heat transfer
+   at matched ΔP in liquid cooling — solid variants win only in some low-velocity gas cases.
+   Per the decision rule ("if not better, hide it"): no solid-network solver in V2; solid stays
+   a viewer-only screening toggle.
+5. **Projects index — agreed.** `projects/index.json` with id → name/file/created/modified/
+   schema-version.
+6. **Centre rib is actually a rib array (ICE V1+2, mesh-verified).**
+   `Heatsink wavy fins mesh_remeshed.stl` (4.12 M triangles, 35.0 × 28.0 × 5.0 mm): 10
+   transverse walls ≈ 0.25 mm thick at exactly 3.0 mm pitch (centres ±1.5, ±4.5 … ±13.5 mm)
+   chop the wavy-fin field into 9 compartments ≈ 2.75 mm open each ⇒ half-path ≈ 1.4 mm.
+   The centre plane holds *fins*, not a solid rib — the "jet-impingement shaped middle rib" is
+   two walls framing a central 3 mm impingement channel, repeated across the plate. Spec
+   updated: first-class layout `distributed_jet_compartments` (§19D), rib-array mode in the rib
+   editor (§19E), roadmap V2.5. Solver implications: n_paths ≈ 18, path = pitch/2, thermal
+   entry dominates the Nu (entry model is now load-bearing), slot/turning losses dominate ΔP —
+   CFD anchor required before quoting numbers. **To confirm with Hieu:** which compartments are
+   feed vs return (the LMM base/manifold mesh defines it), and slot widths.
