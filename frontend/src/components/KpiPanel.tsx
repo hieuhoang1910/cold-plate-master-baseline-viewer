@@ -1,7 +1,9 @@
 import { fmt, isScreening, kPa, milliKW, pct } from '../format'
-import type { BaselineResult, Gates } from '../types'
+import type { BaselineResult, Gates, TargetsInfo } from '../types'
 import { LimitBar } from './LimitBar'
 import { ResistanceStackup } from './ResistanceStackup'
+
+const SOFT_TARGET_C = 90 // design line drawn under the hard T_j ceiling (spec §25 Q1)
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -12,9 +14,37 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
+// V2.1 — exact junction temperature vs the target (ε-NTU form from the API).
+function JunctionTemp({ t }: { t: TargetsInfo }) {
+  const tj = t.T_j_C
+  const color = tj > t.T_j_max_C ? 'var(--fail)'
+    : tj > SOFT_TARGET_C ? 'var(--warn, #d9a441)' : 'var(--accent2)'
+  const pctOfMax = Math.max(0, Math.min(1, tj / t.T_j_max_C))
+  return (
+    <div className="tj-block">
+      <div className="tj-head">
+        <span>Junction temperature</span>
+        <span className="tj-val" style={{ color }}>{fmt(tj, 1)} °C</span>
+      </div>
+      <div className="tj-bar">
+        <div className="tj-fill" style={{ width: `${pctOfMax * 100}%`, background: color }} />
+        <div className="tj-soft" style={{ left: `${(SOFT_TARGET_C / t.T_j_max_C) * 100}%` }}
+          title={`soft design target ${SOFT_TARGET_C} °C`} />
+      </div>
+      <div className="tj-foot muted">
+        ceiling {fmt(t.T_j_max_C, 0)} °C · soft {SOFT_TARGET_C} °C · coolant out {fmt(t.coolant_out_C, 1)} °C
+      </div>
+    </div>
+  )
+}
+
 export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
   const screening = isScreening(r.kpi_status)
-  const rjcPass = r.R_jc_K_W <= gates.limit_R_jc_K_W
+  // V2.1 — when the request carried a T_j target, the gate is the derived R_jc
+  // budget (spec §19A); otherwise the catalog default gate.
+  const rjcGate = r.targets?.R_jc_gate_K_W ?? gates.limit_R_jc_K_W
+  const rjcPass = r.R_jc_K_W <= rjcGate
+  const t = r.targets
 
   return (
     <>
@@ -30,8 +60,9 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
             {r.kpi_status}
           </span>
         </div>
-        <LimitBar label="R_jc vs gate" value={r.R_jc_K_W} limit={gates.limit_R_jc_K_W}
-          display={milliKW(r.R_jc_K_W)} unit="mK/W" />
+        <LimitBar label={t ? 'R_jc vs derived gate' : 'R_jc vs gate'} value={r.R_jc_K_W}
+          limit={rjcGate} display={milliKW(r.R_jc_K_W)} unit="mK/W" />
+        {t && <JunctionTemp t={t} />}
         <div style={{ marginTop: 12 }}>
           <ResistanceStackup r={r} />
         </div>

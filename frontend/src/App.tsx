@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { evaluate, getCatalog } from './api'
+import { evaluate, getCatalog, getSchema } from './api'
 import { milliKW } from './format'
 import { evalPayload, initDesign, isViewable } from './design'
-import type { BaselineResult, Catalog, DesignState } from './types'
+import type { AppSchema, BaselineResult, Catalog, DesignState } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
 import { DesignControls } from './components/DesignControls'
+import { ProblemControls } from './components/ProblemControls'
 import { OptimizerPanel } from './components/OptimizerPanel'
 import { About } from './components/About'
 import { geomFromCase } from './viewerGeom'
@@ -16,8 +17,13 @@ const HERO_ID = 'v6_reference_wavy_fin_0p10'
 
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
+  const [schema, setSchema] = useState<AppSchema | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>(HERO_ID)
+
+  // V2.1 — problem knobs (coolant + max junction temp) shared across the app.
+  const [coolant, setCoolant] = useState<string>('water')
+  const [tjMaxC, setTjMaxC] = useState<number>(100)
 
   // Live editable design (fin families only) + its recomputed result.
   const [design, setDesign] = useState<DesignState | null>(null)
@@ -35,6 +41,13 @@ export default function App() {
         }
       })
       .catch((e) => setError(String(e.message ?? e)))
+    getSchema()
+      .then((s) => {
+        setSchema(s)
+        const def = s.targets?.T_j_max_C?.default
+        if (def != null) setTjMaxC(def)
+      })
+      .catch(() => { /* schema is optional; V1 UI still works without it */ })
   }, [])
 
   const selected = useMemo(
@@ -54,18 +67,18 @@ export default function App() {
     setLive(null)
   }, [catalog, selectedId])
 
-  // Debounced live recompute as the design changes.
+  // Debounced live recompute as the design (or problem knobs) change.
   useEffect(() => {
     if (!design || !catalog) return
     const h = setTimeout(() => {
       setEvaluating(true)
-      evaluate(evalPayload(design, catalog.basis))
+      evaluate(evalPayload(design, catalog.basis, { coolant, tjMaxC }))
         .then(setLive)
         .catch(() => {})
         .finally(() => setEvaluating(false))
     }, 150)
     return () => clearTimeout(h)
-  }, [design, catalog])
+  }, [design, catalog, coolant, tjMaxC])
 
   const geom = useMemo(
     () => (design && catalog ? geomFromCase(design, catalog.basis) : null),
@@ -135,6 +148,11 @@ export default function App() {
                   )
                 })}
               </div>
+
+              {schema && (
+                <ProblemControls schema={schema} coolant={coolant} tjMaxC={tjMaxC}
+                  live={design ? live : null} onCoolant={setCoolant} onTjMax={setTjMaxC} />
+              )}
 
               {design
                 ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}

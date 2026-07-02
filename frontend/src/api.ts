@@ -1,4 +1,4 @@
-import type { BaselineResult, Catalog, SweepResult } from './types'
+import type { AppSchema, BaselineResult, Catalog, SweepResult } from './types'
 
 // The dev server proxies /api -> the Python API (see vite.config.ts), so a
 // relative base works in dev and in the eventual single-origin production build.
@@ -18,6 +18,9 @@ async function jf<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const getCatalog = () => jf<Catalog>('/api/catalog')
+
+// V2.1 — wizard/problem schema: coolant presets, target defaults, families, layouts.
+export const getSchema = () => jf<AppSchema>('/api/schema')
 
 // Master engine — arbitrary design (used from Phase 4 sliders onward).
 export const evaluate = (payload: unknown) =>

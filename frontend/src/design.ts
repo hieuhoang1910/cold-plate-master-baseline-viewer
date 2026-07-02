@@ -84,9 +84,17 @@ export function familyPatch(newFamily: string, design: DesignState): Partial<Des
   return { family: newFamily } // gyroid — fields already populated
 }
 
+// V2.1 — the problem knobs the user sets outside the geometry (coolant + target
+// junction temperature). Optional so V1 call sites keep working unchanged.
+export interface ProblemOpts {
+  coolant?: string
+  tjMaxC?: number
+}
+
 /** Build the /api/evaluate request body — family-aware so fin params don't leak
- *  into the gyroid generic-surface model (and vice-versa). */
-export function evalPayload(d: DesignState, basis: Basis) {
+ *  into the gyroid generic-surface model (and vice-versa). `opts` adds the V2.1
+ *  coolant + target blocks (omitted when not provided, so behaviour is V1). */
+export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}) {
   const caseObj = isGyroid(d.family)
     ? {
         design_id: 'live', family: d.family, process_route: d.process_route,
@@ -102,12 +110,15 @@ export function evalPayload(d: DesignState, basis: Basis) {
         fin_height_mm: d.fin_height_mm, side_margin_mm: d.side_margin_mm,
         wave_amplitude_mm: d.wave_amplitude_mm, wavelength_mm: d.wavelength_mm,
       }
-  return {
+  const payload: Record<string, unknown> = {
     case: caseObj,
     stack: basis.stack,
     operating: { ...basis.operating, flow_lpm: d.flow_lpm },
     architecture: basis.architecture,
   }
+  if (opts.coolant) payload.coolant = opts.coolant
+  if (opts.tjMaxC != null) payload.targets = { T_j_max_C: opts.tjMaxC }
+  return payload
 }
 
 /** Client-side geometric derivations shown next to the fin sliders. */

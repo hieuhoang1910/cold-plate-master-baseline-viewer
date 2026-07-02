@@ -1,3 +1,34 @@
+// V2.1: fluid-property block attached to a result when a coolant was requested.
+export interface CoolantInfo {
+  coolant: string
+  label: string
+  rho_kg_m3: number
+  mu_Pa_s: number
+  k_fluid_W_mK: number
+  cp_J_kgK: number
+  T_eval_C: number
+  extrapolated: boolean
+  warnings: string[]
+}
+
+// V2.1: targets block attached to a result when a T_j target was requested.
+export interface TargetsInfo {
+  R_jc_gate_K_W: number
+  caloric_dT_K: number
+  mean_coolant_C: number
+  mdot_cp_W_K: number
+  T_j_max_C: number
+  derivation: string
+  T_j_C: number
+  NTU: number
+  effectiveness: number
+  coolant_out_C: number
+  wall_to_inlet_K: number
+  conduction_rise_K: number
+  T_j_pass: boolean | null
+  warnings: string[]
+}
+
 // Mirrors the master engine BaselineResult (asdict) returned by the API.
 export interface BaselineResult {
   design_id: string
@@ -27,6 +58,31 @@ export interface BaselineResult {
   margin_heat_load_deltaT_K: number
   kpi_status: string
   warnings: string[]
+  // V2.1 — present only when the request included coolant / targets.
+  coolant?: CoolantInfo
+  targets?: TargetsInfo
+}
+
+// V2.1 — /api/schema (wizard metadata). Only the parts the viewer uses today.
+export interface CoolantPreset {
+  name: string
+  label: string
+  note: string
+  preview_25C: { rho_kg_m3: number; mu_Pa_s: number; k_fluid_W_mK: number; cp_J_kgK: number }
+  T_range_C: [number, number]
+}
+export interface TargetField {
+  default: number
+  min: number
+  max: number
+  soft_target?: number
+  help?: string
+}
+export interface AppSchema {
+  coolants: CoolantPreset[]
+  targets: Record<string, TargetField>
+  families: { family: string; label: string; model: string; status: string; viewable: boolean }[]
+  layouts: { layout: string; label: string; status: string; resolves: string }[]
 }
 
 export interface Gates {
