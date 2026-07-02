@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { evaluate, getProject, getProjects, getSchema, projectCatalog, saveProject, deleteProject } from './api'
 import { milliKW } from './format'
 import { evalPayload, initDesign, isViewable, type ProblemOpts } from './design'
-import type { AppSchema, BaselineResult, Catalog, DesignState, Project, ProjectSummary } from './types'
+import type { AppSchema, BaselineResult, Catalog, DesignState, Project, ProjectSummary, SavedDesign } from './types'
 import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
@@ -169,6 +169,20 @@ export default function App() {
     catch (e) { setError(String((e as Error).message ?? e)) }
   }
 
+  // Add a batch of designs (e.g. the optimizer's top-N sweep points) as named
+  // candidates on the active project; re-adding replaces same-named entries.
+  const addCandidates = async (entries: SavedDesign[]) => {
+    if (!activeProject || entries.length === 0) return
+    let proj = activeProject
+    if (proj.builtin) proj = { ...proj, id: undefined, name: `${proj.name} (custom)`, builtin: false }
+    const incoming = new Set(entries.map((e) => e.name))
+    const designs = [...(proj.designs ?? []).filter((d) => !incoming.has(d.name)), ...entries]
+    try {
+      await saveProjectDraft({ ...proj, designs })
+      setSelectedId('saved_' + slug(entries[0].name))
+    } catch (e) { setError(String((e as Error).message ?? e)) }
+  }
+
   const coolant = activeProject?.problem?.coolant ?? 'water'
   const tjMaxC = activeProject?.targets?.T_j_max_C ?? 100
 
@@ -290,7 +304,7 @@ export default function App() {
             {bottomTab === 'compare'
               ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
               : <OptimizerPanel design={design} basis={catalog.basis} candidates={catalog.candidates}
-                  current={kpiResult} onLoadOptimum={patchDesign} />}
+                  current={kpiResult} onLoadOptimum={patchDesign} onAddCandidates={addCandidates} />}
           </div>
         </>
       )}

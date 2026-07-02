@@ -13,13 +13,13 @@ export const SWEEP_VARS: SweepVar[] = [
 ]
 
 // What to minimise/maximise across the grid (tier-1 optimizer objectives).
-export interface Objective { key: string; label: string; unit: string; dir: 'min' | 'max'; scale: number; digits: number }
+export interface Objective { key: string; label: string; short: string; unit: string; dir: 'min' | 'max'; scale: number; digits: number }
 export const OBJECTIVES: Objective[] = [
-  { key: 'R_jc_K_W', label: 'R_jc (thermal)', unit: 'mK/W', dir: 'min', scale: 1000, digits: 2 },
-  { key: 'pump_power_W', label: 'pump power', unit: 'W', dir: 'min', scale: 1, digits: 3 },
-  { key: 'DeltaP_Pa', label: 'pressure drop', unit: 'kPa', dir: 'min', scale: 1e-3, digits: 2 },
-  { key: 'mass_g', label: 'mass (Cu)', unit: 'g', dir: 'min', scale: 1, digits: 1 },
-  { key: 'cop', label: 'COP (Q/pump)', unit: '', dir: 'max', scale: 1, digits: 0 },
+  { key: 'R_jc_K_W', label: 'R_jc (thermal)', short: 'rjc', unit: 'mK/W', dir: 'min', scale: 1000, digits: 2 },
+  { key: 'pump_power_W', label: 'pump power', short: 'pump', unit: 'W', dir: 'min', scale: 1, digits: 3 },
+  { key: 'DeltaP_Pa', label: 'pressure drop', short: 'dp', unit: 'kPa', dir: 'min', scale: 1e-3, digits: 2 },
+  { key: 'mass_g', label: 'mass (Cu)', short: 'mass', unit: 'g', dir: 'min', scale: 1, digits: 1 },
+  { key: 'cop', label: 'COP (Q/pump)', short: 'cop', unit: '', dir: 'max', scale: 1, digits: 0 },
 ]
 export function objectiveOf(key: string): Objective {
   return OBJECTIVES.find((o) => o.key === key) ?? OBJECTIVES[0]

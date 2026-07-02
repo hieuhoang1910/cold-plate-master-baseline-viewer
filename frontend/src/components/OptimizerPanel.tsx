@@ -2,18 +2,19 @@ import { useEffect, useState } from 'react'
 import { sweep } from '../api'
 import { fmt } from '../format'
 import { OBJECTIVES, SWEEP_VARS, buildSweepRequest, objectiveOf, varLabel, varUnit } from '../optimizer'
-import type { Basis, BaselineResult, DesignState, SweepResult } from '../types'
+import type { Basis, BaselineResult, DesignState, SavedDesign, SweepPoint, SweepResult } from '../types'
 import { Heatmap } from './Heatmap'
 import { Pareto } from './Pareto'
 
 export function OptimizerPanel({
-  design, basis, candidates, current, onLoadOptimum,
+  design, basis, candidates, current, onLoadOptimum, onAddCandidates,
 }: {
   design: DesignState | null
   basis: Basis
   candidates: BaselineResult[]
   current: BaselineResult | null
   onLoadOptimum: (p: Partial<DesignState>) => void
+  onAddCandidates: (entries: SavedDesign[]) => void
 }) {
   const [xVar, setXVar] = useState('fin_thickness_mm')
   const [yVar, setYVar] = useState('channel_gap_mm')
@@ -48,6 +49,23 @@ export function OptimizerPanel({
     onLoadOptimum({ [result.x_var]: o.x, [result.y_var]: o.y } as Partial<DesignState>)
   }
 
+  // Take the top-N sweep points (Pareto front, ranked by the objective) and add
+  // them as named candidates in the left list — each a full design you can tune.
+  const addTop = (n: number) => {
+    if (!result || !design) return
+    const dir = result.objective_dir
+    const pool = (result.pareto.length ? result.pareto : result.grid)
+      .filter((p) => p.feasible && p.objective != null)
+    const sorted = [...pool].sort((a, b) =>
+      dir === 'max' ? b.objective! - a.objective! : a.objective! - b.objective!)
+    const short = objectiveOf(result.objective).short
+    const entries: SavedDesign[] = sorted.slice(0, n).map((pt: SweepPoint, i) => ({
+      name: `opt-${short}-${i + 1}`,
+      design: { ...design, [result.x_var]: pt.x, [result.y_var]: pt.y } as DesignState,
+    }))
+    if (entries.length) onAddCandidates(entries)
+  }
+
   return (
     <div className="opt">
       <div className="opt-controls">
@@ -79,6 +97,10 @@ export function OptimizerPanel({
                   <> · R_jc {fmt(o.R_jc_K_W * 1000, 2)} mK/W</>}
               </span>
               <button className="opt-load" onClick={loadOpt}>load optimum → sliders</button>
+              <button className="opt-load" onClick={() => addTop(5)}
+                title="Add the 5 best sweep points as named candidates in the left list, then fine-tune each">
+                ★ add top 5 → candidates
+              </button>
             </>
           )
         })()}
