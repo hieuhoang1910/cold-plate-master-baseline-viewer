@@ -41,15 +41,24 @@ if not exist "frontend\dist\index.html" (
   popd
 )
 
-REM --- 4. Open the browser shortly after the server starts -----
+REM --- 4. Allow LAN access through Windows Firewall -------------
+REM Adds an inbound rule for port 8000 (needs admin; skipped silently if not).
+netsh advfirewall firewall show rule name="Cold Plate Viewer 8000" >nul 2>&1
+if errorlevel 1 (
+  netsh advfirewall firewall add rule name="Cold Plate Viewer 8000" dir=in action=allow protocol=TCP localport=8000 >nul 2>&1
+)
+
+REM --- 5. Open the browser shortly after the server starts -----
 echo.
 echo Opening http://127.0.0.1:8000 in your browser...
 start "" /min cmd /c "ping -n 4 127.0.0.1 >nul & start http://127.0.0.1:8000"
 
-REM --- 5. Run the app (serves UI + API on one port) -----------
+REM --- 6. Run the app (serves UI + API on one port) -----------
 echo.
 echo  ------------------------------------------------------------
 echo    Server running:  http://127.0.0.1:8000
+echo    Colleagues on the same LAN/WiFi can use the LAN address
+echo    printed below by the server.
 echo    Keep this window OPEN. Close it to stop the app.
 echo  ------------------------------------------------------------
 echo.

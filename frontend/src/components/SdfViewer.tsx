@@ -3,7 +3,12 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import * as THREE from 'three'
 import { fmt } from '../format'
+import { buildStl, type StlQuality } from '../stl'
 import type { ViewerGeom } from '../viewerGeom'
+
+function fmtBytes(n: number): string {
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
+}
 
 // Fullscreen triangle: the vertex shader writes clip space directly, so the
 // pass ignores the scene camera. Rays are reconstructed in the fragment shader
@@ -388,13 +393,40 @@ export function SdfViewer({
   })
   const [cuts, setCuts] = useState<Cuts>(defaultCuts)
   const [viewCmd, setViewCmd] = useState({ view: 'iso', n: 0 })
+  const [stl, setStl] = useState<{ busy: boolean; note: string }>({ busy: false, note: '' })
+  const [stlQuality, setStlQuality] = useState<StlQuality>('standard')
+  // sheet/solid lattices are meshed from the implicit field, so they get a
+  // resolution choice; fins and pins are meshed exactly and need none
+  const isTpmsSurface = g.family === 'gyroid_tpms' && !g.isPin
 
   // Reset cuts + framing when the design changes.
   useEffect(() => {
     setCuts(defaultCuts())
     setViewCmd((c) => ({ view: 'iso', n: c.n + 1 }))
+    setStl({ busy: false, note: '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [designId])
+
+  const downloadStl = () => {
+    if (stl.busy) return
+    setStl({ busy: true, note: '' })
+    // defer so the "building…" label paints before meshing blocks the thread
+    setTimeout(() => {
+      try {
+        const { buffer, triangles } = buildStl(g, stlQuality)
+        const blob = new Blob([buffer], { type: 'model/stl' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${designId.replace(/[^\w.-]+/g, '_')}.stl`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
+        setStl({ busy: false, note: `${fmtBytes(buffer.byteLength)} · ${triangles.toLocaleString()} tris` })
+      } catch (e) {
+        setStl({ busy: false, note: `export failed: ${e instanceof Error ? e.message : String(e)}` })
+      }
+    }, 30)
+  }
 
   const setView = (view: string) => setViewCmd((c) => ({ view, n: c.n + 1 }))
   const patch = (axis: 'x' | 'y' | 'z', p: Partial<Cut>) =>
@@ -451,6 +483,20 @@ export function SdfViewer({
         <AxisCut axis="y" min={-yMax} max={yMax} cut={cuts.y} onChange={(p) => patch('y', p)} />
         <AxisCut axis="z" min={0} max={zMax} cut={cuts.z} onChange={(p) => patch('z', p)} />
         <button className="vo-reset" onClick={() => setCuts(defaultCuts())}>reset</button>
+        <span className="vo-sep" />
+        {isTpmsSurface && (
+          <select className="vo-stlq" value={stlQuality} title="Lattice mesh resolution — sheet lattices export dense"
+            onChange={(e) => setStlQuality(e.target.value as StlQuality)}>
+            <option value="draft">draft</option>
+            <option value="standard">standard</option>
+            <option value="fine">fine</option>
+          </select>
+        )}
+        <button className="vo-reset" onClick={downloadStl} disabled={stl.busy}
+          title="Download the current model as a binary STL (units: mm)">
+          {stl.busy ? 'building…' : '⬇ STL'}
+        </button>
+        {stl.note && <span className="vo-stl-note">{stl.note}</span>}
       </div>
     </div>
   )

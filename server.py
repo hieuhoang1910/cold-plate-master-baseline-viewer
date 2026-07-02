@@ -23,7 +23,9 @@ Run from the project root (or anywhere):
 
     python 07_WebApp/server.py
 
-then the API is on http://127.0.0.1:8000. CORS is open so a Vite dev server on
+then the API is on http://127.0.0.1:8000 and, because it binds 0.0.0.0, also
+on http://<this-machine's-LAN-IP>:8000 for other devices on the same LAN/WiFi
+(both URLs are printed at startup). CORS is open so a Vite dev server on
 another port can call it during development. In production the same server can
 also serve the built frontend from ./frontend/dist (see do_GET).
 
@@ -37,6 +39,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import socket
 import sys
 from dataclasses import asdict, fields
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -93,8 +96,21 @@ DIE_COVERAGE_ARCH = {
 }
 PHYSICAL_FOOTPRINT = {"width_mm": 28.0, "length_mm": 35.0}
 
-HOST = "127.0.0.1"
+# Bind to all interfaces so colleagues on the same LAN/WiFi can open the app
+# via this machine's LAN IP (printed at startup). Use "127.0.0.1" to restrict
+# access to this machine only.
+HOST = "0.0.0.0"
 PORT = 8000
+
+
+def _lan_ip() -> str:
+    """Best-effort LAN IP of this machine (no packets are actually sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
 
 # Allowed dataclass field names, so stray JSON keys are ignored, not fatal.
 _CASE_FIELDS = {f.name for f in fields(mbc.GeometryCase)}
@@ -436,7 +452,8 @@ def main() -> int:
     print("=" * 64)
     print("Cold Plate Master Baseline Viewer - API (Phase 1)")
     print("=" * 64)
-    print(f"  Serving on http://{HOST}:{PORT}")
+    print(f"  This machine:  http://127.0.0.1:{PORT}")
+    print(f"  Same LAN/WiFi: http://{_lan_ip()}:{PORT}")
     print("  GET  /api/health   /api/catalog")
     print("  POST /api/evaluate /api/solve /api/sweep")
     print("  Ctrl+C to stop.")

@@ -6,7 +6,17 @@ implicit-body (SDF) 3D geometry next to their KPIs, with a multi-objective
 the browser never runs a second physics model.
 
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
-- **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), and an About tab with nomenclature + cited references.
+- **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), STL export, and an About tab with nomenclature + cited references.
+
+**STL export.** The **⬇ STL** button in the viewer's bottom bar downloads the
+current model as a binary STL in millimetres (base + fins/pins/lattice, viewer
+axes). Fin and pin-fin families are meshed analytically — watertight,
+exact-dimension shells at tiny file sizes (straight fins ~50 KB, wavy fins a
+few MB). TPMS lattices are meshed from the implicit field (surface nets) with
+a draft/standard/fine resolution picker; **sheet** lattices with thin walls are
+inherently triangle-dense — expect large files (tens to hundreds of MB), which
+is normal for lattice STLs. Joined shells overlap by 0.05 mm on purpose so
+slicers/CAD union them cleanly.
 
 ## Quick start
 
@@ -28,6 +38,16 @@ so a single Python process serves the whole app:
 
 3. Open **http://127.0.0.1:8000** in your browser.
 4. Press `Ctrl+C` in the terminal to stop.
+
+**Sharing with colleagues on the same LAN/WiFi.** The server listens on all
+network interfaces, so anyone on the same network can open the app at
+`http://<this-PC's-LAN-IP>:8000` — the exact URL is printed when the server
+starts (e.g. `http://192.168.1.140:8000`). The launcher `.bat` adds a Windows
+Firewall rule for port 8000 automatically when run as administrator; otherwise
+allow access (including **Private networks**) when Windows prompts on first
+run. If others still can't connect, check that your WiFi network is set to
+*Private* (not *Public*) in Windows network settings, or that "AP/client
+isolation" is disabled on the router.
 
 **If it won't start / "address already in use":** an old server is still holding
 port 8000. Close it, then run `python server.py` again. On Windows (PowerShell):

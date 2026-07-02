@@ -147,6 +147,182 @@ export function About({ onClose }: { onClose: () => void }) {
           </section>
 
           <section>
+            <h3>Reading the KPI panel — every number explained</h3>
+            <p className="note">
+              This mirrors the right-hand panel top to bottom. Green limit bars show how much of a gate's budget the
+              design uses; they turn red past the gate.
+            </p>
+
+            <h4 className="kpi-h">Card 1 — Junction-to-coolant</h4>
+            <table className="about-tbl kpi-tbl">
+              <thead><tr><th>Item</th><th>What it is</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>R_jc (big number, mK/W)</td>
+                  <td>Total junction-to-coolant thermal resistance: R_jc = R_conv + R_base + R_TIM. Shown in mK/W
+                    (thousandths of K/W), so 12.86 mK/W = 0.01286 K/W.</td>
+                  <td><b>The one decision metric.</b> Every trade in this tool cashes out here: die temperature rise =
+                    R_jc × heat load. Everything else on the panel explains <i>why</i> R_jc is what it is.</td>
+                </tr>
+                <tr>
+                  <td>PASS / FAIL / SCREENING badge</td>
+                  <td>The solver's gate verdict (kpi_status). FAIL lists which gate tripped (R_jc, ΔP, pump, coverage,
+                    open volume…). SCREENING_ONLY marks families (gyroid/TPMS) whose model is a placeholder until
+                    nTop-measured area + CFD exist.</td>
+                  <td>A design that fails any gate is out regardless of a pretty R_jc. Screening rows can be compared
+                    with each other but should not be quoted externally.</td>
+                </tr>
+                <tr>
+                  <td>R_jc vs gate bar</td>
+                  <td>R_jc as a fraction of the 0.078 K/W (78 mK/W) gate.</td>
+                  <td>Shows headroom at a glance — the hero sits near 16% of budget, i.e. the gate is comfortably met
+                    and R_jc is not the binding constraint.</td>
+                </tr>
+                <tr>
+                  <td>base / TIM / conv stack bar</td>
+                  <td>The three series resistances, each in mK/W with its share of R_jc: <b>base</b> = conduction
+                    through the 0.7 mm copper floor, <b>TIM</b> = the interface material between die and cold plate,
+                    <b>conv</b> = fins-to-water convection (1/UA).</td>
+                  <td><b>The most important diagnostic on the panel.</b> Only conv responds to fin geometry — base and
+                    TIM are fixed by material and assembly. With conv at ~26%, even a <i>perfect</i> fin field could
+                    cut R_jc by barely a quarter; real gains past that come from a thinner base or a better TIM, not
+                    from more fins.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 className="kpi-h">Card 2 — Hydraulics</h4>
+            <table className="about-tbl kpi-tbl">
+              <thead><tr><th>Item</th><th>What it is</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Pressure drop (kPa / 50k)</td>
+                  <td>Total ΔP the coolant loses crossing the plate: channel friction (Shah–London fRe over the wavy
+                    arc length) + manifold/header minor losses. Gate: 50 kPa (50,000 Pa).</td>
+                  <td>The pump must supply this at 2.65 L/min. Blow the budget and the loop delivers less flow than
+                    the model assumes — every thermal number above quietly degrades. Narrow gaps buy heat transfer at
+                    the direct cost of ΔP (∝ 1/D_h² in laminar flow).</td>
+                </tr>
+                <tr>
+                  <td>Pump power (W / 5)</td>
+                  <td>Ideal hydraulic power W_pump = V̇ × ΔP. Gate: 5 W. (Real pump electrical draw is higher by its
+                    efficiency.)</td>
+                  <td>The system-level cost of a thermal win, and the second axis of the optimizer's Pareto front.
+                    Two designs with equal R_jc are not equal if one needs 10× the pumping.</td>
+                </tr>
+                <tr>
+                  <td>Velocity (m/s)</td>
+                  <td>Mean water velocity in the channels = flow ÷ total open flow area.</td>
+                  <td>Sanity/limits check: too low → weak convection and silt-prone channels; too high → erosion and
+                    ΔP. Sub-m/s laminar values like 0.24 m/s are typical for micro-fin plates.</td>
+                </tr>
+                <tr>
+                  <td>Re (Reynolds number)</td>
+                  <td>ρ·v·D_h/μ — the flow-regime number. Laminar below ~2300; here Re ≈ 50 is deeply laminar.</td>
+                  <td>Tells you which physics applies. The solver's Nu/fRe correlations are laminar duct theory —
+                    valid at this Re. It also means no turbulence to help mixing, which is exactly why the wavy fins
+                    (Dean vortices) earn their keep.</td>
+                </tr>
+                <tr>
+                  <td>D_h (mm)</td>
+                  <td>Hydraulic diameter of one channel = 2bH/(b+H) — the effective "pipe size" of the b × H
+                    rectangular gap.</td>
+                  <td>The master length scale: h = Nu·k/D_h, so halving D_h roughly doubles the convective
+                    coefficient — while friction rises as 1/D_h². Most thermal-vs-pressure tension on this panel is
+                    D_h in disguise.</td>
+                </tr>
+                <tr>
+                  <td>Open frac</td>
+                  <td>Open (water-filled) volume ÷ active core volume. 50.2% means half the core is copper, half is
+                    coolant.</td>
+                  <td>Manufacturing + reliability proxy rather than a performance target: enough open volume must
+                    remain to depowder the LMM print, and it correlates with cloggability and weight. There is a
+                    minimum-open-volume gate; beyond passing it, don't maximize it — it trades directly against fin
+                    area.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 className="kpi-h">Card 3 — Surface &amp; thermal</h4>
+            <table className="about-tbl kpi-tbl">
+              <thead><tr><th>Item</th><th>What it is</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>SA/V raw (m²/m³)</td>
+                  <td>Total wetted surface per unit of active-core volume — the "brochure" area density.</td>
+                  <td>Mostly a <b>diagnostic, not a goal</b>. It only counts area, not whether that area is hot enough
+                    to matter. Chasing raw SA/V alone is how designs end up with impressive area and mediocre R_jc.</td>
+                </tr>
+                <tr>
+                  <td>SA/V eff (m²/m³)</td>
+                  <td>Raw SA/V derated by what actually works: × η_o (fin efficiency) × flow uniformity × surface
+                    access. Here 13386 → 2035, an 85% haircut.</td>
+                  <td>The honest area number. The gap between raw and effective is the fin-efficiency story below —
+                    when thinner/taller fins raise raw SA/V but effective SA/V stalls, you've hit the plateau and
+                    further fin-packing is free of benefit but not free of ΔP.</td>
+                </tr>
+                <tr>
+                  <td>η_f (fin efficiency)</td>
+                  <td>tanh(mH)/(mH) with m = √(2h/(k·t)) — how close the fin runs to base temperature over its height.
+                    η_f = 0.144 means the average fin surface works at ~14% of its potential.</td>
+                  <td>Looks alarming; is expected. 0.1 mm-thin, ~5 mm-tall fins in water simply cannot conduct enough
+                    heat up their length. This single number explains why "just make the fins taller/thinner" stopped
+                    paying — the extra area arrives at nearly coolant temperature.</td>
+                </tr>
+                <tr>
+                  <td>η_o (overall surface efficiency)</td>
+                  <td>Area-weighted efficiency of the whole wetted surface: fins at η_f plus the exposed base floor at
+                    ~1.0. Always between η_f and 1.</td>
+                  <td>This is the factor UA actually uses. Barely above η_f here because fins dominate the wetted
+                    area.</td>
+                </tr>
+                <tr>
+                  <td>UA (W/K)</td>
+                  <td>Overall convective conductance: h × A_wet × η_o × uniformity × access. R_conv = 1/UA.</td>
+                  <td>The single number the whole fin field boils down to. 296 W/K → R_conv = 3.38 mK/W, the blue
+                    segment in card 1. Raise UA and only the conv slice shrinks — the TIM+base floor stays.</td>
+                </tr>
+                <tr>
+                  <td>Coverage</td>
+                  <td>Cooled footprint ÷ die footprint. Gate: ≥ 1. Here 1.317 — the 28 × 35 mm core overhangs the
+                    24 × 31 mm die on all sides.</td>
+                  <td>Below 1, die corners must push heat sideways before finding water — a spreading resistance the
+                    1-D stack model does not capture, so its numbers turn optimistic. Above ~1.3 extra coverage adds
+                    little; it exists to guarantee the model's assumptions hold.</td>
+                </tr>
+                <tr>
+                  <td>ΔT @450 W / ΔT @575 W</td>
+                  <td>Junction rise above coolant = R_jc × Q at nominal (450 W) and margin (575 W) load: 5.79 K and
+                    7.40 K.</td>
+                  <td>R_jc translated into what a thermal engineer feels. With ~25 °C water the junction sits near
+                    31–33 °C — enormous headroom against silicon limits, which is the point: the budget is spent on
+                    the loop, radiator, and hot-spot non-uniformity that this lumped model does not see.</td>
+                </tr>
+                <tr>
+                  <td>"analytical" badge</td>
+                  <td>validation_stage — where the numbers come from. "analytical" = closed-form correlation model
+                    (Shah–London, fin theory), not yet anchored by a test on this exact part.</td>
+                  <td>Sets how much to trust the absolute values: analytical results rank designs reliably but carry
+                    ±20–30% absolute uncertainty until prototype data closes the loop.</td>
+                </tr>
+                <tr>
+                  <td>"LMM" badge</td>
+                  <td>process_route — the manufacturing process assumed: Lithography-based Metal Manufacturing
+                    (printed copper).</td>
+                  <td>The route sets the design floor the sliders enforce (≈0.10 mm minimum wall/gap for LMM) and the
+                    conductivity band (k ≈ 340 W/m·K printed vs ~400 wrought). Change the route and the same geometry
+                    gets different limits and different physics.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="note">
+              If a ⚠ warnings box appears under the cards, it lists solver caveats for this exact design point (e.g.
+              correlation used outside its fitted range, entry-length effects, screening placeholders) — read them
+              before quoting numbers.
+            </p>
+          </section>
+
+          <section>
             <h3>Nomenclature — symbols &amp; units</h3>
             <p className="note">Matches the v6 master report conventions. Resistances are stored in K/W; the UI shows them in mK/W (×1000).</p>
             <table className="about-tbl nomen">

@@ -253,7 +253,11 @@ header .api-bad { color: var(--fail); font-size: 12px; }
   border-radius: 7px; padding: 4px 12px; cursor: pointer; font-size: 11px; white-space: nowrap;
   transition: border-color 0.12s ease;
 }
-.vo-reset:hover { border-color: var(--accent); }
+.vo-reset:hover:not(:disabled) { border-color: var(--accent); }
+.vo-reset:disabled { opacity: 0.55; cursor: default; }
+.vo-sep { width: 1px; height: 18px; background: var(--line); flex: none; }
+.vo-stlq { font-size: 11px; padding: 3px 6px; }
+.vo-stl-note { color: var(--muted); white-space: nowrap; }
 
 /* ---- Center viewer placeholder ---- */
 .center { min-height: 0; }
@@ -363,6 +367,12 @@ th {
 .about-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); color: #cdd6e4; vertical-align: top; }
 .about-tbl td:first-child { font-family: var(--mono); color: var(--text); white-space: nowrap; }
 .about-foot { color: var(--faint); font-size: 12px; padding-top: 14px; }
+.kpi-h {
+  color: var(--text); font-weight: 650; font-size: 11px; margin: 14px 0 2px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.kpi-tbl td { font-size: 12px; line-height: 1.55; }
+.kpi-tbl td:first-child { white-space: normal; width: 20%; min-width: 110px; }
 .ref-h { color: var(--text); font-weight: 600; font-size: 12px; margin: 12px 0 4px; }
 .refs { margin: 2px 0 6px; padding-left: 22px; }
 .refs li { color: #cdd6e4; font-size: 12px; line-height: 1.55; margin: 5px 0; }
