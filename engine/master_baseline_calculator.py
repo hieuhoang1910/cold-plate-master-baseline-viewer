@@ -20,11 +20,12 @@ import csv
 import json
 import math
 import argparse
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-import pin_fin  # V2.3 S1 pin-fin solver (webapp-native, co-located in engine/)
+import pin_fin        # V2.3 S1 pin-fin solver (webapp-native, co-located in engine/)
+import tpms_geometry  # V2.4 S2 TPMS sheet geometry (webapp-native)
 
 
 @dataclass
@@ -123,6 +124,10 @@ class GeometryCase:
     pin_diameter_mm: Optional[float] = None
     pin_pitch_mm: Optional[float] = None
     pin_pattern: str = "staggered"
+    # V2.4 TPMS sheet geometry (S2) — cell + wall drive derived SA/V, void, D_h.
+    tpms_type: Optional[str] = None
+    unit_cell_mm: Optional[float] = None
+    wall_thickness_mm: Optional[float] = None
     notes: str = ""
 
 
@@ -274,6 +279,25 @@ def evaluate_case(
     coverage, R_base, R_tim = _stack_resistances(stack)
     flow_per_path = op.flow_m3_s / max(arch.n_parallel_paths, 1)
     path_length_m = arch.resolved_path_length_m(stack)
+
+    # V2.4 (S2): for literature TPMS sheet types, derive SA/V, void fraction and
+    # D_h from the minimal-surface geometry (cell + wall) instead of hand-entered
+    # values, so the geometry is consistent with what the viewer/STL draw. (The
+    # heat-transfer model stays the generic-surface screening one until the TPMS
+    # Nu/f correlations land — see spec §20 S2.)
+    if (family not in {"straight_fin", "wavy_fin", "pin_fin"}
+            and case.tpms_type in tpms_geometry.LIT_TYPES
+            and case.unit_cell_mm and case.wall_thickness_mm):
+        _g = tpms_geometry.geometry(case.tpms_type, case.unit_cell_mm, case.wall_thickness_mm)
+        case = replace(case,
+                       void_fraction=_g["void_fraction"],
+                       surface_area_density_m2_m3=_g["surface_area_density_m2_m3"],
+                       hydraulic_diameter_mm=_g["hydraulic_diameter_mm"])
+        warnings.append(
+            f"{case.tpms_type} geometry derived from the minimal-surface area "
+            f"coefficient ({_g['area_coeff']:.3f}): SA/V {_g['surface_area_density_m2_m3']:.0f} "
+            f"m2/m3, void {_g['void_fraction']:.2f}, D_h {_g['hydraulic_diameter_mm']:.3f} mm.")
+        warnings.extend(_g["warnings"])
 
     if family in {"straight_fin", "wavy_fin"}:
         result = _evaluate_fin_family(case, stack, op, arch, path_length_m, flow_per_path, relative_roughness)

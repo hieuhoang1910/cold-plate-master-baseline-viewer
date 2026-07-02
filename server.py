@@ -259,6 +259,9 @@ def _case_from_design(ds: dict, design_id: str) -> dict:
                 "fin_height_mm": ds.get("fin_height_mm")}
     if fam == "gyroid_tpms":
         return {**base, "family": "gyroid_tpms",
+                "tpms_type": ds.get("tpms_type"),
+                "unit_cell_mm": ds.get("unit_cell_mm"),
+                "wall_thickness_mm": ds.get("wall_thickness_mm"),
                 "void_fraction": ds.get("void_fraction"),
                 "surface_area_density_m2_m3": ds.get("surface_area_density_m2_m3"),
                 "hydraulic_diameter_mm": ds.get("hydraulic_diameter_mm"),
