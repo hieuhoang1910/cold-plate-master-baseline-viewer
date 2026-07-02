@@ -6,70 +6,80 @@ implicit-body (SDF) 3D geometry next to their KPIs, with a multi-objective
 the browser never runs a second physics model.
 
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md)
-- **Status:** Phase 1 (Python API) + Phase 2 (React frontend: candidate table + KPI panel) done. Phase 3 = the 3D implicit-body viewer.
+- **Status:** complete — 3D SDF viewer (fin + TPMS/lattice families), live tuning, optimizer (R_jc heatmap + Pareto), and an About tab with nomenclature + cited references.
 
 ## Layout
 
-```
+```text
 07_WebApp/
+├─ README.md                        this file
 ├─ MASTER_BASELINE_VIEWER_SPEC.md   design spec (review/iterate here)
-├─ server.py                        stdlib HTTP API (Phase 1)
+├─ REFERENCES.md                    cited sources (mirrored in the About tab)
+├─ server.py                        stdlib HTTP API + serves the built UI
 ├─ test_api_parity.py              acceptance test: reproduces the 5 golden results
 ├─ sync_engine.py                  refresh engine/ from the source project
 ├─ engine/                         vendored snapshot of the validated solvers
 │  ├─ cold_plate_v6/               v6 solver package (depth: wavy hero)
 │  ├─ master_baseline_calculator.py  master engine (breadth: all families)
 │  └─ data/                        master params + candidates + baseline cases
-└─ frontend/                       (Phase 2+) Vite + React + react-three-fiber
+└─ frontend/                       Vite + React + react-three-fiber UI
+   └─ src/                         App, SdfViewer (SDF shader), DesignControls,
+                                   KpiPanel, OptimizerPanel, About, …
 ```
 
-## Run the API (Phase 1)
+## Running the app
 
-Standard-library Python only — no `pip install` needed.
+**Prerequisites:** Python 3.10+ and Node.js 18+ (LTS). The Python API uses only
+the standard library — no `pip install`. On Windows, if you *just* installed
+Node, open a **fresh terminal** so it's on your PATH (check with `node -v`).
 
-```bash
-python server.py
-# serves http://127.0.0.1:8000
-```
+All commands below are run from the `07_WebApp/` directory.
 
-Endpoints (see spec §12):
+### Development (two terminals, hot reload)
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/health` | liveness probe |
-| GET | `/api/catalog` | master parameter registry + 5 scored candidates + gate limits |
-| POST | `/api/evaluate` | master `evaluate_case()` for arbitrary parameters (all families) |
-| POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
-| POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
-
-## Run the frontend (Phase 2)
-
-Needs Node.js (LTS). Two processes during development — the API and the Vite dev
-server (which proxies `/api` to the API, so there are no CORS issues):
+The Vite dev server proxies `/api` to the Python API, so both sit behind one
+origin (no CORS setup needed).
 
 ```bash
-# terminal 1 — the API
-python server.py
+# terminal 1 — solver API
+python server.py                 # -> http://127.0.0.1:8000
 
-# terminal 2 — the frontend
+# terminal 2 — frontend
 cd frontend
-npm install        # first time only
-npm run dev        # http://localhost:5173
+npm install                      # first run only (installs dependencies)
+npm run dev                      # -> http://localhost:5173
 ```
 
-Open http://localhost:5173.
+Then open **http://localhost:5173** in your browser. Press `Ctrl+C` in each
+terminal to stop.
 
-## Production (single-origin)
+### Production (one process, single origin)
 
-Build the frontend, then let the Python app serve everything on one port:
+Build the UI once, then let the Python app serve both the UI and the API:
 
 ```bash
-cd frontend && npm run build   # -> frontend/dist/
-cd .. && python server.py      # serves the app + API on http://127.0.0.1:8000
+cd frontend && npm run build     # build UI -> frontend/dist/
+cd ..        && python server.py # serves UI + API on http://127.0.0.1:8000
 ```
 
 `server.py` serves `frontend/dist/` (with SPA fallback) alongside `/api/*`, so a
 single process runs the whole app — ready to host on any Python-capable host.
+
+### Troubleshooting
+
+- **"API error" / no data in the UI** — the API isn't running; start `python server.py` (terminal 1).
+- **`npm` / `node` not found (Windows)** — open a *new* terminal after installing Node; PATH doesn't refresh in an already-open shell.
+- **Port already in use** — an old dev server is still running; close it, or Vite will fall back to the next free port (5174, 5175, …). Kill a stray server on a port with, e.g. (PowerShell): `Get-NetTCPConnection -LocalPort 5173 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`.
+
+### API endpoints (see spec §12)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | liveness probe |
+| GET | `/api/catalog` | parameter registry + candidates + gate limits |
+| POST | `/api/evaluate` | master `evaluate_case()` for arbitrary parameters (all families) |
+| POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
+| POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
 
 ## Test (acceptance gate)
 
