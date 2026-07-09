@@ -42,6 +42,20 @@ export function Heatmap({ result }: { result: SweepResult }) {
   const o = result.optimum
   const oi = o ? xs.indexOf(o.x) : -1
   const oj = o ? ys.indexOf(o.y) : -1
+  // V3.3 — the gates-only ghost ☆; drawn when it differs from ★ (the gap
+  // between them is the price of manufacturability).
+  const u = result.optimum_unconstrained
+  const ghost = u && o && (u.x !== o.x || u.y !== o.y) ? u : null
+  const gi = ghost ? xs.indexOf(ghost.x) : -1
+  const gj = ghost ? ys.indexOf(ghost.y) : -1
+
+  // Two-tier feasibility dimming: gate-fail dimmest, then mfg FAIL, then MARGINAL.
+  const cellOpacity = (c: { feasible: boolean; mfg?: string | null }) => {
+    if (!c.feasible) return 0.22
+    if (c.mfg === 'FAIL') return 0.45
+    if (c.mfg === 'MARGINAL') return 0.75
+    return 1
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="opt-svg">
@@ -51,13 +65,21 @@ export function Heatmap({ result }: { result: SweepResult }) {
           if (!c || c.objective == null) return null
           return (
             <rect key={`${i}-${j}`} x={xi(i)} y={yj(j)} width={cw + 0.6} height={chh + 0.6}
-              fill={goodBadColor(norm(c.objective))} opacity={c.feasible ? 1 : 0.28}>
-              <title>{`${varLabel(result.x_var)}=${fmt(x, 3)}, ${varLabel(result.y_var)}=${fmt(y, 3)}\n${ob.label}=${fmt(c.objective * ob.scale, ob.digits)} ${ob.unit}\nR_jc=${fmt((c.R_jc_K_W ?? 0) * 1000, 2)} mK/W · ΔP=${fmt((c.DeltaP_Pa ?? 0) / 1000, 2)} kPa · ${c.kpi_status}`}</title>
+              fill={goodBadColor(norm(c.objective))} opacity={cellOpacity(c)}>
+              <title>{`${varLabel(result.x_var)}=${fmt(x, 3)}, ${varLabel(result.y_var)}=${fmt(y, 3)}\n${ob.label}=${fmt(c.objective * ob.scale, ob.digits)} ${ob.unit}\nR_jc=${fmt((c.R_jc_K_W ?? 0) * 1000, 2)} mK/W · ΔP=${fmt((c.DeltaP_Pa ?? 0) / 1000, 2)} kPa · ${c.kpi_status}${c.mfg ? ` · mfg ${c.mfg}` : ''}`}</title>
             </rect>
           )
         }),
       )}
 
+      {ghost && gi >= 0 && gj >= 0 && (
+        <g opacity={0.75}>
+          <circle cx={xi(gi) + cw / 2} cy={yj(gj) + chh / 2} r={6} fill="none" stroke="#fff"
+            strokeWidth={1.2} strokeDasharray="2.5 2" />
+          <text x={xi(gi) + cw / 2} y={yj(gj) + chh / 2 + 3.5} textAnchor="middle" fontSize="10" fill="#fff">☆</text>
+          <title>gates-only optimum (ignores manufacturability)</title>
+        </g>
+      )}
       {o && oi >= 0 && oj >= 0 && (
         <g>
           <circle cx={xi(oi) + cw / 2} cy={yj(oj) + chh / 2} r={6} fill="none" stroke="#fff" strokeWidth={1.6} />

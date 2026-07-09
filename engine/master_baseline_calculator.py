@@ -162,6 +162,9 @@ class BaselineResult:
     heat_load_deltaT_K: float
     margin_heat_load_deltaT_K: float
     kpi_status: str
+    # V3.2 — structure-only surface area (fin faces / pin laterals / TPMS sheet),
+    # no channel-floor base. Falls back to wetted_area for surface families.
+    fin_area_m2: Optional[float] = None
     warnings: List[str] = field(default_factory=list)
 
     def display_row(self) -> Dict[str, Any]:
@@ -355,6 +358,7 @@ def evaluate_case(
         effective_SA_V_m2_m3=result["effective_SA_V_m2_m3"],
         wetted_area_m2=result["wetted_area"],
         flow_area_m2=result["flow_area"],
+        fin_area_m2=result.get("fin_area", result["wetted_area"]),
         UA_W_K=result["UA"],
         eta_f=result.get("eta_f"),
         eta_o=result.get("eta_o"),
@@ -424,6 +428,7 @@ def _evaluate_fin_family(
         "effective_SA_V_m2_m3": effective_sa_v,
         "wetted_area": A_wet,
         "flow_area": flow_area,
+        "fin_area": A_fin * case.wetted_area_multiplier,
         "UA": UA,
         "eta_f": eta_f,
         "eta_o": eta_o,

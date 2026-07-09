@@ -1,4 +1,5 @@
 import { evalPayload, isGyroid, isPinStructure, routeFloor, type ProblemOpts } from './design'
+import type { Enforcement } from './manufacturing'
 import type { Basis, DesignState } from './types'
 
 export interface SweepVar { key: string; label: string }
@@ -54,9 +55,10 @@ export function varUnit(key: string): string {
   return 'mm'
 }
 
-/** Sweep range for a variable — mirrors the slider bounds; t/b/wall clamp to the route floor. */
-export function varRange(key: string, design: DesignState): { min: number; max: number } {
-  const fl = routeFloor(design.process_route)
+/** Sweep range for a variable — mirrors the slider bounds; t/b/wall clamp to
+ *  the route floor under the active enforcement mode (§35F). */
+export function varRange(key: string, design: DesignState, mode: Enforcement = 'marginal'): { min: number; max: number } {
+  const fl = routeFloor(design.process_route, mode)
   switch (key) {
     case 'fin_thickness_mm': return { min: fl.t, max: 0.3 }
     case 'channel_gap_mm': return { min: fl.b, max: 0.4 }
@@ -76,9 +78,13 @@ export function varRange(key: string, design: DesignState): { min: number; max: 
 export function buildSweepRequest(
   design: DesignState, basis: Basis, xVar: string, yVar: string,
   objective = 'R_jc_K_W', opts: ProblemOpts = {}, steps = 24,
+  mode: Enforcement = 'marginal',
 ) {
-  const rx = varRange(xVar, design)
-  const ry = varRange(yVar, design)
+  // Sweep the FULL physical range so the ghost ☆ (gates-only optimum) and the
+  // infeasible shading stay visible; the server picks ★ from the compliant
+  // pool per the enforcement mode (§35F).
+  const rx = varRange(xVar, design, 'explore')
+  const ry = varRange(yVar, design, 'explore')
   return {
     // Same family-aware case + coolant + targets as the live KPI evaluate, so
     // "feasible" in the sweep means "fits the active project's problem".
@@ -86,5 +92,6 @@ export function buildSweepRequest(
     x: { var: xVar, min: rx.min, max: rx.max, steps },
     y: { var: yVar, min: ry.min, max: ry.max, steps },
     objective,
+    manufacturability: mode === 'explore' ? undefined : { enforce: mode },
   }
 }

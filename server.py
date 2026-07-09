@@ -62,6 +62,7 @@ import master_baseline_calculator as mbc             # noqa: E402  (path set abo
 import coolants                                       # noqa: E402  (V2 fluid library)
 import targets                                        # noqa: E402  (V2 targets->gate)
 import projects                                       # noqa: E402  (V2.2 project store)
+import manufacturing                                  # noqa: E402  (V3.3 DfAM rulebooks)
 
 from cold_plate_v6.architecture import FlowArchitecture as V6Arch   # noqa: E402
 from cold_plate_v6.geometry import Geometry                          # noqa: E402
@@ -188,6 +189,72 @@ def _linspace(lo: float, hi: float, n: int):
 
 
 # ---------------------------------------------------------------------------
+# V3.2 — area readouts. Fin-only (structure) surface area per user decision
+# 2026-07-09: fin faces / pin laterals / TPMS sheet — no channel-floor base.
+# ---------------------------------------------------------------------------
+def _areas(result: dict, stack_d: dict | None) -> dict:
+    s = mbc.StackBasis(**_filtered(stack_d, _STACK_FIELDS))
+    die_mm2 = s.die_area_m2 * 1e6
+    cooled_mm2 = s.cooled_area_m2 * 1e6
+    fin_m2 = result.get("fin_area_m2") or result.get("wetted_area_m2") or 0.0
+    wet_m2 = result.get("wetted_area_m2") or 0.0
+    flow_m2 = result.get("flow_area_m2") or 0.0
+    # Effective derate: fins work at eta_f; uniformity x access is recovered from
+    # the SA/V pair (eff/raw = eta_o x uniformity x access). Surface families
+    # (eta_f undefined) use the eff/raw ratio directly.
+    eta_f = result.get("eta_f")
+    eta_o = result.get("eta_o")
+    raw_sav = result.get("raw_SA_V_m2_m3") or 0.0
+    eff_sav = result.get("effective_SA_V_m2_m3") or 0.0
+    ratio = (eff_sav / raw_sav) if raw_sav > 0 else 1.0
+    if eta_f is not None and eta_o:
+        derate = eta_f * (ratio / eta_o)
+    else:
+        derate = ratio
+    fin_mm2 = fin_m2 * 1e6
+    fin_eff_mm2 = fin_mm2 * derate
+    return {
+        "die_mm2": die_mm2,
+        "cooled_mm2": cooled_mm2,
+        "fin_mm2": fin_mm2,
+        "fin_eff_mm2": fin_eff_mm2,
+        "flow_mm2": flow_m2 * 1e6,
+        "wetted_mm2": wet_m2 * 1e6,
+        "amplification": (fin_mm2 / die_mm2) if die_mm2 > 0 else None,
+        "amplification_eff": (fin_eff_mm2 / die_mm2) if die_mm2 > 0 else None,
+    }
+
+
+def _augment(out: dict, case_d: dict, stack_d: dict | None) -> dict:
+    """V3 additive blocks on every evaluated result: areas + manufacturability."""
+    out["areas"] = _sanitize(_areas(out, stack_d))
+    stack_for_mfg = {**asdict(mbc.StackBasis()), **(stack_d or {})}
+    out["manufacturability"] = _sanitize(manufacturing.check_case(case_d, stack_for_mfg))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# V3.3 — the Incus-compliant LMM presets (review §4–§6). M1 is the project's
+# primary manufacturing target (team decision 2026-07-09), M2 the backup,
+# M3 the easy-clean fallback. Appended to every catalog, rescored per project.
+# ---------------------------------------------------------------------------
+M_PRESET_CASES = [
+    {"design_id": "v6_lmm_M1_primary", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 0.12, "channel_gap_mm": 0.15, "fin_height_mm": 5.5,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
+     "notes": "M1 — primary target: at the Incus cleanability floor; coupon to confirm."},
+    {"design_id": "v6_lmm_M2_backup", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 0.15, "channel_gap_mm": 0.20, "fin_height_mm": 5.5,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
+     "notes": "M2 — backup: green 7 px inside the Incus 6–8 px band."},
+    {"design_id": "v6_lmm_M3_easyclean", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 0.15, "channel_gap_mm": 0.25, "fin_height_mm": 5.0,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
+     "notes": "M3 — easy-clean: matches the proven 0.25 mm build."},
+]
+
+
+# ---------------------------------------------------------------------------
 # Business logic (pure functions — tested directly by test_api_parity.py)
 # ---------------------------------------------------------------------------
 def _build_catalog(stack_d: dict, arch_d: dict, op_d: dict, *,
@@ -208,7 +275,18 @@ def _build_catalog(stack_d: dict, arch_d: dict, op_d: dict, *,
     candidates = []
     for c in cases:
         case = mbc.GeometryCase(**_filtered(c, _CASE_FIELDS))
-        candidates.append(_sanitize(asdict(mbc.evaluate_case(case, stack, op, arch))))
+        out = _sanitize(asdict(mbc.evaluate_case(case, stack, op, arch)))
+        candidates.append(_augment(out, c, stack_d))
+
+    # V3.3 — Incus-compliant LMM presets ride along as first-class candidates.
+    m_cases = []
+    for c in M_PRESET_CASES:
+        case = mbc.GeometryCase(**_filtered(c, _CASE_FIELDS))
+        out = _sanitize(asdict(mbc.evaluate_case(case, stack, op, arch)))
+        out["preset"] = True
+        candidates.append(_augment(out, c, stack_d))
+        m_cases.append(c)
+    cases = cases + m_cases
 
     gates = {
         "limit_R_jc_K_W": op.limit_R_jc_K_W,
@@ -311,6 +389,7 @@ def project_catalog_payload(payload: dict) -> dict:
                 op_over["flow_lpm"] = float(ds["flow_lpm"])
             op2 = mbc.OperatingPoint(**_filtered(op_over, _OP_FIELDS))
             res = _sanitize(asdict(mbc.evaluate_case(case, stack, op2, arch)))
+            _augment(res, _case_from_design(ds, did), r["stack"])
             res["saved"] = True
             res["name"] = name
             cat["candidates"].append(res)
@@ -389,6 +468,7 @@ def schema_payload() -> dict:
         "targets": targets.target_schema(),
         "families": _FAMILY_PEDIGREE,
         "layouts": _LAYOUTS,
+        "manufacturing": manufacturing.schema(),   # V3.3 — DfAM rulebooks
     }
 
 
@@ -465,6 +545,7 @@ def evaluate_payload(payload: dict) -> dict:
 
     result = mbc.evaluate_case(case, stack, op, arch, relative_roughness=rr)
     out = _sanitize(asdict(result))
+    _augment(out, case_in, payload.get("stack"))   # V3: areas + manufacturability
 
     # --- V2: attach coolant + exact junction temperature (when requested) ----
     if coolant_info is not None:
@@ -620,6 +701,12 @@ def sweep_payload(payload: dict) -> dict:
     base_op = dict(base.get("operating") or {})
     stack_d = base.get("stack")
     Q = float(base_op.get("heat_load_W", 450.0))
+    # V3.3 — manufacturability enforcement over the sweep (spec §35F): every
+    # point is annotated with its DfAM verdict; `enforce` restricts which
+    # verdicts the ★ optimum may come from ("enforce" -> PASS only,
+    # "marginal" -> PASS+MARGINAL, "explore"/absent -> unrestricted).
+    mfg_enforce = str((payload.get("manufacturability") or {}).get("enforce", "")) or None
+    _MFG_ALLOWED = {"enforce": {"PASS"}, "marginal": {"PASS", "MARGINAL"}}
     # V2 problem context: coolant + targets (T_j gate, ΔP/pump budgets) ride
     # along on every grid point so `feasible` means "fits THIS problem" and the
     # optimum is the constrained optimum, not the unconstrained corner.
@@ -655,7 +742,7 @@ def sweep_payload(payload: dict) -> dict:
                     "x": xv, "y": yv, "objective": None,
                     "R_jc_K_W": None, "R_th_conv_K_W": None, "DeltaP_Pa": None,
                     "pump_power_W": None, "mass_g": None, "cop": None,
-                    "kpi_status": "INVALID", "feasible": False,
+                    "kpi_status": "INVALID", "feasible": False, "mfg": None,
                 })
                 continue
             status = r.get("kpi_status") or ""
@@ -695,6 +782,7 @@ def sweep_payload(payload: dict) -> dict:
                 **metrics,
                 "kpi_status": status,
                 "feasible": "FAIL" not in status,
+                "mfg": (r.get("manufacturability") or {}).get("verdict"),
             })
 
     # Pareto front (minimise R_jc and pump_power) over finite points.
@@ -712,13 +800,20 @@ def sweep_payload(payload: dict) -> dict:
     pareto.sort(key=lambda g: g["R_jc_K_W"])
 
     # Optimum = best objective among feasible (fall back to best overall).
+    # V3.3: with manufacturability enforcement, ★ comes from the rule-compliant
+    # pool and ☆ (optimum_unconstrained, gates-only) shows the price of
+    # manufacturability.
     maximise = _OBJECTIVE_DIR[objective] == "max"
     scored = [g for g in grid if g.get("objective") is not None]
     feasible = [g for g in scored if g["feasible"]]
-    pool = feasible or scored
-    optimum = None
-    if pool:
-        optimum = (max if maximise else min)(pool, key=lambda g: g["objective"])
+    best_of = lambda pool: (max if maximise else min)(pool, key=lambda g: g["objective"]) if pool else None  # noqa: E731
+    optimum_unconstrained = best_of(feasible or scored)
+    allowed = _MFG_ALLOWED.get(mfg_enforce or "")
+    if allowed is not None:
+        mfg_pool = [g for g in feasible if g.get("mfg") in allowed]
+        optimum = best_of(mfg_pool) or optimum_unconstrained
+    else:
+        optimum = optimum_unconstrained
 
     # R_jc floor = R_base + R_TIM (fixed; convection can't beat it). Constant
     # across the sweep, so read it off any finite point as R_jc - R_conv.
@@ -736,6 +831,8 @@ def sweep_payload(payload: dict) -> dict:
         "grid": grid,
         "pareto": pareto,
         "optimum": optimum,
+        "optimum_unconstrained": optimum_unconstrained,
+        "mfg_enforce": mfg_enforce,
         "r_jc_floor_K_W": floor,
         "r_jc_gate_K_W": (gates_out or {}).get("limit_R_jc_K_W",
                                                base_op.get("limit_R_jc_K_W")),

@@ -29,6 +29,38 @@ export interface TargetsInfo {
   warnings: string[]
 }
 
+// V3.2 — absolute area readouts (fin/structure-only; no channel-floor base).
+// All areas in mm² (user request 2026-07-09).
+export interface AreasInfo {
+  die_mm2: number
+  cooled_mm2: number
+  fin_mm2: number
+  fin_eff_mm2: number
+  flow_mm2: number
+  wetted_mm2: number
+  amplification: number | null
+  amplification_eff: number | null
+}
+
+// V3.3 — manufacturability verdict from the per-route DfAM rulebook.
+export interface MfgCheck {
+  rule: string
+  label: string
+  value: number | null
+  abs: number | null
+  rec: number | null
+  status: 'PASS' | 'MARGINAL' | 'FAIL' | 'INFO'
+  message: string
+}
+export interface MfgInfo {
+  route: string
+  label: string
+  grade: string
+  source: string
+  verdict: 'PASS' | 'MARGINAL' | 'FAIL'
+  checks: MfgCheck[]
+}
+
 // Mirrors the master engine BaselineResult (asdict) returned by the API.
 export interface BaselineResult {
   design_id: string
@@ -51,6 +83,7 @@ export interface BaselineResult {
   effective_SA_V_m2_m3: number
   wetted_area_m2: number
   flow_area_m2: number
+  fin_area_m2?: number | null
   UA_W_K: number
   eta_f: number | null
   eta_o: number | null
@@ -75,6 +108,11 @@ export interface BaselineResult {
     nominal_k: number
     R_jc_nominal_K_W: number
   }
+  // V3 — always attached by the API (areas + manufacturability verdict).
+  areas?: AreasInfo
+  manufacturability?: MfgInfo
+  // V3.3 — set on the built-in Incus M-presets.
+  preset?: boolean
 }
 
 // V2.1 — /api/schema (wizard metadata). Only the parts the viewer uses today.
@@ -97,6 +135,12 @@ export interface AppSchema {
   targets: Record<string, TargetField>
   families: { family: string; label: string; model: string; status: string; viewable: boolean }[]
   layouts: { layout: string; label: string; status: string; resolves: string }[]
+  // V3.3 — DfAM rulebooks + LMM process constants + enforcement modes.
+  manufacturing?: {
+    routes: Record<string, unknown>[]
+    lmm_process: Record<string, number>
+    enforcement_modes: { key: string; label: string; hint: string }[]
+  }
 }
 
 export interface Gates {
@@ -201,6 +245,8 @@ export interface Project {
   families?: string[]
   designs?: SavedDesign[]
   physical_footprint?: { width_mm: number; length_mm: number }
+  // V3.3 §35F — how hard the manufacturing rulebook binds this project.
+  manufacturing?: { enforcement?: 'enforce' | 'marginal' | 'explore' }
   created?: string | null
   modified?: string | null
 }
@@ -232,6 +278,8 @@ export interface SweepPoint {
   cop: number | null
   kpi_status: string
   feasible: boolean
+  // V3.3 — per-point manufacturability verdict (PASS/MARGINAL/FAIL, null = invalid)
+  mfg?: 'PASS' | 'MARGINAL' | 'FAIL' | null
 }
 
 export interface SweepResult {
@@ -242,6 +290,10 @@ export interface SweepResult {
   grid: SweepPoint[]
   pareto: SweepPoint[]
   optimum: SweepPoint | null
+  // V3.3 — gates-only best point (the ghost ☆); the gap to `optimum` is the
+  // price of manufacturability. Equal to `optimum` when no enforcement sent.
+  optimum_unconstrained?: SweepPoint | null
+  mfg_enforce?: string | null
   r_jc_floor_K_W: number | null
   r_jc_gate_K_W: number | null
   // V2 tier-2 — the budgets every grid point was judged against (from the

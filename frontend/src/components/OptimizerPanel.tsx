@@ -2,17 +2,19 @@ import { useEffect, useState } from 'react'
 import { sweep } from '../api'
 import { fmt } from '../format'
 import type { ProblemOpts } from '../design'
+import type { Enforcement } from '../manufacturing'
 import { OBJECTIVES, buildSweepRequest, objectiveOf, sweepVarsFor, varLabel, varUnit } from '../optimizer'
 import type { Basis, BaselineResult, DesignState, SavedDesign, SweepPoint, SweepResult } from '../types'
 import { Heatmap } from './Heatmap'
 import { Pareto } from './Pareto'
 
 export function OptimizerPanel({
-  design, basis, opts, candidates, current, onLoadOptimum, onAddCandidates,
+  design, basis, opts, mode, candidates, current, onLoadOptimum, onAddCandidates,
 }: {
   design: DesignState | null
   basis: Basis
   opts: ProblemOpts
+  mode: Enforcement
   candidates: BaselineResult[]
   current: BaselineResult | null
   onLoadOptimum: (p: Partial<DesignState>) => void
@@ -36,19 +38,19 @@ export function OptimizerPanel({
     if (!design) return
     setLoading(true)
     setErr(null)
-    sweep(buildSweepRequest(design, basis, xEff, yEff, objective, opts))
+    sweep(buildSweepRequest(design, basis, xEff, yEff, objective, opts, 24, mode))
       .then(setResult)
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setLoading(false))
   }
 
   // Re-sweep on open, variable/objective change, when the design (family)
-  // changes, or when the problem (coolant / targets / budgets) changes.
+  // changes, or when the problem (coolant / targets / budgets / mode) changes.
   useEffect(() => {
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [xEff, yEff, objective, design?.design_id, design?.family, design?.tpms_type,
-    JSON.stringify(opts)])
+    design?.process_route, mode, JSON.stringify(opts)])
 
   if (!design) {
     return <div className="muted" style={{ padding: 14 }}>The optimizer works on viewable designs (fin, gyroid, pin) — select one.</div>
@@ -132,6 +134,19 @@ export function OptimizerPanel({
           constrained by the project&apos;s budgets: R_jc ≤ {fmt((result.gates.limit_R_jc_K_W ?? 0) * 1000, 1)} mK/W
           {' '}· ΔP ≤ {fmt((result.gates.limit_deltaP_Pa ?? 0) / 1000, 0)} kPa
           {' '}· pump ≤ {fmt(result.gates.limit_pump_W ?? 0, 1)} W — ★ = best point that fits all three
+          {result.mfg_enforce && <> <b>and</b> the {result.mfg_enforce === 'enforce' ? 'recommended' : 'absolute'} manufacturing bounds</>}
+        </div>
+      )}
+      {/* V3.3 §35F — the price of manufacturability: ★ (compliant) vs ☆ (gates-only) */}
+      {result?.optimum && result.optimum_unconstrained
+        && (result.optimum.x !== result.optimum_unconstrained.x || result.optimum.y !== result.optimum_unconstrained.y)
+        && result.optimum.R_jc_K_W != null && result.optimum_unconstrained.R_jc_K_W != null && (
+        <div className="opt-note opt-mfgprice">
+          ☆ unconstrained best would be R_jc {fmt(result.optimum_unconstrained.R_jc_K_W * 1000, 2)} mK/W
+          {' '}({varLabel(result.x_var)} {fmt(result.optimum_unconstrained.x, 3)} · {varLabel(result.y_var)} {fmt(result.optimum_unconstrained.y, 3)}, mfg {result.optimum_unconstrained.mfg ?? '—'})
+          {' '}→ manufacturability costs <b>
+          +{fmt((result.optimum.R_jc_K_W - result.optimum_unconstrained.R_jc_K_W) * 1000, 2)} mK/W</b>
+          {' '}(+{fmt((result.optimum.R_jc_K_W - result.optimum_unconstrained.R_jc_K_W) * Number(basis.operating.margin_heat_load_W ?? 575), 1)} K @ margin load)
         </div>
       )}
       {o && !o.feasible && (
@@ -148,7 +163,7 @@ export function OptimizerPanel({
           <div className="opt-chart">
             <div className="opt-cap">
               {objectiveOf(result.objective).label} heatmap · {varLabel(result.x_var)} × {varLabel(result.y_var)}{' '}
-              <span className="muted">green = better · ★ optimum · dim = gate fail</span>
+              <span className="muted">green = better · ★ optimum · ☆ gates-only · dim = gate fail / mfg FAIL / marginal</span>
             </div>
             <Heatmap result={result} />
           </div>

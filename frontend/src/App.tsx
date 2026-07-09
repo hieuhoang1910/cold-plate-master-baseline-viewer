@@ -7,6 +7,7 @@ import { CandidateTable } from './components/CandidateTable'
 import { KpiPanel } from './components/KpiPanel'
 import { ViewerPlaceholder } from './components/ViewerPlaceholder'
 import { SdfViewer } from './components/SdfViewer'
+import { PixelPreview } from './components/PixelPreview'
 import { DesignControls } from './components/DesignControls'
 import { ProblemControls } from './components/ProblemControls'
 import { DesignStudio } from './components/DesignStudio'
@@ -16,7 +17,11 @@ import { Report } from './components/Report'
 import { Splitter } from './components/Splitter'
 import { usePanels } from './panels'
 import { geomFromCase } from './viewerGeom'
+import { normalizeRoute, type Enforcement } from './manufacturing'
 
+// V3.3: M1 is the primary manufacturing target (team decision 2026-07-09);
+// the 0.10 hero stays in the list as a reference row.
+const DEFAULT_ID = 'v6_lmm_M1_primary'
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
 const DEFAULT_PROJECT_ID = 'gb202-gpu'
 
@@ -24,7 +29,9 @@ export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [schema, setSchema] = useState<AppSchema | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string>(HERO_ID)
+  const [selectedId, setSelectedId] = useState<string>(DEFAULT_ID)
+  // V3.3d — centre view: raymarched 3-D or the DLP layer-mask preview (LMM)
+  const [viewMode, setViewMode] = useState<'3d' | 'pixel'>('3d')
 
   // V2.2 — the active project scopes the whole app (basis, gates, coolant).
   const [activeProject, setActiveProject] = useState<Project | null>(null)
@@ -61,7 +68,8 @@ export default function App() {
           setSelectedId((prev) =>
             cat.candidates.some((c) => c.design_id === prev)
               ? prev
-              : (cat.candidates.find((c) => c.design_id === HERO_ID)?.design_id
+              : (cat.candidates.find((c) => c.design_id === DEFAULT_ID)?.design_id
+                 ?? cat.candidates.find((c) => c.design_id === HERO_ID)?.design_id
                  ?? cat.candidates[0]?.design_id ?? ''))
         })
         .catch((e) => setError(String(e.message ?? e)))
@@ -189,6 +197,9 @@ export default function App() {
 
   const coolant = activeProject?.problem?.coolant ?? 'water'
   const tjMaxC = activeProject?.targets?.T_j_max_C ?? 100
+  // V3.3 §35F — enforcement mode lives on the project; default = allow-marginal
+  // (M1 sits on the Incus floor while the cleanability coupon is pending).
+  const mfgMode: Enforcement = activeProject?.manufacturing?.enforcement ?? 'marginal'
 
   // KPI panel + viewer follow the live design when editing.
   const kpiResult = design ? (live ?? selected) : selected
@@ -281,6 +292,7 @@ export default function App() {
 
               {design
                 ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
+                    mode={mfgMode} mfg={live?.manufacturability ?? null}
                     onPatch={patchDesign} onReset={resetDesign} />
                 : <div className="card muted" style={{ fontSize: 14 }}>
                     Live tuning covers wavy / straight fin and gyroid designs.
@@ -296,10 +308,24 @@ export default function App() {
 
             <Splitter dir="col" onResize={panels.resizeLeft} onReset={panels.resetLeft} />
 
-            {/* CENTER: implicit-body viewer (fins) or placeholder (gyroid/pin) */}
+            {/* CENTER: implicit-body viewer (fins) or the DLP pixel preview (V3.3d) */}
             <div className="center col">
+              {geom && design && (
+                <div className="view-tabs">
+                  <button className={viewMode === '3d' ? 'sel' : ''} onClick={() => setViewMode('3d')}>3-D</button>
+                  <button className={viewMode === 'pixel' ? 'sel' : ''} onClick={() => setViewMode('pixel')}
+                    disabled={normalizeRoute(design.process_route) !== 'LMM'}
+                    title={normalizeRoute(design.process_route) === 'LMM'
+                      ? 'DLP layer preview — the design rasterized on the EVO35 pixel grid'
+                      : 'pixel preview applies to the LMM (DLP) route only'}>
+                    ▦ Pixel (LMM)
+                  </button>
+                </div>
+              )}
               {geom && design
-                ? <SdfViewer g={geom} designId={design.design_id} family={design.family} />
+                ? (viewMode === 'pixel' && normalizeRoute(design.process_route) === 'LMM'
+                    ? <PixelPreview design={design} basis={catalog.basis} />
+                    : <SdfViewer g={geom} designId={design.design_id} family={design.family} />)
                 : <ViewerPlaceholder r={selected} />}
             </div>
 
@@ -323,7 +349,7 @@ export default function App() {
             </div>
             {bottomTab === 'compare'
               ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
-              : <OptimizerPanel design={design} basis={catalog.basis} opts={liveOpts}
+              : <OptimizerPanel design={design} basis={catalog.basis} opts={liveOpts} mode={mfgMode}
                   candidates={catalog.candidates}
                   current={kpiResult} onLoadOptimum={patchDesign} onAddCandidates={addCandidates} />}
           </div>

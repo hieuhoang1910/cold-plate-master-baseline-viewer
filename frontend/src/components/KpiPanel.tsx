@@ -1,7 +1,43 @@
-import { fmt, isScreening, kPa, milliKW, pct } from '../format'
-import type { BaselineResult, Gates, TargetsInfo } from '../types'
+import { fmt, fmtInt, isScreening, kPa, milliKW, pct } from '../format'
+import type { BaselineResult, Gates, MfgInfo, TargetsInfo } from '../types'
 import { LimitBar } from './LimitBar'
 import { ResistanceStackup } from './ResistanceStackup'
+
+const MFG_COLOR: Record<string, string> = {
+  PASS: 'var(--accent2)', MARGINAL: 'var(--warn, #d9a441)', FAIL: 'var(--fail)', INFO: '#93a0b5',
+}
+
+// V3.3 — the manufacturability card: verdict + every non-passing rule with its
+// bound and source, so no verdict is a magic judgement.
+function MfgCard({ m }: { m: MfgInfo }) {
+  const shown = m.checks.filter((c) => c.status !== 'PASS')
+  return (
+    <div className="card">
+      <h2>
+        Manufacturability
+        <span className="mfg-chip" style={{ color: MFG_COLOR[m.verdict], borderColor: MFG_COLOR[m.verdict] }}>
+          {m.verdict}
+        </span>
+      </h2>
+      <div className="mfg-route muted">{m.label} · <em>{m.grade}</em></div>
+      {shown.length === 0
+        ? <div className="mfg-ok">✓ all rules met at the recommended bounds</div>
+        : (
+          <ul className="mfg-list">
+            {shown.map((c, i) => (
+              <li key={i}>
+                <span className="mfg-st" style={{ color: MFG_COLOR[c.status] }}>
+                  {c.status === 'FAIL' ? '✗' : c.status === 'MARGINAL' ? '△' : 'ℹ'}
+                </span>
+                <span><b>{c.label}</b> — {c.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      <div className="mfg-src muted">source: {m.source}</div>
+    </div>
+  )
+}
 
 const SOFT_TARGET_C = 90 // design line drawn under the hard T_j ceiling (spec §25 Q1)
 
@@ -91,6 +127,24 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
 
       <div className="card">
         <h2>Surface & thermal</h2>
+        {r.areas && (
+          <div className="areas-strip" title="Structure-only surface area (fin faces / pin laterals / TPMS sheet — no channel floor). The core is fully flooded, so this is the coolant-washed area. ×N = amplification over the die footprint.">
+            <div className="areas-main">
+              <span className="a-label">A_fin</span>
+              <b>{fmtInt(r.areas.fin_mm2)}</b> <span className="muted">mm²</span>
+              <span className="a-amp">×{fmt(r.areas.amplification, 0)} die</span>
+            </div>
+            <div className="areas-main">
+              <span className="a-label">A_eff</span>
+              <b>{fmtInt(r.areas.fin_eff_mm2)}</b> <span className="muted">mm²</span>
+              <span className="a-amp eff">×{fmt(r.areas.amplification_eff, 1)} die</span>
+            </div>
+            <div className="areas-main">
+              <span className="a-label">A_flow</span>
+              <b>{fmtInt(r.areas.flow_mm2)}</b> <span className="muted">mm²</span>
+            </div>
+          </div>
+        )}
         <div className="metrics">
           <Metric label="SA/V raw" value={`${fmt(r.raw_SA_V_m2_m3, 0)}`} />
           <Metric label="SA/V eff" value={`${fmt(r.effective_SA_V_m2_m3, 0)}`} />
@@ -108,6 +162,8 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
           <span className="badge stage">{r.process_route}</span>
         </div>
       </div>
+
+      {r.manufacturability && <MfgCard m={r.manufacturability} />}
 
       {r.warnings.length > 0 && (
         <div className="warn-box">

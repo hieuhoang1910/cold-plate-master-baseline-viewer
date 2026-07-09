@@ -17,6 +17,12 @@ export function kPa(v: number | null | undefined, digits = 2): string {
   return (v / 1000).toFixed(digits)
 }
 
+/** Integer with thousands separators (for large mm² areas etc.). */
+export function fmtInt(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return DASH
+  return Math.round(v).toLocaleString('en-US')
+}
+
 /** 0..1 -> percent string. */
 export function pct(v: number | null | undefined, digits = 0): string {
   if (v == null || Number.isNaN(v)) return DASH

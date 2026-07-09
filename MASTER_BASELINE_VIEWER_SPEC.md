@@ -22,10 +22,11 @@ tags:
 
 Project: [[Hieu's Coldplate R&D]] | Folder map: `PROJECT_FOLDER_STRUCTURE.md` | Roadmap: [[Cold Plate Milestones]]
 
-> **Status: V1 SHIPPED · V2 ACCEPTED (2026-07-02).** §1–§17 describe V1, now built and
-> running (viewer, live tuning, optimizer, STL export, LAN serving). §18–§25 are the
-> **official V2 plan** — accepted 2026-07-02 with all open questions resolved (§25);
-> implementation follows the V2 roadmap (§24). Change control: edits to accepted sections
+> **Status: V1 SHIPPED · V2 SHIPPED (through V2.6 + §30 addenda) · V3 SHIPPED (2026-07-09).**
+> §1–§17 describe V1; §18–§31 are V2 (accepted 2026-07-02, built through §30–31).
+> §32–§37 are V3 — About rewrite, area readouts, LMM/SLM manufacturing
+> constraints — accepted and **built 2026-07-09** (all §36 phases; see the V3
+> changelog at the end of §37). Change control: edits to accepted sections
 > should note the date and rationale.
 
 ---
@@ -740,3 +741,443 @@ Summary of what it pins down:
   print CAD) vs route B (custom implicit, exact parity, needed for the five
   exotic types); verification targets rho*, void, SA/V from the A0/a^2
   coefficients (gyroid c=2.5/w=0.12: rho*=0.148, SA/V=2473 m2/m3).
+
+---
+
+## V3 — "Explainability, Areas & Manufacturability" (ACCEPTED 2026-07-09)
+
+> **Status: ACCEPTED 2026-07-09 — all §37 questions resolved; implementation
+> per the §36 roadmap.**
+> Three asks (2026-07-09): (1) rewrite the About tab so every explanation is
+> understandable by a non-specialist, (2) add area readouts for every design,
+> (3) add real manufacturing constraints for **SLM** (researched) and **LMM**
+> (from the Incus email, Paul Peritsch 2026-07-07). Decisions: fin-only areas;
+> M1 primary / M2 backup; both SLM routes (OEM = Nikon SLM Solutions);
+> enforcement modes (§35F); DLP pixel-preview tab (§35D-7).
+
+## 32. V3 scope & principles
+
+| # | Feature | Touches | Physics change? |
+|---|---|---|---|
+| V3.1 | About tab rewrite — plain-language explanations | `About.tsx` only | none |
+| V3.2 | Area readouts per design | engine (additive fields) + KPI panel + candidate table + report | none (exposes already-computed values) |
+| V3.3 | Manufacturing constraints layer — LMM + SLM rulebooks | new `engine/manufacturing.py` + routes + sliders + KPI card + heatmap + optimizer | none to thermal/hydraulic solvers; adds a parallel manufacturability check |
+
+Principles carried over: physics stays server-side and untouched (D8); all API
+additions are **additive fields** so the 5 golden fixtures still pass
+bit-for-bit; manufacturability stays an *annotation/verdict*, never a silent
+mutation of the design (LMM-intent philosophy, §6B) — but V3 upgrades it from
+one number (a floor) to a **two-tier rulebook** (absolute vs recommended).
+
+## 33. V3.1 — About tab rewrite (plain language)
+
+**Problem:** the current About is written engineer-to-engineer. Each section
+leads with an equation; the "why should I care" is buried or implicit.
+
+**Fix — every section gets the same 3-layer structure, top to bottom:**
+
+1. **Plain words** (new, styled callout box first): 1–2 sentences, zero
+   symbols, one everyday analogy.
+2. **The math** (kept as-is — equations are not dumbed down or removed).
+3. **What to do with it** (new closing line): the design decision this
+   knowledge drives.
+
+**Planned per-section "plain words" content** (draft copy, to be tuned):
+
+| Section | Plain-words summary (draft) | Analogy |
+|---|---|---|
+| What this is | "A flight simulator for the cold plate: change the fins, instantly see how hot the chip runs — using the same trusted math as our formal reports." | flight simulator |
+| The design problem | "A 450 W chip must stay cool with 25 °C water. We design the copper part between chip and water." | — |
+| R_jc | "Heat must pass three doors in a row: the paste (TIM), the copper floor (base), and into the water (fins). We can only redesign the third door — and it's only ~30 % of the total resistance." | three doors in series |
+| ΔT = Q·R_th | "Resistance × heat = how much hotter the chip gets. Same as Ohm's law: volts = amps × ohms. Lower resistance = cooler chip. Full stop." | electrical circuit |
+| Geometry & fin field | "Thinner fins and gaps = more fins packed in = more contact with water. But the printer has a minimum feature size, and narrow gaps fight the pump." | comb teeth |
+| Fin efficiency | "A tall thin fin is like a long corridor from a heated room: the far end barely gets warm. Past a point, extra fin height adds area that does almost nothing." | long corridor |
+| Wavy fins | "Wiggly fins stir the water like a bent straw stirs a drink — the water can't settle into a lazy warm layer next to the wall. Best single lever we have." | stirring straw |
+| Hydraulics | "Everything you win thermally is paid for in pressure: the pump must push water through those narrow gaps. ΔP is the bill." | the bill |
+| Optimization doctrine | "Make the chip as cool as possible **without exceeding the pump's budget**. Thermal is the goal; pressure is the budget; manufacturability is the law." | budget + law |
+| Two engines | "A quick estimator that compares all shapes fairly, and a deep validated model for the wavy-fin hero. Numbers are honest screening, not lab-measured truth." | — |
+| KPI panel guide | keep tables, wrap in collapsible `<details>` so the page isn't a wall | — |
+| Nomenclature / equations / refs | keep, collapsible | — |
+
+**Also new in About:**
+- **"This app in 60 seconds"** intro card at the very top: what the 3 columns
+  are, what to drag, what number to watch (R_jc), what PASS/FAIL means.
+- **"What happens if I…" slider cheat-sheet** (new small table): one row per
+  headline slider (t, b, H, A, λ, flow) → effect on R_jc, on ΔP, and its limit
+  (e.g. "b ↓ → R_jc ↓ but ΔP ↑↑ — floor set by the printer/cleaning").
+- **"The readout strip under the sliders"** (new section, user request
+  2026-07-09): a dedicated explainer for the derived numbers
+  `pitch · fins · open % · χ`, same 4-column format as the KPI tables
+  (what it is / formula / why it matters / what moves it). Draft copy:
+
+  | Readout | What it is | Why it matters / what moves it |
+  |---|---|---|
+  | **pitch** = t + b | Center-to-center spacing of adjacent fins — one copper wall plus one water gap; the design's smallest repeating unit. | Sets how many fins fit: smaller pitch → more fins → more area, but both t and b move toward the printer's floor together. For LMM the *green* pitch must land on a whole number of 35 µm pixels (M2: 12 px = 0.420 mm) — pitch is what the pixel grid actually quantizes. Overpolymerization moves material from channel to fin but **preserves pitch**, which is why the compensation is written around it. |
+  | **fins** (count) | How many fins fit across the transverse span: ⌊(W_trans − 2·margin) / pitch⌋. | Every fin adds two water-facing faces, so wetted area — and with it R_conv — scales almost directly with this number (hero: 166 fins ≈ 715 cm²). It is an *integer*: while dragging t or b the count jumps in steps, which is why the KPIs visibly "tick" instead of gliding — each tick is one whole fin (≈ 2·H·L_arc of area) appearing or vanishing. |
+  | **open %** (open fraction) | Share of the fin-field cross-section that is water instead of copper: n_ch·b / (n_fin·t + n_ch·b). 50 % = equal metal and water. | A manufacturability + reliability number, not a performance target. Too low → channels can't be cleaned/depowdered, clog-prone, and the part is heavy; too high → few fins, little area. Gate band ≈ 0.35–0.75. Note t = b always gives ≈ 50 % regardless of how small both are — which is why the hero and M1/M2 all hover near 50 %. |
+  | **χ** = 2π·A/λ | Wave-sharpness: the slope of the fin path at its steepest turn. Neither A (how far the wiggle swings) nor λ (how often it repeats) alone says how sharp the wiggle is — their ratio does. Mountain-road analogy: A = how far the switchbacks swing out, λ = distance between them, χ = how sharp the hairpins feel. As an angle: χ = 0 → straight; 0.5 → 27°; 1.0 → 45°; hero 1.38 → ≈ 54° (moving more sideways than forward at the steepest point). The 2π is just the calculus of a sine's slope. | The single strongest thermal lever, and it works twice. (1) A wiggly line is longer than a straight one — by ×√(1 + χ²/2); at χ = 1.38 that is ×1.40 = **40 % more fin surface in the same footprint**, free. (2) At Re ≈ 50 water flows like honey in smooth sheets, and a warm "blanket" layer sits stuck to the fin wall insulating it; each bend slings the water into corkscrew swirls (Dean vortices) that peel the blanket off and press fresh cool water on the metal — sharper turns, stronger swirls (the Nu ×= 1 + 0.40·χ^1.5 term). Price: the water travels the same 40 %-longer path → ΔP up; too sharp can also pinch the channel locally below the printable gap (`lmm.pinch`). Keep A/λ in the 0.05–0.30 band. |
+
+
+>[!note] 
+>
+>Let me explain it from zero, because χ is genuinely the least obvious number on that strip.
+>**What χ literally is: the steepness of the sharpest turn.**
+>
+>Each fin is a sine wave: it swings sideways by ±A (amplitude) and repeats every λ (wavelength). Now imagine walking along that fin. Twice per wave — where the sine crosses the centerline — you are cutting sideways at your steepest angle. χ is the slope at that steepest moment. The 2π is just what calculus gives when you take the slope of a sine wave; there's no deeper meaning to it.
+>
+You can convert χ to an angle you can picture:
+>
+>- χ = 0 → straight fin, you always walk straight ahead
+>- χ = 0.5 → steepest moment ≈ 27° off the flow direction — a gentle weave
+>- χ = 1.0 → 45° — at the steepest point you're going as much sideways as forward
+>- **χ = 1.38 (the hero) → ≈ 54°** — at the steepest point you're moving _more sideways than forward_
+>
+**Why one number instead of A and λ separately?** Because neither alone tells you how sharp the wiggle is. A huge swing (big A) stretched over a very long wave (big λ) is a lazy drift — nearly straight. A tiny swing repeated every half millimeter is a violent zigzag. What matters is the _ratio_ — swing per unit length — and that's χ. Think of a mountain road: A is how far the switchbacks swing out, λ is the distance between them, χ is how sharp the hairpins feel.
+>
+**Why it helps, twice:**
+>
+>1. **More fin in the same box.** A wiggly line between two points is simply longer than a straight one — by the factor √(1 + χ²/2). At χ = 1.38 that's ×1.40: the same 28 mm footprint holds **40% more fin surface**, without changing t, b, or H.
+>2. **It stirs water that refuses to stir itself.** At Re ≈ 50 the flow is deeply laminar — water slides in smooth parallel sheets like honey, and a warm "blanket" layer sits stuck against the fin wall, insulating it. Every bend slings the water sideways into corkscrew swirls (Dean vortices) that peel that warm blanket off and press fresh cool water against the metal. Sharper turns (higher χ) = stronger swirls. That's the `Nu ×= 1 + 0.40·χ^1.5·…` term.
+>
+**The price:** the water must travel that same 40%-longer path through narrow gaps and around bends, so ΔP goes up — and if adjacent fins ever fall out of phase, a sharp wave can locally pinch the channel below the printable gap (that's exactly the `lmm.pinch` rule Incus warned about).
+>
+So on the strip, read **χ 1.38** as: _"strongly waved — 54° hairpins, 40% bonus area, strong stirring."_
+
+- **Manufacturing constraints section** (new; content = §35 rulebooks with
+  sources, including the Incus email citation and SLM references).
+- Area terms (§34) added to the nomenclature table.
+
+Acceptance: review-read by a non-thermal colleague; no numeric content changes.
+
+## 34. V3.2 — Area readouts per design
+
+**Terminology (settled 2026-07-09, user decision):** the model's wetted area
+assumes a fully flooded core: `A_wet = A_fin (both fin side faces) + A_base
+(channel floor)` (`master_baseline_calculator.py` `_evaluate_fin_family`).
+**Decision: the displayed area is the STRUCTURE surface only — fins, no
+channel-floor base.** Per family: fin families → `A_fin` (both side faces;
+tip faces excluded per the adiabatic-tip fin model); pin fins → pin lateral
+area `N·π·d·H` (endwall floor excluded); TPMS → the lattice sheet surface
+(which is the whole structure — no floor to exclude). For the thin-fin hero
+the floor is ~1 % of A_wet anyway, so the fin-only number is also the honest
+one. The full model `A_wet` (incl. floor) stays available in the Report for
+traceability with the SA/V figures.
+
+| Readout | Definition | Unit | Source |
+|---|---|---|---|
+| `A_die` | die footprint (24 × 31) | cm² | stack (constant 7.44 cm²) |
+| `A_cooled` | cooled core footprint W × L | cm² | `stack.cooled_area_m2` (drives coverage) |
+| `A_fin` | raw fin (structure-only) surface area — no channel floor | cm² | engine internal `A_fin` / `A_pins` / TPMS sheet area — expose |
+| `A_fin,eff` | honest working fin area = A_fin · η_f · uniformity · access | cm² | derived (η_f directly, since floor is excluded) |
+| **Amplification** | A_fin / A_die — "one die area becomes N areas of wet copper" | × | derived |
+| `A_flow` | open flow cross-section (sets velocity) | mm² | `flow_area_m2` (already in result dict) |
+| `A_wet` (report only) | full model wetted area incl. channel floor (basis of SA/V and UA) | cm² | `wetted_area_m2` (already in result dict) |
+
+Hero example (for the About copy): A_fin ≈ 715 cm² from a 7.44 cm² die ≈
+**~96× amplification**, but after the fin-efficiency haircut the *effective*
+area is ~×14 — the same raw-vs-effective story the SA/V pair tells, now in
+absolute, intuitive units.
+
+**Where surfaced:**
+1. **KPI panel Card 3** gains an "Areas" row group: A_fin, A_fin,eff (with
+   amplification ×N badges), A_flow. Footprints stay implicit via coverage.
+2. **Candidate table** gains three compact columns: `A_fin (cm²)`, `eff ×`
+   (effective amplification), and `A_flow (mm²)`.
+3. **Report tab**: full area block per §34 table (incl. A_wet for
+   traceability).
+4. **About**: nomenclature rows + a short "Reading areas" note (structure-only
+   definition, raw vs effective, why amplification is the honest brag number).
+
+**Engine/API:** additive `areas` object on every evaluate/solve result:
+`{die_cm2, cooled_cm2, fin_cm2, fin_eff_cm2, flow_mm2, wetted_cm2,
+amplification, amplification_eff}`. Exposing `A_fin` needs a ~5-line additive
+change per family evaluator (values exist locally). Golden parity untouched
+(new keys only).
+
+## 35. V3.3 — Manufacturing constraints (LMM + SLM)
+
+**Problem:** V1 §6B modelled manufacturability as **one number per route**
+(min wall/gap 0.10 / 0.12 / 0.20 mm). Reality since then: Incus reviewed our
+actual v6 STLs (email 2026-07-07) and rejected the 0.10 mm target — the true
+LMM constraint set is richer (cleanability floor, pixel grid, overpoly,
+shrinkage, aspect ratio, drainage). SLM likewise has published rules well
+beyond a single floor. V3 replaces the single floor with a **per-route DfAM
+rulebook**, checked live.
+
+### 35A. LMM rulebook (Incus Hammer EVO35 — authoritative, from Paul Peritsch email 2026-07-07)
+
+Source: Incus DfAM review, distilled in
+`03_Reports/.../cold_plate_v6_incus_manufacturability_review_20260708.md`.
+All Incus dimensions are **green (as-printed)** unless noted; final part is
+smaller by the sinter shrink. Basis ambiguity (green vs final) is Incus open
+question #1 — the rulebook stores both and checks the conservative one.
+
+| Rule id | Constraint | Absolute | Recommended | Tier |
+|---|---|---|---|---|
+| `lmm.gap_min` | channel gap `b` (final) | ≥ 0.15 mm (Incus stated cleanability limit) | **≥ 0.20 mm** (M2; green 7 px inside their 6–8 px deep-channel band) | hard / soft |
+| `lmm.fin_min` | fin thickness `t` (final) | ≥ 0.105 mm (3 px green, printed successfully) | **≥ 0.14 mm** (4–5 px green band) | hard / soft |
+| `lmm.aspect` | fin aspect ratio H/b | ≤ 40 (legacy) | **≤ ~30** ("taller fins need thicker fins") | soft |
+| `lmm.pixel_snap` | XY dims = n × 35 µm; Z = n × 25 µm (green) | — | snap all of t, b, p, A, λ, H | advisory + helper |
+| `lmm.overpoly` | CAD pre-compensation: fin −2 px, channel +2 px (in CAD, not slicer) | — | applied in export recipe | advisory (export) |
+| `lmm.shrink` | green = final × 1.197 (XY) / × 1.23 (Z) | — | applied in export recipe | advisory (export) |
+| `lmm.pinch` | channel width constant along wavy path — no local pinch below `gap_min` | check min gap along path | — | hard |
+| `lmm.big_part` | part ≫ proven 7.7 × 7.7 mm coupon → cleanability unproven | — | warn when core footprint > ~4× coupon area & b < 0.25 | warning |
+| `lmm.drainage` | drainage holes + gravity drain path required | — | checklist item (not geometric) | checklist |
+
+**Consequence — defaults change (breaking vs V1 §6B):** the LMM route floor
+moves **0.10 → 0.15 mm absolute / 0.20 mm recommended**. The 0.10 mm hero
+preset is kept for provenance but gets a permanent
+**"not printable/cleanable per Incus 2026-07-07"** badge. Three new presets
+are added as candidates (from the manufacturability review, §4–§6).
+**Team decision 2026-07-09: M1 is the primary manufacturing target; M2 is the
+backup** (accept ~1 K more junction rise only if M1's 0.15 mm gap fails the
+cleanability coupon). Note the honest verdict display: M1's gap sits exactly
+on Incus's stated cleanability floor and its green gap ≈ 5 px is below their
+6–8 px deep-channel band, so the manufacturability card will show M1 as
+**MARGINAL** (inside absolute, outside recommended) — that is the rulebook
+working as intended, not a bug. The Incus Option-2 coupon matrix is what
+confirms or kills M1.
+
+| Preset | t / b / H (mm) | N_fin | R_jc (mK/W) | ΔT @575 W | Verdict chip |
+|---|---|---:|---:|---:|---|
+| **`v6 LMM M1 (primary)`** ✅ | 0.12 / 0.15 / 5.5 | 122 | 14.6 | 8.4 K | MARGINAL — at Incus floor, coupon to confirm |
+| `v6 LMM M2 (backup)` | 0.15 / 0.20 / 5.5 | 94 | 16.2 | 9.3 K | PASS — printable + cleanable |
+| `v6 LMM M3 (easy-clean)` | 0.15 / 0.25 / 5.0 | 83 | 17.9 | 10.3 K | PASS — safest |
+
+**Default selected candidate switches from the 0.10 hero to M1** (hero stays
+as a reference row).
+
+**Green→CAD converter (new, LMM route only):** a small readout under the
+sliders showing the current design's full export chain per the M2 recipe —
+final → ×shrink → pixel-snapped green → ∓2 px overpoly → **CAD value** — for
+t, b, p, H, A, λ. This is the nTop handoff artifact and makes the pixel rules
+tangible instead of preachy.
+
+### 35B. SLM rulebook (researched 2026-07-09 — vendor-guide + literature grade)
+
+Two SLM flavours, because their limits differ by ~4×:
+
+**Route `slm_ir` — standard IR-laser LPBF, Cu alloy (CuCrZr class):**
+
+| Rule id | Constraint | Absolute | Recommended | Basis |
+|---|---|---|---|---|
+| `slm.wall_min` | fin/wall thickness | ≥ 0.3 mm (thin-wall studies reach 0.1–0.15 but not robust) | **≥ 0.4 mm**; EOS CuCrZr guidance for reliable walls up to 0.8 | thin-wall LPBF literature; vendor guides |
+| `slm.gap_min` | channel gap / slot | ≥ 0.4–0.5 mm printable | **≥ 0.5 mm** for depowdering deep channels; HX practice suggests D_h 1.5–2.0 mm for *reliable* powder evacuation at our depth | vendor guides; Cu-HX practice |
+| `slm.overhang` | down-facing surfaces ≥ 45° or supported | 45° rule | self-supporting horizontal channels ≤ ~8 mm dia; teardrop/diamond above | LPBF overhang literature |
+| `slm.aspect` | free-standing thin-wall aspect ratio | — | ≤ ~10 (recoater interaction / distortion) | vendor guides |
+| `slm.roughness` | as-built internal Ra ≈ 6–15 µm (worse on downskin) | — | warn when Ra is > ~5 % of gap `b` (couples to the solver's existing roughness correction) | AM-channel roughness studies |
+| `slm.tolerance` | dimensional ± 0.1–0.2 mm | — | warn when t or b < 5× tolerance | vendor guides |
+| `slm.depowder` | unfused **powder** (not liquid feedstock) must be shaken/blown out | — | open both channel ends; no blind pockets | process nature |
+
+**Route `slm_green` — fine green-laser LPBF, pure Cu (TruPrint/AddiReen class):**
+
+| Rule id | Constraint | Absolute | Recommended | Basis |
+|---|---|---|---|---|
+| `slm.wall_min` | wall thickness | ≥ 0.1 mm (demonstrated, research-grade; 0.08 claimed) | **≥ 0.15–0.20 mm** practical | green-laser pure-Cu studies |
+| `slm.gap_min` | channel gap | ≥ 0.2 mm | **≥ 0.3 mm** (depowdering still governs; fine powder 5–25 µm helps) | same + fine-powder machines (25 µm spot / 10 µm layers) |
+| others | overhang / aspect / roughness / tolerance as `slm_ir`, tightened | — | Ra lower (fine powder), tolerance ± 0.05–0.1 | same |
+
+Material note carried to the k_solid band (§15 Q7): green-laser pure Cu
+reaches 99.6–99.8 % density and ~76–100 % IACS — consistent with the existing
+250/340/400 W/m·K band; the route selector will annotate which band edge is
+realistic for the chosen route.
+
+**Honesty tier:** unlike the LMM rulebook (supplier-stated, on our own
+geometry), the SLM numbers are **vendor-guide + literature grade** — good for
+screening and for keeping SLM designs honest, but a supplier DfM review is
+required before committing an SLM print. The UI labels the two rulebooks
+accordingly (`supplier-verified` vs `literature`).
+
+**Target OEM (decision 2026-07-09): Nikon SLM Solutions.** Their machines
+(SLM 280/500, NXG XII 600) are IR-fiber-laser LPBF → `slm_ir` is the rulebook
+that maps to this supplier path and is annotated as such in the UI; `slm_green`
+is kept as the alternate fine-feature pure-Cu path (Trumpf/AddiReen-class
+machines). When Nikon SLM Solutions provides machine-specific design
+guidelines or a DfM review, those numbers replace the literature values in
+`slm_ir` (same upgrade path as the Incus coupon for LMM).
+
+### 35C. Engine & API
+
+- New `engine/manufacturing.py`: `RULES = {route: [Rule, ...]}` (data, not
+  code — each Rule = id, description, tier, bound(s), basis/source string) +
+  `check_manufacturability(design, route) → {verdict, checks[]}` where verdict
+  ∈ PASS / MARGINAL (inside absolute, outside recommended) / FAIL, and each
+  check reports its rule id, measured value, bound, and source.
+- `POST /api/evaluate` result gains additive `manufacturability` object.
+  Pure function of geometry — no thermal coupling; golden parity untouched.
+- `GET /api/schema` serves the rulebooks so the UI never hard-codes them.
+- Process-route enum becomes `{lmm, lmm_supplier_qualified (legacy), slm_ir,
+  slm_green}`; per-route floors used by sliders/optimizer now come from the
+  rulebook (absolute = hard clamp, recommended = soft band).
+
+### 35D. UI
+
+1. **Manufacturability card** (new, KPI panel, under Card 3): overall
+   PASS / MARGINAL / FAIL chip + one line per failed/marginal rule with its
+   source ("gap 0.10 < 0.15 mm — Incus cleanability floor, email 2026-07-07").
+2. **Two-tier slider feasibility:** track shading amber between recommended
+   and absolute bounds, red below absolute (extends the existing red-floor
+   behaviour).
+3. **Heatmap:** feasible-region shading gains the same two tiers (dark =
+   violates absolute, light = violates recommended).
+4. **Optimizer:** absolute bounds constrain the sweep as today; recommended
+   bounds shown as a dashed contour; the ★ optimum reports its
+   manufacturability verdict next to the T_j margin.
+5. **Green→CAD converter** (LMM only, §35A).
+6. **Candidate table**: M1/M2/M3 presets appear as candidates; verdict chip
+   per row.
+7. **DLP pixel-preview viewer tab** (new, LMM route — user request
+   2026-07-09, modelled on DLP-slicer slice views): renders the design's
+   cross-section at a chosen height **rasterized onto the printer's pixel
+   grid**, exactly as the Hammer EVO35 would expose it — a black/white pixel
+   mask like a slicer's layer preview.
+   - **Pipeline per frame:** current design → green scale (×1.197 XY) →
+     sample the same SDF the 3-D viewer uses at each 35 µm pixel centre at
+     height z → binary mask; optional overpoly toggle offsets the SDF by
+     ±1 px before thresholding to preview the as-printed (fin +2 px, channel
+     −2 px) vs CAD-compensated outcome.
+   - **Controls:** Z slider stepping in 25 µm green layers (with layer
+     number readout), zoom/pan, overlay toggles: nominal CAD outline vs
+     rasterized mask, overpoly on/off, and a **violation overlay** painting
+     any channel run narrower than 6 px (and any fin thinner than 3 px) in
+     red — this makes `lmm.pixel_snap` and `lmm.pinch` visible instead of
+     abstract.
+   - **Readouts:** min channel width (px) / min fin width (px) found in the
+     current layer, % of pixels changed by overpoly, current layer count vs
+     total (H green / 25 µm).
+   - Implementation note: a 2-D canvas/WebGL fragment-shader raster of the
+     existing SDF — no new geometry code, no server round-trip; the wavy-fin
+     moiré look of a real slicer preview falls out naturally.
+
+### 35E. What this supersedes
+
+- §6B process-route floor table → replaced by the rulebooks (kept for history).
+- §15 Q6 "LMM 0.10 defensible floor" → **overturned by supplier evidence**
+  (Incus 2026-07-07): 0.10 mm is not printable/cleanable. The solver still
+  *evaluates* below-floor geometry (for study reproduction); it just fails the
+  manufacturability check loudly.
+- §16 "supplier coupon status" open item → answered for LMM by the Incus
+  review; the Option-2 coupon matrix (review §11) remains the empirical
+  upgrade path and is referenced in the About copy.
+
+### 35F. Design-tab integration — the design follows the constraint (added 2026-07-09)
+
+The manufacturing constraint is not just a warning layer: it is part of the
+**problem definition**. The Design tab (Step 1, T2 "design rules" block —
+where the process route already lives) gains an **enforcement mode** stored on
+the project (`{process_route, enforcement_mode}`), and everything downstream
+obeys it:
+
+| Mode | Sliders | Optimizer sweep | Presets offered | Use case |
+|---|---|---|---|---|
+| **Design-to-manufacture** (default) | hard-clamped at the **recommended** bounds | only rule-compliant region is searched; ★ optimum is compliant by construction | compliant only (LMM → M2/M3 band) | normal design work — you cannot draw an unprintable part |
+| **Allow marginal** | clamped at the **absolute** bounds; the amber zone (absolute→recommended) is reachable and shows MARGINAL live | feasible = above absolute; recommended band drawn as dashed contour | + marginal presets (M1 lives here) | current project stance: chasing M1 while the Incus coupon is pending |
+| **Explore / audit** | no clamps — verdict chips annotate only (V1 behaviour) | unconstrained; verdict reported per point | all, incl. the 0.10 hero | reproducing old studies, sensitivity work, honesty checks |
+
+With M1 as the primary target, the **project default is "Allow marginal"** —
+the app lets you sit on the 0.15 mm floor but never lets you forget it's
+marginal.
+
+**Supporting features:**
+
+1. **"Make manufacturable" button** (Explore tab, next to the verdict chip):
+   one click projects the current design onto the nearest rule-compliant
+   point — `b → max(b, bound)`, `t → max(t, bound)`, `H` trimmed if
+   AR > 30, then (LMM) pixel-snap all dims — and shows the before/after KPI
+   delta (e.g. hero 0.10 → compliant: R_jc 12.9 → ~15–16 mK/W, ΔT +~1.5 K)
+   with accept / revert. The cost of compliance is always explicit, never
+   silent.
+2. **Two stars in the optimizer:** ★ constrained optimum (respects the mode)
+   and a ghost ☆ unconstrained optimum — the gap between them is the price
+   of manufacturability, visible on every sweep.
+3. **Wizard preview card** states the active constraint set in words:
+   "LMM (Incus EVO35): gap ≥ 0.15 / rec 0.20 · fin ≥ 0.105 / rec 0.14 ·
+   AR ≤ 30 · pixel 35/25 µm · supplier-verified 2026-07-07".
+4. **Route × family guard:** the wizard warns when a family/route pairing has
+   no verified rule set (e.g. TPMS on LMM inherits the same gap rules with a
+   "coupon was gyroid 7.7 mm — size unproven" caveat).
+
+## 36. V3 roadmap (proposed)
+
+| Phase | Deliverable | Acceptance |
+|---|---|---|
+| V3.1 | About rewrite (plain-words layers, 60-second intro, cheat-sheet, collapsibles) | readable by non-specialist; no numeric changes |
+| V3.2 | `areas` fields (engine additive) + KPI/candidate/report surfacing + About rows | golden parity 5/5; areas match hand-check (hero A_fin ≈ 715 cm², ~×96 / ~×14 eff) |
+| V3.3a | `manufacturing.py` rulebooks + `/api/evaluate.manufacturability` + schema | unit tests per rule; hero → FAIL (lmm.gap_min), M1 → MARGINAL, M2 → PASS; parity 5/5 |
+| V3.3b | UI: manufacturability card, two-tier sliders/heatmap, route selector, M1–M3 presets, **enforcement modes + "make manufacturable" + two-star optimizer (§35F)** | verdicts match engine; presets reproduce review §5 numbers; mode clamps propagate to sliders + sweep; make-manufacturable projects hero → compliant point with KPI delta shown |
+| V3.3c | Green→CAD converter readout | reproduces the M2 recipe table (review §6) exactly |
+| V3.3d | DLP pixel-preview viewer tab (§35D-7) | mask matches SDF at 35 µm/25 µm green grid; hero shows channel-closure in overpoly view; M1/M2 stay open; violation overlay flags < 6 px runs |
+
+## 37. V3 open questions (answer before/at acceptance)
+
+1. ~~Default candidate~~ **ANSWERED 2026-07-09: M1 is the primary target, M2
+   backup** — default selected candidate = M1; hero kept as reference row.
+   Rulebook bounds stay as Incus stated them (absolute 0.15 / recommended
+   0.20), so M1 displays MARGINAL until the coupon test upgrades it.
+2. ~~Green-vs-final basis~~ **ANSWERED 2026-07-09: OK as drafted** — check the
+   conservative interpretation (final dims), show both in the converter.
+3. ~~SLM flavours~~ **ANSWERED 2026-07-09: keep both.** Target OEM = **Nikon
+   SLM Solutions** (IR-laser machines → `slm_ir` is the supplier-mapped
+   rulebook; `slm_green` retained as the fine-feature pure-Cu alternate).
+4. ~~Area columns~~ **ANSWERED 2026-07-09: include `A_flow` too** → columns
+   `A_fin`, `eff ×`, `A_flow`. Also: areas are **fin/structure-only** (no
+   channel-floor base) per the same-day decision in §34.
+5. ~~Pixel-snap helper~~ **ANSWERED 2026-07-09: definitely wanted, plus a
+   dedicated DLP pixel-preview viewer tab** (slicer-style layer mask view) —
+   specced as §35D-7 / roadmap V3.3d. Snap stays advisory readout + the
+   preview makes violations visible; a "snap now" button can be added there
+   later if wanted.
+
+**All §37 questions are now answered — V3 draft is ready for final
+acceptance.**
+
+---
+
+### V3 changelog (accepted + built 2026-07-09)
+
+All §36 phases implemented and verified the same day:
+
+- **Engine:** new `engine/manufacturing.py` — rulebooks LMM / SLM_IR /
+  SLM_GREEN, `check_case()` verdicts, `lmm_recipe()` green→CAD chain,
+  `/api/schema.manufacturing`; `fin_area_m2` exposed by every family
+  evaluator (fin faces / pin laterals / TPMS sheet).
+- **Server:** every result carries additive `areas` + `manufacturability`
+  blocks; M1/M2/M3 ride along as preset candidates (M1 = default selection,
+  hero kept as reference); sweep annotates every point with its mfg verdict
+  and returns `optimum` (★ compliant per enforcement mode) +
+  `optimum_unconstrained` (☆ gates-only).
+- **Frontend:** `manufacturing.ts` mirror (instant slider verdicts,
+  mode-aware floors, make-manufacturable projection, green→CAD);
+  DesignControls (two-tier red/amber/green band strips, verdict chip,
+  ⚒ fix button, AR readout, `GreenCad` converter); KpiPanel (areas strip +
+  Manufacturability card); CandidateTable (A_fin / eff × / A_flow / mfg
+  columns); Report (areas + mfg findings); Optimizer (two stars +
+  price-of-manufacturability note; heatmap mfg-tier dimming); DesignStudio
+  (enforcement-mode selector, §35F); `PixelPreview.tsx` DLP layer-mask tab
+  (§35D-7: 35/25 µm grid, Z layer slider, overpoly + violation overlays,
+  min-run readouts); About fully rewritten per §33 (plain-words layers,
+  60-second intro, readout-strip explainer incl. the χ hairpin framing,
+  manufacturing-constraints section, slider cheat-sheet, collapsibles).
+- **Post-ship UI tweaks (2026-07-09, user requests):** pixel-preview zoom moved
+  from a dropdown to **scroll-wheel zoom toward the cursor** (10 %–1600 %,
+  native non-passive listener) + **drag-to-pan** (wheel no longer scrolls);
+  toolbar shows live zoom % + a fit button. Readability pass: **pixel-grid
+  overlay** above 600 % zoom (one cell = one 35 µm printer pixel), **hover
+  measurement** (the feature under the cursor reports its true width in px +
+  mm green — no manual counting; slanted-row chords labelled as such), and
+  fin-family min-width stats/violations switched from per-row run scans to
+  the **analytic perpendicular widths** (t ± comp, b ∓ comp) — removes the
+  false "min fin 1 px" stair-step artifacts of rasterized wavy fins
+  (TPMS/pin keep the run heuristic; no constant width exists there).
+- **Unit change (2026-07-09, user request):** all V3 surface-area readouts
+  (A_fin, A_eff, A_wet, die/cooled) display and serialize in **mm²** instead of
+  cm² (API fields renamed `*_cm2` → `*_mm2`; thousands separators in the UI;
+  §34's cm² examples read ×100). A_flow was always mm².
+- **Tests / verification:** new `test_v3_manufacturing.py` (35 checks:
+  hero FAIL / M1 MARGINAL / M2+M3 PASS fixtures, area hand-checks
+  (~715 cm², ×96/×14), the exact review-§6 M2 green→CAD table, sweep
+  enforcement semantics, route normalization, schema); `test_v2_projects.py`
+  updated for the +3 presets. Full suite green: parity 5/5 golden-exact,
+  all V2 suites, V3 35/35; frontend type-check + production build clean;
+  HTTP smoke verified (catalog = 8 candidates w/ areas + verdicts, schema
+  routes, two-star sweep, static frontend).

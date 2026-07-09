@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { fmt, milliKW } from '../format'
+import { ENFORCEMENT_MODES, type Enforcement } from '../manufacturing'
 import type { AppSchema, Project, ProjectSummary } from '../types'
 
 // A blank problem template for "New project".
@@ -15,6 +16,7 @@ const BLANK: Project = {
   targets: { T_j_max_C: 100, R_jc_gate_override: null, limit_deltaP_Pa: 50000, limit_pump_W: 5 },
   architecture: { name: 'center_feed_bidirectional', n_parallel_paths: 2, path_length_mm: 14, header_K_total: 1.5, flow_uniformity: 1 },
   families: ['wavy_fin', 'straight_fin', 'gyroid_tpms', 'pin_fin'],
+  manufacturing: { enforcement: 'marginal' },
 }
 
 function Num({ label, value, onChange, step = 1, unit }: {
@@ -173,6 +175,18 @@ export function DesignStudio({
                   </label>
                 ))}
               </div>
+
+              <h3 style={{ marginTop: 14 }}>3b · Manufacturing constraint</h3>
+              <label className="ds2-num" title="§35F — how hard the process route's DfAM rulebook binds this project: sliders, sweep ranges and the optimizer ★ all follow it.">
+                <span>Enforcement</span>
+                <select value={draft.manufacturing?.enforcement ?? 'marginal'}
+                  onChange={(e) => setDraft((d) => ({ ...d, manufacturing: { ...d.manufacturing, enforcement: e.target.value as Enforcement } }))}>
+                  {ENFORCEMENT_MODES.map((m) => <option key={m.key} value={m.key} title={m.hint}>{m.label}</option>)}
+                </select>
+              </label>
+              <p className="ds2-hint muted" style={{ margin: '4px 0 0' }}>
+                {ENFORCEMENT_MODES.find((m) => m.key === (draft.manufacturing?.enforcement ?? 'marginal'))?.hint}
+              </p>
 
               <h3 style={{ marginTop: 14 }}>4 · Layout</h3>
               <label className="ds2-num">

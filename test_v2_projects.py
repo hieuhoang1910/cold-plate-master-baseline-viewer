@@ -146,10 +146,12 @@ proj_with_designs = {
             "pin_pattern": "staggered", "fin_height_mm": 5.5, "flow_lpm": 2.65}},
     ],
 }
+# V3.3: every catalog also carries the 3 Incus M-presets (M1/M2/M3).
+N_BASE = 5 + len(server.M_PRESET_CASES)
 dc = server.project_catalog_payload({"project": proj_with_designs})
 saved = [c for c in dc["candidates"] if c.get("saved")]
-check(len(dc["candidates"]) == 7 and len(saved) == 2,
-      f"5 baseline + 2 saved = 7 candidates (got {len(dc['candidates'])}, {len(saved)} saved)")
+check(len(dc["candidates"]) == N_BASE + 2 and len(saved) == 2,
+      f"{N_BASE} baseline+preset + 2 saved candidates (got {len(dc['candidates'])}, {len(saved)} saved)")
 check(all(c.get("name") for c in saved), "saved candidates carry their name")
 pin_c = next((c for c in saved if c["name"] == "Pin idea"), None)
 check(pin_c is not None and pin_c["family"] == "pin_fin" and "SCREENING" not in pin_c["kpi_status"],
@@ -159,9 +161,9 @@ pin_case = next((x for x in dc["cases"] if x.get("design_id") == "saved_pin-idea
 check(pin_case is not None and pin_case.get("family") == "gyroid_tpms"
       and pin_case.get("tpms_type") == "pin_fins",
       "saved case keeps gyroid_tpms+pin_fins so the viewer renders + sliders seed")
-# empty / absent designs must not change the 5-candidate baseline
-check(len(server.project_catalog_payload({"project": "gb202-gpu"})["candidates"]) == 5,
-      "a project with no designs still yields exactly the 5 baseline candidates")
+# empty / absent designs must not change the baseline+preset candidate set
+check(len(server.project_catalog_payload({"project": "gb202-gpu"})["candidates"]) == N_BASE,
+      "a project with no designs still yields exactly the baseline + M-preset candidates")
 
 # --------------------------------------------------------------------------
 print("-" * 60)

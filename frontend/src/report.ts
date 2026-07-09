@@ -66,10 +66,20 @@ export function generateReport(
     L.push(`| R stack (base / TIM / conv) | ${milliKW(r.R_base_K_W)} / ${milliKW(r.R_TIM_K_W)} / ${milliKW(r.R_th_conv_K_W)} mK/W (conv ${pct(r.conv_fraction, 0)}) |`)
     L.push(`| Hydraulics | ΔP ${kPa(r.DeltaP_Pa)} kPa · pump ${fmt(r.pump_power_W, 3)} W · v ${fmt(r.velocity_m_s, 3)} m/s · Re ${fmt(r.Re, 0)} · D_h ${fmt(r.hydraulic_diameter_mm, 3)} mm |`)
     L.push(`| Surface | SA/V ${fmt(r.raw_SA_V_m2_m3, 0)} raw / ${fmt(r.effective_SA_V_m2_m3, 0)} eff · η_f ${r.eta_f == null ? '—' : fmt(r.eta_f, 3)} · η_o ${r.eta_o == null ? '—' : fmt(r.eta_o, 3)} · UA ${fmt(r.UA_W_K, 1)} W/K · coverage ${fmt(r.coverage, 2)} |`)
+    if (r.areas) L.push(`| Areas (V3) | A_fin ${fmt(r.areas.fin_mm2, 0)} mm² (×${fmt(r.areas.amplification, 0)} die) · A_eff ${fmt(r.areas.fin_eff_mm2, 0)} mm² (×${fmt(r.areas.amplification_eff, 1)}) · A_flow ${fmt(r.areas.flow_mm2, 0)} mm² · A_wet ${fmt(r.areas.wetted_mm2, 0)} mm² (model basis, incl. floor) |`)
     L.push(`| Temperature rise | ΔT@450W ${fmt(r.heat_load_deltaT_K, 2)} K · ΔT@575W ${fmt(r.margin_heat_load_deltaT_K, 2)} K${r.targets ? ` · Tⱼ ${fmt(r.targets.T_j_C, 1)} °C` : ''} |`)
     if (r.mass_g != null) L.push(`| Mass / material | ${fmt(r.mass_g, 1)} g Cu · ~$${fmt(r.material_cost_usd ?? 0, 2)} (powder only, excl. AM machine time) |`)
     L.push(`| Status | **${r.kpi_status}** |`)
+    if (r.manufacturability) L.push(`| Manufacturability | **${r.manufacturability.verdict}** — ${r.manufacturability.label} (${r.manufacturability.grade}) |`)
     L.push('')
+    if (r.manufacturability) {
+      const bad = r.manufacturability.checks.filter((c) => c.status !== 'PASS')
+      if (bad.length) {
+        L.push('**Manufacturability findings** (' + r.manufacturability.source + '):')
+        bad.forEach((c) => L.push(`- ${c.status}: ${c.label} — ${c.message}`))
+        L.push('')
+      }
+    }
     if (r.warnings?.length) {
       L.push('**Warnings / caveats for this design:**')
       r.warnings.forEach((w) => L.push(`- ${w}`))

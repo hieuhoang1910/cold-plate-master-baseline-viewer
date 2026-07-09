@@ -171,6 +171,7 @@ def evaluate_pin_fin(
         "effective_SA_V_m2_m3": eff_sa_v,
         "wetted_area": A_wet,
         "flow_area": flow_area,
+        "fin_area": A_pins * wetted_area_multiplier,
         "UA": UA,
         "eta_f": eta_pin,
         "eta_o": eta_o,

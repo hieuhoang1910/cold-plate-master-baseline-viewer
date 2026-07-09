@@ -22,6 +22,7 @@
   --pass: #3fb950;
   --fail: #f85149;
   --warn: #e3b341;
+  --accent2: var(--pass); /* legacy alias used across components */
 
   /* resistance stackup */
   --rbase: #6b7688;
@@ -511,3 +512,104 @@ th {
   color: #cdd6e4; white-space: pre-wrap; word-break: break-word;
   max-height: 62vh; overflow: auto; margin: 0;
 }
+
+/* ============================== V3 =================================== */
+/* two-tier manufacturability bands under the t/b sliders (spec 35D-2) */
+.ds-tiers { position: relative; height: 4px; margin-top: 2px; border-radius: 2px; overflow: hidden; background: var(--surface-2); }
+.ds-tier { position: absolute; top: 0; height: 100%; }
+.ds-tier.fail { left: 0; background: rgba(248, 81, 73, 0.55); }
+.ds-tier.marg { background: rgba(227, 179, 65, 0.5); }
+.ds-tier.ok { background: rgba(63, 185, 80, 0.35); }
+
+.ds-verdict { float: right; margin-left: 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.ds-fix {
+  width: 100%; margin: 2px 0 10px; padding: 7px 10px; border: 1px solid var(--line-2);
+  border-radius: 6px; background: rgba(227, 179, 65, 0.12); color: var(--warn);
+  font-size: 13px; font-weight: 600; cursor: pointer; text-align: left;
+}
+.ds-fix:hover { background: rgba(227, 179, 65, 0.2); }
+
+/* areas strip on the Surface & thermal card (V3.2) */
+.areas-strip { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; }
+.areas-main { display: flex; align-items: baseline; gap: 5px; font-size: 13.5px; }
+.areas-main b { font-size: 16px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.areas-main .a-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.areas-main .a-amp { color: var(--accent); font-size: 12px; font-weight: 650; }
+.areas-main .a-amp.eff { color: var(--pass); }
+
+/* manufacturability card (V3.3b) */
+.mfg-chip { float: right; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; border: 1px solid; border-radius: 4px; padding: 1px 8px; }
+.mfg-route { font-size: 12.5px; margin: 2px 0 8px; }
+.mfg-ok { color: var(--pass); font-size: 13.5px; }
+.mfg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
+.mfg-list .mfg-st { margin-right: 6px; font-weight: 700; }
+.mfg-src { margin-top: 8px; font-size: 11.5px; }
+
+/* green -> CAD converter (V3.3c) */
+.gc { margin: 8px 0 4px; font-size: 12.5px; }
+.gc summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.gc summary:hover { color: var(--text); }
+.gc-tbl { width: 100%; margin-top: 6px; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+.gc-tbl th, .gc-tbl td { padding: 2.5px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.gc-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.gc-tbl th { color: var(--faint); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; }
+.gc-note { margin-top: 6px; font-size: 11.5px; line-height: 1.45; }
+
+/* centre view tabs (3-D | pixel) */
+.view-tabs { display: flex; gap: 4px; padding: 4px 6px 0; }
+.view-tabs button {
+  padding: 4px 12px; border: none; border-bottom: 2px solid transparent; background: none;
+  color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.view-tabs button:hover:not(:disabled) { color: var(--text); }
+.view-tabs button.sel { color: var(--accent); border-bottom-color: var(--accent); }
+.view-tabs button:disabled { color: var(--faint); cursor: not-allowed; }
+
+/* DLP pixel preview (V3.3d) */
+.pxv { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 6px 8px 8px; gap: 6px; }
+.pxv-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.pxv-title { font-weight: 650; color: var(--text); }
+.pxv-t { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.pxv-t select { background: var(--surface-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 4px; }
+.pxv-canvas-wrap { flex: 1; min-height: 0; overflow: auto; background: #050608; border: 1px solid var(--line); border-radius: 6px; }
+.pxv-canvas { display: block; image-rendering: pixelated; margin: 0 auto; }
+.pxv-foot input[type='range'] { flex: 1; min-width: 120px; }
+.pxv-stat { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.pxv-note { font-size: 11.5px; line-height: 1.5; }
+
+/* optimizer: price-of-manufacturability note */
+.opt-mfgprice { color: var(--warn); font-size: 12.5px; }
+
+/* About V3: plain-words callouts + collapsibles */
+.about-body .plain {
+  margin: 0 0 10px; padding: 9px 12px; border-left: 3px solid var(--accent);
+  background: var(--accent-soft); border-radius: 0 6px 6px 0; font-size: 14.5px; line-height: 1.55;
+}
+.about-body .plain b { color: var(--text); }
+.about-body details.fold { margin: 8px 0; }
+.about-body details.fold summary { cursor: pointer; font-weight: 650; color: var(--muted); font-size: 14px; }
+.about-body details.fold summary:hover { color: var(--text); }
+.about-body .doit { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+.about-body .doit b { color: var(--text); }
+
+/* pixel preview: wheel zoom + drag pan */
+.pxv-canvas-wrap { cursor: grab; }
+.pxv-canvas-wrap.panning { cursor: grabbing; user-select: none; }
+.pxv-zoom { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); min-width: 42px; display: inline-block; text-align: right; }
+.pxv-fit {
+  margin-left: 4px; padding: 1px 8px; border: 1px solid var(--line-2); border-radius: 4px;
+  background: var(--surface-2); color: var(--muted); font-size: 11.5px; cursor: pointer;
+}
+.pxv-fit:hover:not(:disabled) { color: var(--text); }
+.pxv-fit:disabled { opacity: 0.4; cursor: default; }
+
+/* pixel preview: pixel grid overlay + hover measurement */
+.pxv-stage { position: relative; margin: 0 auto; }
+.pxv-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, rgba(110, 130, 160, 0.4) 0 1px, transparent 1px 100%),
+    repeating-linear-gradient(to bottom, rgba(110, 130, 160, 0.4) 0 1px, transparent 1px 100%);
+}
+.pxv-hover { margin-left: auto; color: var(--muted); }
+.pxv-hover b { color: var(--text); }

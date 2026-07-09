@@ -1,14 +1,15 @@
+import { MFG_ROUTES, mfgFloor, normalizeRoute as mfgNormalizeRoute, type Enforcement } from './manufacturing'
 import type { Basis, DesignCase, DesignState } from './types'
 
-// Process routes set the manufacturing floor on wall & gap (spec §6B).
-export const ROUTES: { key: string; label: string; t: number; b: number }[] = [
-  { key: 'LMM', label: 'LMM (0.10 mm floor)', t: 0.1, b: 0.1 },
-  { key: 'LMM_supplier', label: 'LMM supplier-qual (0.12)', t: 0.12, b: 0.12 },
-  { key: 'standard_LPBF', label: 'standard LPBF (0.20)', t: 0.2, b: 0.2 },
-]
+// V3.3 — process routes come from the DfAM rulebook (spec §35); the old
+// single-floor table is superseded. Route keys: LMM · SLM_IR · SLM_GREEN
+// (legacy 'standard_LPBF' / 'LMM_supplier' normalize on load).
+export const ROUTES: { key: string; label: string }[] =
+  MFG_ROUTES.map((r) => ({ key: r.key, label: r.label }))
 
-export function routeFloor(route: string) {
-  return ROUTES.find((r) => r.key === route) ?? ROUTES[0]
+/** Wall/gap slider floor for a route under the active enforcement mode. */
+export function routeFloor(route: string, mode: Enforcement = 'marginal') {
+  return mfgFloor(route, mode)
 }
 
 export const FIN_FAMILIES = ['wavy_fin', 'straight_fin']
@@ -18,7 +19,7 @@ export function isGyroid(f: string): boolean { return f === 'gyroid_tpms' }
 export function isViewable(f: string): boolean { return VIEWABLE_FAMILIES.includes(f) }
 
 function normalizeRoute(r?: string): string {
-  return r === 'standard_LPBF' ? 'standard_LPBF' : 'LMM'
+  return mfgNormalizeRoute(r)
 }
 
 /** Seed an editable design from a catalog case + basis. All fields are always
