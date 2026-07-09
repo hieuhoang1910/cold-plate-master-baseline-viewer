@@ -5,14 +5,19 @@ heat-sink designs as live implicit-body (SDF) 3D geometry next to their KPIs.
 Physics comes from the **validated** Cold Plate solvers — the browser never
 runs a second physics model.
 
-- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; latest addenda §30–31)
+- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
-- **Status:** V2 complete — projects & Design Studio (problem definition:
-  coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts), fin +
-  TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros / Zukauskas), live
+- **Status:** V3 complete — everything from V2 (projects & Design Studio:
+  coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts; fin +
+  TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros / Zukauskas); live
   3D tuning, constrained optimizer, saved designs as candidates, report
-  export, mass/cost + R_jc uncertainty band, STL export, LAN hosting.
+  export, mass/cost + R_jc uncertainty band, STL export, LAN hosting) **plus**
+  the V3 manufacturability layer: two-tier LMM/SLM DfAM rulebooks with live
+  PASS / MARGINAL / FAIL verdicts, per-design area readouts
+  (A_fin / A_eff / A_flow with ×N die amplification), Incus-compliant M1/M2/M3
+  presets (M1 = default), enforcement modes, green→CAD export chain, a DLP
+  pixel-preview tab, and a plain-language About rewrite.
 
 **Optimizer.** The Optimizer tab sweeps two family-appropriate variables
 (fin t/b/H/A/λ · TPMS cell/wall/grading · pin Ø/pitch · flow) into an
@@ -22,7 +27,34 @@ R_jc (or pump/ΔP) *among points that fit the T_j gate + ΔP + pump budgets* —
 reported with its T_j margin in °C; the Pareto chart draws the pump-budget
 line. Set the budgets in the Design Studio (◆ chip in the header) and the
 optimizer re-runs against them. "★ add top 5 → candidates" turns the best
-sweep points into named, tunable candidates.
+sweep points into named, tunable candidates. Since V3 every sweep point also
+carries a manufacturability verdict: the heatmap dims non-compliant tiers and
+the optimizer shows **two stars** — ★ the best point that also passes the
+active manufacturing rulebook, ☆ the gates-only optimum — so the price of
+manufacturability is visible on every sweep.
+
+**Manufacturability (V3).** `engine/manufacturing.py` carries per-route DfAM
+rulebooks — **LMM** (Incus Hammer EVO35, supplier-verified from their
+2026-07-07 DfAM review of our actual STLs), **SLM_IR** (Nikon SLM Solutions
+class, literature grade) and **SLM_GREEN** (fine green-laser pure Cu) — each
+with two tiers: an *absolute* bound (printable at all) and a *recommended*
+band. Every evaluate result gains a PASS / MARGINAL / FAIL verdict with the
+violated rule and its source; sliders shade the amber/red zones live. The
+project's **enforcement mode** decides how strict the app is:
+*design-to-manufacture* (sliders and sweep clamped to the recommended band),
+*allow marginal* (clamped at absolute — the current stance while the Incus M1
+coupon is pending), or *explore/audit* (no clamps, verdicts annotate only).
+The Incus review moved the LMM floor from 0.10 to 0.15 mm absolute / 0.20 mm
+recommended, so three compliant presets ship as candidates — **M1
+(0.12/0.15, primary target, default selection)**, M2 (0.15/0.20, backup) and
+M3 (0.15/0.25, easy-clean) — with the historical 0.10 hero kept as a
+reference row that honestly fails the rulebook. A **⚒ make-manufacturable**
+button projects any design onto the nearest compliant point and shows the KPI
+delta before you accept. For LMM export, a **green→CAD converter** prints the
+full recipe chain (final → ×shrink → pixel-snapped green → ∓2 px overpoly →
+CAD value) and the **▦ pixel-preview tab** rasterizes any layer onto the
+printer's 35/25 µm DLP grid — zoom/pan, overpoly and violation overlays, and
+min fin/channel width readouts in pixels.
 
 **STL export.** The **⬇ STL** button in the viewer's bottom bar downloads the
 current model as a binary STL in millimetres (base + fins/pins/lattice, viewer
@@ -95,10 +127,14 @@ For live-reload development (editing the UI), use the two-terminal setup under
 ├─ engine/                         vendored snapshot of the validated solvers
 │  ├─ cold_plate_v6/               v6 solver package (depth: wavy hero)
 │  ├─ master_baseline_calculator.py  master engine (breadth: all families)
+│  ├─ manufacturing.py             V3 DfAM rulebooks (LMM/SLM) + verdicts + green→CAD recipe
+│  ├─ coolants.py / targets.py / projects.py / layouts.py / pin_fin.py / tpms_*.py
+│  │                               webapp-native physics modules (V2)
 │  └─ data/                        master params + candidates + baseline cases
 └─ frontend/                       Vite + React + react-three-fiber UI
    └─ src/                         App, SdfViewer (SDF shader), DesignControls,
-                                   KpiPanel, OptimizerPanel, About, …
+                                   KpiPanel, OptimizerPanel, PixelPreview,
+                                   GreenCad, About, …
 ```
 
 ## Running the app
@@ -161,6 +197,16 @@ single process runs the whole app — ready to host on any Python-capable host.
 | POST | `/api/solve` | v6 `solve()` for the wavy hero drill-down |
 | POST | `/api/sweep` | 2-variable grid sweep (heatmap + Pareto data) |
 
+**V3 additions ride on the existing routes** (no new endpoints, all additive
+so the golden fixtures stay bit-identical): `/api/schema` gains a
+`manufacturing` block (the full rulebooks, so the UI never hard-codes them);
+every `/api/evaluate` result (and every catalog candidate) gains `areas`
+(`{die_cm2, fin_cm2, fin_eff_cm2, flow_mm2, amplification, …}`) and
+`manufacturability` (`{verdict, checks[]}` with rule id, measured value,
+bound, and source per check); `/api/sweep` points each carry their
+manufacturability verdict plus the two-star (compliant vs gates-only)
+optimum.
+
 **V2.2 projects (Design Studio).** A *project* scopes the app to a problem
 (die + envelope, operating point, coolant, target junction temp → R_jc gate,
 architecture, families). The built-in **GB202 GPU** preset reproduces the V1
@@ -192,10 +238,12 @@ python test_v2_tpms_corr.py          # S2 TPMS Nu/f correlations (Renon & Jeanni
 python test_v2_layouts.py            # S3 layouts + jet-flux coupling
 python test_v2_report.py             # V2.6 report / mass / uncertainty band
 python test_v2_sweep.py              # optimizer: family-aware + budget-constrained sweep
+python test_v3_manufacturing.py      # V3 rulebooks, verdicts, areas, presets, green→CAD recipe
 ```
 
-All V2 features are **additive**: with no V2 keys in a request, responses are
-bit-identical to V1 — `test_api_parity.py` enforces this after every change.
+All V2/V3 features are **additive**: with no V2/V3 keys in a request,
+responses are bit-identical to V1 — `test_api_parity.py` enforces this after
+every change.
 
 ## The `engine/` snapshot
 
