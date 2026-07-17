@@ -293,6 +293,37 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
   )
 }
 
+// V4 — scroll-intro rig: while introT < 1 the camera flies a cinematic path
+// (far dolly-in with a slow azimuth sweep) that lands exactly on the standard
+// iso pose, where OrbitControls takes over. Driven by the page scroll.
+const ISO_AZ = Math.atan2(-0.72, -0.72)          // ≈ −2.356 rad
+const ISO_EL = Math.asin(0.62 / Math.hypot(0.72, 0.72, 0.62)) // ≈ 0.547 rad
+
+function IntroRig({ t, target, radius }: { t: number; target: [number, number, number]; radius: number }) {
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as unknown as
+    | { target: THREE.Vector3; update: () => void }
+    | null
+  useFrame(() => {
+    if (t >= 1) return
+    const e = 1 - Math.pow(1 - Math.min(Math.max(t, 0), 1), 3) // ease-out cubic
+    const az = ISO_AZ - 1.15 * (1 - e)
+    const el = 0.14 + (ISO_EL - 0.14) * e
+    const r = radius * (4.4 - 3.4 * e)
+    camera.up.set(0, 0, 1)
+    camera.position.set(
+      target[0] + r * Math.cos(el) * Math.cos(az),
+      target[1] + r * Math.cos(el) * Math.sin(az),
+      target[2] + r * Math.sin(el),
+    )
+    camera.lookAt(target[0], target[1], target[2])
+    if (controls) {
+      controls.target.set(target[0], target[1], target[2])
+    }
+  })
+  return null
+}
+
 // Standard view directions (z-up). Camera sits at target + dir*radius.
 const VIEW_DIRS: Record<string, [number, number, number]> = {
   iso: [-0.72, -0.72, 0.62],
@@ -375,11 +406,17 @@ function AxisCut({
 }
 
 export function SdfViewer({
-  g, designId, family,
+  g, designId, family, introT = 1, hud = true, gizmoMargin = [56, 56],
 }: {
   g: ViewerGeom
   designId: string
   family: string
+  /** V4 scroll intro: 0 = far cinematic view, 1 = interactive workspace pose */
+  introT?: number
+  /** hide the HUD/section controls/gizmo (e.g. while a pane covers the stage) */
+  hud?: boolean
+  /** gizmo offset — pushed left of the KPI drawer in stage mode */
+  gizmoMargin?: [number, number]
 }) {
   const xMax = g.coreWidth / 2
   const yMax = g.coreLength / 2
@@ -443,6 +480,7 @@ export function SdfViewer({
         <RayMarcher g={g} cuts={cuts} />
         <OrbitControls
           makeDefault
+          enabled={introT >= 1}
           target={[0, 0, cz]}
           enablePan
           screenSpacePanning
@@ -454,13 +492,16 @@ export function SdfViewer({
           minDistance={8}
           maxDistance={400}
         />
+        {introT < 1 && <IntroRig t={introT} target={[0, 0, cz]} radius={radius} />}
         <ViewController cmd={viewCmd} target={[0, 0, cz]} radius={radius} />
-        <GizmoHelper alignment="top-right" margin={[56, 56]}>
-          <GizmoViewport axisColors={['#e5534b', '#2ea043', '#3fb6ff']} labelColor="white" />
-        </GizmoHelper>
+        {hud && introT >= 1 && (
+          <GizmoHelper alignment="top-right" margin={gizmoMargin}>
+            <GizmoViewport axisColors={['#e5534b', '#2ea043', '#3fb6ff']} labelColor="white" />
+          </GizmoHelper>
+        )}
       </Canvas>
 
-      <div className="vo-hud">
+      <div className="vo-hud" style={{ opacity: hud && introT >= 1 ? 1 : 0, transition: 'opacity 0.4s ease' }}>
         <div className="vo-title">{designId}</div>
         <div className="vo-views">
           {VIEW_BUTTONS.map((b) => (
@@ -478,7 +519,12 @@ export function SdfViewer({
         </div>
       </div>
 
-      <div className="vo-controls">
+      <div className="vo-controls"
+        style={{
+          opacity: hud && introT >= 1 ? 1 : 0,
+          pointerEvents: hud && introT >= 1 ? 'auto' : 'none',
+          transition: 'opacity 0.4s ease',
+        }}>
         <span className="vo-cuts-label">Section</span>
         <AxisCut axis="x" min={-xMax} max={xMax} cut={cuts.x} onChange={(p) => patch('x', p)} />
         <AxisCut axis="y" min={-yMax} max={yMax} cut={cuts.y} onChange={(p) => patch('y', p)} />

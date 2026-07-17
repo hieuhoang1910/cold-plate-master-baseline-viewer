@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { evaluate, getProject, getProjects, getSchema, projectCatalog, saveProject, deleteProject } from './api'
-import { milliKW } from './format'
 import { evalPayload, initDesign, isViewable, type ProblemOpts } from './design'
 import type { AppSchema, BaselineResult, Catalog, DesignState, Project, ProjectSummary, SavedDesign } from './types'
 import { CandidateTable } from './components/CandidateTable'
@@ -14,9 +13,12 @@ import { DesignStudio } from './components/DesignStudio'
 import { OptimizerPanel } from './components/OptimizerPanel'
 import { About } from './components/About'
 import { Report } from './components/Report'
-import { Splitter } from './components/Splitter'
-import { usePanels } from './panels'
+import { Hero } from './components/Hero'
+import { Cursor } from './components/Cursor'
+import { VerifyTab } from './components/VerifyTab'
+import { useVerify } from './verify/useVerify'
 import { geomFromCase } from './viewerGeom'
+import { milliKW } from './format'
 import { normalizeRoute, type Enforcement } from './manufacturing'
 
 // V3.3: M1 is the primary manufacturing target (team decision 2026-07-09);
@@ -25,13 +27,20 @@ const DEFAULT_ID = 'v6_lmm_M1_primary'
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
 const DEFAULT_PROJECT_ID = 'gb202-gpu'
 
+// V4 shell — one long page: hero (100vh) → scroll runway → pinned studio.
+// The implicit-body viewer is a fixed full-bleed stage behind everything;
+// scrolling dollies its camera from the far cinematic pose into the workspace.
+const RUNWAY_VH = 2.2 // scroll distance (in viewport heights) of the intro
+
+type ViewMode = '3d' | 'pixel' | 'verify'
+
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [schema, setSchema] = useState<AppSchema | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>(DEFAULT_ID)
-  // V3.3d — centre view: raymarched 3-D or the DLP layer-mask preview (LMM)
-  const [viewMode, setViewMode] = useState<'3d' | 'pixel'>('3d')
+  const [viewMode, setViewMode] = useState<ViewMode>('3d')
+  const [pixelJump, setPixelJump] = useState<number | null>(null)
 
   // V2.2 — the active project scopes the whole app (basis, gates, coolant).
   const [activeProject, setActiveProject] = useState<Project | null>(null)
@@ -46,6 +55,47 @@ export default function App() {
   const [bottomTab, setBottomTab] = useState<'compare' | 'optimize'>('compare')
   const [showAbout, setShowAbout] = useState(false)
   const [showReport, setShowReport] = useState(false)
+
+  // V4 — drawers (glass overlays over the stage) + scroll intro + verify
+  const [leftOpen, setLeftOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(true)
+  const [bottomOpen, setBottomOpen] = useState(false)
+  const verifyApi = useVerify()
+  const reduced = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  )
+  const [introT, setIntroT] = useState(reduced ? 1 : 0)
+  const introRef = useRef(introT)
+  introRef.current = introT
+
+  const runwayPx = useCallback(() => window.innerHeight * RUNWAY_VH, [])
+
+  useEffect(() => {
+    if (reduced) { setIntroT(1); return }
+    let raf = 0
+    const read = () => {
+      const t = Math.min(1, Math.max(0, window.scrollY / runwayPx()))
+      if (Math.abs(t - introRef.current) > 0.001 || (t === 1) !== (introRef.current === 1)) setIntroT(t)
+      raf = 0
+    }
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(read) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    read()
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [reduced, runwayPx])
+
+  const enterStudio = useCallback(() => {
+    window.scrollTo({ top: runwayPx() + 2, behavior: reduced ? 'auto' : 'smooth' })
+  }, [reduced, runwayPx])
+  const backToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+  }, [reduced])
 
   // Boot: schema + project list + the default project.
   useEffect(() => {
@@ -204,31 +254,37 @@ export default function App() {
   // KPI panel + viewer follow the live design when editing.
   const kpiResult = design ? (live ?? selected) : selected
 
-  // Resizable panels (VS Code–style drag handles); persisted to localStorage.
-  const panels = usePanels()
-  const appVars = { '--bottom-h': `${panels.sizes.bottom}px` } as CSSProperties
-  const mainVars = { '--left': `${panels.sizes.left}px`, '--right': `${panels.sizes.right}px` } as CSSProperties
+  const isLmm = design ? normalizeRoute(design.process_route) === 'LMM' : false
+  const entered = introT >= 1
+
+  // Verify tab's "open this layer in the pixel view" jump.
+  const openPixelAt = (layer: number) => {
+    setPixelJump(layer)
+    setViewMode('pixel')
+  }
+
+  const setMode = (m: ViewMode) => {
+    if (m !== 'pixel') setPixelJump(null)
+    setViewMode(m)
+  }
 
   return (
-    <div className="app" style={appVars}>
-      <header>
-        <h1>Cold Plate — Master Baseline Viewer</h1>
-        <span className="sub">internal engineering review · live from the validated solvers</span>
-        <span className="spacer" />
-        {activeProject && (
-          <button className="proj-chip" onClick={() => setShowStudio(true)}
-            title="Open the Design Studio to edit or switch the problem">
-            ◆ {activeProject.name}{activeProject.builtin ? '' : ''}{dirty ? ' *' : ''}
-          </button>
-        )}
-        {error
-          ? <span className="api-bad">API error: {error}</span>
-          : catalog
-            ? <span className="api-ok">● {catalog.candidates.length} candidates</span>
-            : <span className="sub">connecting…</span>}
-        {catalog && <button className="about-btn" onClick={() => setShowReport(true)}>Report</button>}
-        <button className="about-btn" onClick={() => setShowAbout(true)}>About</button>
-      </header>
+    <div className="shell">
+      <Cursor />
+
+      {/* fixed full-bleed stage behind everything; dimmed + HUD-less while a
+          pane (pixel/verify) covers it, and its HUD/gizmo inset past the open
+          drawers so nothing is trapped underneath the glass */}
+      {/* class is "viewer-stage", NOT "stage" — the V2 KPI badges already use
+          `badge stage`, and a bare .stage selector inflated them into giant
+          accent discs (found live 2026-07-17) */}
+      <div className={`viewer-stage ${entered && viewMode === '3d' ? 'live' : ''} ${entered && viewMode !== '3d' ? 'dim' : ''} ${leftOpen ? 'pad-l' : ''} ${rightOpen ? 'pad-r' : ''}`}
+        data-cursor="drag">
+        {geom && design
+          ? <SdfViewer g={geom} designId={design.design_id} family={design.family} introT={introT}
+              hud={viewMode === '3d'} gizmoMargin={[rightOpen ? 476 : 110, 116]} />
+          : <div className="stage-empty">{catalog && <ViewerPlaceholder r={selected} />}</div>}
+      </div>
 
       {showAbout && <About onClose={() => setShowAbout(false)} />}
       {showReport && catalog && (
@@ -241,120 +297,179 @@ export default function App() {
           onLoad={loadProject} onDelete={removeProject} onClose={() => setShowStudio(false)} />
       )}
 
-      {!catalog && !error && <div className="center-msg">Loading…</div>}
+      <div className="scroller">
+        <Hero catalog={catalog} project={activeProject} error={error} t={introT}
+          onSelect={setSelectedId} onEnter={enterStudio}
+          onStudio={() => setShowStudio(true)} onAbout={() => setShowAbout(true)} />
 
-      {error && (
-        <div className="center-msg">
-          <div>
-            <p className="error">Could not reach the API: {error}</p>
-            <p className="muted">Start it with <code>python server.py</code> (it listens on :8000; Vite proxies /api).</p>
-          </div>
-        </div>
-      )}
+        <div className="runway" style={{ height: `${(RUNWAY_VH - 1) * 100}vh` }} />
 
-      {catalog && (
-        <>
-          <div className="main" style={mainVars}>
-            {/* LEFT: candidate selector + problem knobs + live design sliders */}
-            <div className="col">
-              <div className="card">
-                <h2>Candidates</h2>
-                {catalog.candidates.map((c) => {
-                  const pass = c.R_jc_K_W <= catalog.gates.limit_R_jc_K_W
-                  return (
-                    <div key={c.design_id}
-                      className={`cand-item ${c.design_id === selectedId ? 'sel' : ''}`}
-                      onClick={() => setSelectedId(c.design_id)}>
-                      <div className="name">
-                        {c.name ?? c.design_id}
-                        {c.saved && (
-                          <button className="cand-del" title="delete saved design"
-                            onClick={(e) => { e.stopPropagation(); removeSavedDesign(c.name!) }}>×</button>
-                        )}
-                      </div>
-                      <div className="meta">
-                        {c.saved && <span className="cand-saved">saved</span>}
-                        <span>{c.family}</span><span>·</span><span>{c.process_route}</span>
-                      </div>
-                      <div className="rjc">
-                        R_jc <b style={{ color: pass ? 'var(--accent2)' : 'var(--fail)' }}>{milliKW(c.R_jc_K_W)}</b>
-                        <span className="muted"> mK/W</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {schema && (
-                <ProblemControls schema={schema} coolant={coolant} tjMaxC={tjMaxC}
-                  live={design ? live : null} onCoolant={setCoolant} onTjMax={setTjMax} />
-              )}
-
-              {design
-                ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
-                    mode={mfgMode} mfg={live?.manufacturability ?? null}
-                    onPatch={patchDesign} onReset={resetDesign} />
-                : <div className="card muted" style={{ fontSize: 14 }}>
-                    Live tuning covers wavy / straight fin and gyroid designs.
-                  </div>}
-
-              {design && (
-                <button className="save-cand" onClick={saveAsCandidate}
-                  title="Save the current tuned design as a named candidate (optimize first in the Optimizer tab, then load into the sliders)">
-                  + Save current design as candidate
-                </button>
-              )}
+        {/* ------------------------- the studio ------------------------- */}
+        <section className="workspace" style={{ opacity: Math.max(0, (introT - 0.55) / 0.45) }}>
+          <div className="ws-top">
+            <button className="ws-mark" onClick={backToTop} title="back to the landing view">COLD PLATE</button>
+            {activeProject && (
+              <button className="proj-chip" onClick={() => setShowStudio(true)}
+                title="Open the Design Studio to edit or switch the problem">
+                ◆ {activeProject.name}{dirty ? ' *' : ''}
+              </button>
+            )}
+            <div className="ws-views">
+              <button className={viewMode === '3d' ? 'sel' : ''} onClick={() => setMode('3d')}>3-D</button>
+              <button className={viewMode === 'pixel' ? 'sel' : ''} onClick={() => setMode('pixel')}
+                disabled={!isLmm}
+                title={isLmm ? 'DLP layer preview — the design rasterized on the EVO35 pixel grid'
+                  : 'pixel preview applies to the LMM (DLP) route only'}>
+                ▦ Pixel
+              </button>
+              <button className={viewMode === 'verify' ? 'sel' : ''} onClick={() => setMode('verify')}
+                disabled={!design}
+                title="import an nTop STL and verify it against this design">
+                ✓ Verify
+                {verifyApi.session.status === 'done' && verifyApi.session.result && (
+                  <span className={`ws-vdot ${verifyApi.session.result.deviation.verdict.toLowerCase()}`} />
+                )}
+              </button>
             </div>
+            <span className="ws-spacer" />
+            {error
+              ? <span className="api-bad">API error: {error}</span>
+              : catalog
+                ? <span className="api-ok" title="candidates rescored live against the active project">
+                    ● {catalog.candidates.length} candidates
+                    {kpiResult && ` · R_jc ${milliKW(kpiResult.R_jc_K_W)} mK/W`}
+                  </span>
+                : <span className="muted">connecting…</span>}
+            {catalog && <button className="about-btn" onClick={() => setShowReport(true)}>Report</button>}
+            <button className="about-btn" onClick={() => setShowAbout(true)}>About</button>
+          </div>
 
-            <Splitter dir="col" onResize={panels.resizeLeft} onReset={panels.resetLeft} />
+          {!catalog && !error && <div className="ws-center-msg">Loading…</div>}
+          {error && !catalog && (
+            <div className="ws-center-msg">
+              <div>
+                <p className="error">Could not reach the API: {error}</p>
+                <p className="muted">Start it with <code>python server.py</code> (it listens on :8000; Vite proxies /api).</p>
+              </div>
+            </div>
+          )}
 
-            {/* CENTER: implicit-body viewer (fins) or the DLP pixel preview (V3.3d) */}
-            <div className="center col">
-              {geom && design && (
-                <div className="view-tabs">
-                  <button className={viewMode === '3d' ? 'sel' : ''} onClick={() => setViewMode('3d')}>3-D</button>
-                  <button className={viewMode === 'pixel' ? 'sel' : ''} onClick={() => setViewMode('pixel')}
-                    disabled={normalizeRoute(design.process_route) !== 'LMM'}
-                    title={normalizeRoute(design.process_route) === 'LMM'
-                      ? 'DLP layer preview — the design rasterized on the EVO35 pixel grid'
-                      : 'pixel preview applies to the LMM (DLP) route only'}>
-                    ▦ Pixel (LMM)
-                  </button>
+          {catalog && (
+            <>
+              {/* LEFT drawer: candidates + problem + live design sliders */}
+              <button className={`ws-tab ws-tab-left ${leftOpen ? 'open' : ''}`}
+                onClick={() => setLeftOpen(!leftOpen)} title={leftOpen ? 'hide the design panel' : 'candidates + design sliders'}>
+                {leftOpen ? '◂' : '▸ design'}
+              </button>
+              {leftOpen && (
+                <div className="ws-left">
+                  <div className="card">
+                    <h2>Candidates</h2>
+                    {catalog.candidates.map((c) => {
+                      const pass = c.R_jc_K_W <= catalog.gates.limit_R_jc_K_W
+                      return (
+                        <div key={c.design_id}
+                          className={`cand-item ${c.design_id === selectedId ? 'sel' : ''}`}
+                          onClick={() => setSelectedId(c.design_id)}>
+                          <div className="name">
+                            {c.name ?? c.design_id}
+                            {c.saved && (
+                              <button className="cand-del" title="delete saved design"
+                                onClick={(e) => { e.stopPropagation(); removeSavedDesign(c.name!) }}>×</button>
+                            )}
+                          </div>
+                          <div className="meta">
+                            {c.saved && <span className="cand-saved">saved</span>}
+                            <span>{c.family}</span><span>·</span><span>{c.process_route}</span>
+                          </div>
+                          <div className="rjc">
+                            R_jc <b style={{ color: pass ? 'var(--accent2)' : 'var(--fail)' }}>{milliKW(c.R_jc_K_W)}</b>
+                            <span className="muted"> mK/W</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {schema && (
+                    <ProblemControls schema={schema} coolant={coolant} tjMaxC={tjMaxC}
+                      live={design ? live : null} onCoolant={setCoolant} onTjMax={setTjMax} />
+                  )}
+
+                  {design
+                    ? <DesignControls design={design} basis={catalog.basis} evaluating={evaluating}
+                        mode={mfgMode} mfg={live?.manufacturability ?? null}
+                        onPatch={patchDesign} onReset={resetDesign} />
+                    : <div className="card muted" style={{ fontSize: 14 }}>
+                        Live tuning covers wavy / straight fin and gyroid designs.
+                      </div>}
+
+                  {design && (
+                    <button className="save-cand" onClick={saveAsCandidate}
+                      title="Save the current tuned design as a named candidate (optimize first in the Optimizer tab, then load into the sliders)">
+                      + Save current design as candidate
+                    </button>
+                  )}
                 </div>
               )}
-              {geom && design
-                ? (viewMode === 'pixel' && normalizeRoute(design.process_route) === 'LMM'
-                    ? <PixelPreview design={design} basis={catalog.basis} />
-                    : <SdfViewer g={geom} designId={design.design_id} family={design.family} />)
-                : <ViewerPlaceholder r={selected} />}
-            </div>
 
-            <Splitter dir="col" onResize={panels.resizeRight} onReset={panels.resetRight} />
+              {/* CENTER pane for pixel / verify (the 3-D lives on the stage) */}
+              {viewMode !== '3d' && design && (
+                <div className={`ws-pane ${leftOpen ? '' : 'wide-l'} ${rightOpen ? '' : 'wide-r'}`}>
+                  {viewMode === 'pixel' && isLmm && (
+                    <PixelPreview design={design} basis={catalog.basis}
+                      verify={verifyApi} initialLayer={pixelJump} />
+                  )}
+                  {viewMode === 'verify' && (
+                    <VerifyTab verify={verifyApi} design={design} basis={catalog.basis}
+                      live={design ? live : selected} opts={liveOpts} onOpenPixel={openPixelAt} />
+                  )}
+                </div>
+              )}
 
-            {/* RIGHT: KPI panel (follows the live design when tuning) */}
-            <div className="col">
-              {kpiResult
-                ? <KpiPanel r={kpiResult} gates={catalog.gates} />
-                : <div className="card muted">Select a candidate.</div>}
-            </div>
-          </div>
+              {/* RIGHT drawer: KPI panel */}
+              <button className={`ws-tab ws-tab-right ${rightOpen ? 'open' : ''}`}
+                onClick={() => setRightOpen(!rightOpen)} title={rightOpen ? 'hide the KPI panel' : 'KPIs'}>
+                {rightOpen ? '▸' : '◂ KPIs'}
+              </button>
+              {rightOpen && (
+                <div className="ws-right">
+                  {kpiResult
+                    ? <KpiPanel r={kpiResult} gates={catalog.gates} />
+                    : <div className="card muted">Select a candidate.</div>}
+                </div>
+              )}
 
-          <Splitter dir="row" onResize={panels.resizeBottom} onReset={panels.resetBottom} />
-
-          {/* BOTTOM: comparison table / optimizer */}
-          <div className="bottom">
-            <div className="tabs">
-              <button className={bottomTab === 'compare' ? 'sel' : ''} onClick={() => setBottomTab('compare')}>Comparison</button>
-              <button className={bottomTab === 'optimize' ? 'sel' : ''} onClick={() => setBottomTab('optimize')}>Optimizer</button>
-            </div>
-            {bottomTab === 'compare'
-              ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
-              : <OptimizerPanel design={design} basis={catalog.basis} opts={liveOpts} mode={mfgMode}
-                  candidates={catalog.candidates}
-                  current={kpiResult} onLoadOptimum={patchDesign} onAddCandidates={addCandidates} />}
-          </div>
-        </>
-      )}
+              {/* BOTTOM drawer: comparison / optimizer */}
+              <div className={`ws-bottom ${bottomOpen ? 'open' : ''}`}>
+                <div className="ws-bottom-bar">
+                  <button className={bottomOpen && bottomTab === 'compare' ? 'sel' : ''}
+                    onClick={() => { setBottomTab('compare'); setBottomOpen(bottomTab !== 'compare' ? true : !bottomOpen) }}>
+                    Comparison
+                  </button>
+                  <button className={bottomOpen && bottomTab === 'optimize' ? 'sel' : ''}
+                    onClick={() => { setBottomTab('optimize'); setBottomOpen(bottomTab !== 'optimize' ? true : !bottomOpen) }}>
+                    Optimizer
+                  </button>
+                  <span className="ws-spacer" />
+                  <button className="ws-bottom-toggle" onClick={() => setBottomOpen(!bottomOpen)}>
+                    {bottomOpen ? '▾ collapse' : '▴ expand'}
+                  </button>
+                </div>
+                {bottomOpen && (
+                  <div className="ws-bottom-body">
+                    {bottomTab === 'compare'
+                      ? <CandidateTable candidates={catalog.candidates} selectedId={selectedId} onSelect={setSelectedId} />
+                      : <OptimizerPanel design={design} basis={catalog.basis} opts={liveOpts} mode={mfgMode}
+                          candidates={catalog.candidates}
+                          current={kpiResult} onLoadOptimum={patchDesign} onAddCandidates={addCandidates} />}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   )
 }

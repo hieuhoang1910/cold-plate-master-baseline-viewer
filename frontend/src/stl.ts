@@ -194,12 +194,12 @@ function meshWavyFin(
 // TPMS field (port of the GLSL in SdfViewer.tsx — keep the two in sync)
 // ---------------------------------------------------------------------------
 
-const TPMS_IDX: Record<string, number> = {
+export const TPMS_IDX: Record<string, number> = {
   gyroid: 0, diamond: 1, schwarz_p: 2, lidinoid: 3,
   split_p: 4, iwp: 5, neovius: 6, fischer_koch: 7,
 }
 
-function tpmsField(px: number, py: number, pz: number, k: number, ty: number): number {
+export function tpmsField(px: number, py: number, pz: number, k: number, ty: number): number {
   const x = k * px, y = k * py, z = k * pz
   const c2x = Math.cos(2 * x), c2y = Math.cos(2 * y), c2z = Math.cos(2 * z)
   const sx = Math.sin(x), sy = Math.sin(y), sz = Math.sin(z)

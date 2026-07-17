@@ -12,6 +12,7 @@ node_modules/
 frontend/dist/
 dist/
 build/
+.verify-build/
 *.tsbuildinfo
 *.local
 npm-debug.log*
