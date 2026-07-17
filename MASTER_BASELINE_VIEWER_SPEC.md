@@ -1181,3 +1181,382 @@ All §36 phases implemented and verified the same day:
   all V2 suites, V3 35/35; frontend type-check + production build clean;
   HTTP smoke verified (catalog = 8 candidates w/ areas + verdicts, schema
   routes, two-star sweep, static frontend).
+
+---
+
+## V4 — "Verify" (nTop round-trip verification) (DRAFT 2026-07-17)
+
+## 38. V4 concept, scope & principles
+
+**What it is.** A new **Verify tab**: drop the file Hieu exports from nTop
+(the geometry that actually goes to Incus) onto the app and get a verdict on
+whether it matches the design the solvers scored — against the implicit
+field (geometry), against the solver's geometric inputs (KPI trust), and
+against the DLP pixel grid (print outcome). `NTOP_REPLICATION.md` §3.6
+already defines verification *targets* measured by hand in nTop; V4 turns
+that section into software, in the reverse direction.
+
+**Key decisions (brainstorm log, 2026-07-17):**
+
+1. **Mesh route (binary STL) chosen** as the interchange format — it is the
+   artifact the printer receives, parses trivially in a worker, and needs no
+   third-party kernel.
+2. **nTop `.implicit` import rejected.** It is a serialized computational
+   graph, not closed-form math: evaluating it requires nTop's licensed C++
+   SDK (browser-impossible, breaks the stdlib-only server), full node-
+   vocabulary coverage (a kernel project), and even then two implicit
+   representations of the same shape only agree on the **zero level set** —
+   field values away from the surface are incomparable by construction. So
+   any implicit-vs-implicit check reduces to comparing surfaces, which the
+   mesh and raster checks already do. The 3MF *implicit extension* (open
+   node-graph spec) is a **watch, don't build** item.
+3. **Point-map CSV is the implicit-grade check** (V4.4): the app generates
+   probe points, nTop's own kernel evaluates its implicit body at them
+   (Point Map → CSV export), the app compares zero-crossings. Field-level
+   verification with no mesh tolerance in the loop and no SDK.
+
+**Principles (all phases):**
+
+- **Client-side only.** Parse/measure/render in a Web Worker + the existing
+  TS field evaluator (`stl.ts` meshes from it today). Zero new endpoints,
+  `server.py` stays stdlib-only, golden parity untouched.
+- **Physics never runs in the browser** (house rule §4). Verification
+  measures *geometry*; when measured geometry should be re-scored, the app
+  calls the existing `/api/evaluate` with measured parameters.
+- **Explanation-first UI is a P0 requirement, not polish** (user request
+  2026-07-17): every number ships with its meaning, method, bound and
+  source, per §39. A screen of bare µm statistics is a spec violation.
+- **Verdicts reuse the house vocabulary**: PASS / MARGINAL / FAIL chips with
+  per-check rows, same shape as the V3 manufacturability card.
+
+## 39. Explanation-first UI contract (P0, applies to every V4 phase)
+
+The tab must be readable by someone who has never seen a deviation map.
+Concretely:
+
+1. **Teaching empty state.** Before any file is dropped, the tab shows a
+   60-second plain-words explainer (About-tab voice): what verification
+   does, the three checks and what each catches, and exactly what to export
+   from nTop (frame, units, stage — linking the `NTOP_REPLICATION.md` §6
+   contract). Not a blank dropzone.
+2. **Guided steps, not a dashboard.** ① drop file → ② confirm what it is
+   (stage, units, alignment — with the app's best guess pre-selected and
+   explained) → ③ read the verdict. Each step states in one sentence why it
+   exists.
+3. **Verdict-first, numbers second.** The result opens with a chip + one
+   English sentence: *"PASS — 99.2 % of the imported surface lies within
+   ±15 µm (half a printer pixel) of the design; worst spot 22 µm, on the
+   inlet-side fin tips."* The histogram, map and tables sit below for those
+   who want them.
+4. **Every number carries an ⓘ** with four fixed fields: *what it is · how
+   it was measured · the bound it's judged against + source (Incus email
+   2026-07-07 / EVO35 grid / nTop meshing tolerance) · what to do if it
+   fails.* Same pattern as the V3 manufacturability rows.
+5. **The stage selector explains itself** with a mini-diagram of the
+   green→CAD chain (final → ×1.197/×1.230 green → ∓2 px overpoly → CAD) and
+   plain captions ("pick *CAD-for-print* if this file already has the
+   thin-fin compensation baked in"). **Auto-detect hints**: if the imported
+   bounding box is ≈19.7 % oversize the app suggests the green stage; if
+   fins measure ≈2 px thin, the CAD stage — with the suggestion worded, not
+   silently applied. A wrong-stage comparison is the #1 foreseeable false
+   alarm (a ~60–70 µm uniform fin "error" that is actually intentional
+   compensation) and the UI's job is to make it impossible to hit silently.
+6. **Legends in words and both units.** Deviation colors labelled in µm
+   *and* printer pixels ("red = surface sits more than 1 pixel (29 µm) off
+   the design"). Histogram gate lines annotated with their meaning, plus
+   the **noise floor**: the user-entered nTop meshing tolerance is drawn on
+   the histogram so meshing chatter isn't read as rebuild error.
+7. **Errors that teach.** Unit mismatch → "this body is ~1000× smaller than
+   the design — STL has no units; it was probably exported in metres.
+   Scale ×1000?" Axis flip → show the contract axes and offer the swap.
+   Non-watertight → say which checks still work (deviation) and which are
+   disabled (volume, porosity) and why.
+8. **Deltas carry consequences.** Measured-vs-nominal rows (§41) get a
+   qualitative note in words ("fin area 4 % low → quoted R_jc is slightly
+   optimistic — re-score to quantify"), never a bare percentage.
+9. **About tab gains a "Verifying an nTop export" section** mirroring the
+   explainer, so the method is documented where the other physics
+   explanations live.
+
+## 40. V4.1 — Import & geometry conformance (deviation vs the implicit field)
+
+**Importer.** Binary STL (ASCII detected and refused with guidance —
+exports should be binary), parsed in a Web Worker into transferable
+Float32 buffers; 50–200 MB TPMS files never block the main thread. Display
+copy may be decimated for frame rate; **measurements always run on the full
+mesh** (decimation is a display concern only, stated in the UI).
+
+**Stage selector** (per §39-5). The reference field is transformed to match
+the declared stage before any comparison:
+
+| stage | reference transform | typical use |
+|---|---|---|
+| final part | none | design review, CFD export |
+| green (scaled) | ×1.197 XY / ×1.230 Z (`LMM_PROC`) | as-printed geometry |
+| CAD-for-print | green + pixel-snap + fin −2 px / gap +2 px | the file actually sent to Incus |
+
+**Alignment guard.** Bounding box compared to the contract frame
+(`NTOP_REPLICATION.md` §0); auto-suggest axis swaps/flips and centre-offset;
+manual nudge as fallback. No silent registration — the applied transform is
+always shown.
+
+**Deviation.** Evaluate the TS implicit field at every imported vertex →
+signed distance per vertex (near the surface the field is distance-like;
+exact enough at these magnitudes). Render as a per-vertex heatmap on the
+imported mesh (raymarched view swaps to mesh view), with histogram, p50 /
+p95 / max, and % inside each gate. One-sided by design in V4.1 — vertex
+sampling cannot see *missing* geometry (a dropped fin has no vertices to
+flag); that class is caught by V4.3's raster diff and two-sided pass, and
+the UI says so ("this check confirms the surfaces that exist are in the
+right place; layer-by-layer comparison below catches anything missing").
+
+**Gates** (judged on |deviation|, after stage transform; 1 px_final =
+35 µm / 1.197 ≈ 29.2 µm):
+
+| verdict | rule |
+|---|---|
+| PASS | p95 ≤ ½ px (14.6 µm) **and** max ≤ 1 px (29.2 µm) |
+| MARGINAL | p95 ≤ 1 px |
+| FAIL | otherwise |
+
+Rationale (shown in the ⓘ): below the printer's own quantization a
+deviation cannot change a single exposed pixel, so ±½ px is "identical as
+far as the machine is concerned". The user enters nTop's meshing tolerance
+at import; it annotates the histogram as the expected noise floor.
+
+## 41. V4.2 — Solver-input audit (measured vs nominal — "are the KPIs valid for this file?")
+
+A mesh can't verify the correlations, but it can verify the geometric
+quantities they consume — where a bad rebuild silently poisons the KPIs.
+All measured in the worker, full mesh, stage-corrected back to final
+dimensions:
+
+| measured | method | compared against |
+|---|---|---|
+| watertight? | directed-edge pairing | gate for volume/porosity rows |
+| volume | signed tetra sum | nominal solid volume |
+| surface area → A_fin | triangle sum, base faces excluded | `areas.fin_mm2` |
+| A_flow(z), wetted perimeter → D_h | per-slice cross-sections | solver's A_flow / D_h |
+| porosity over core band | slice solid-fraction integral | `void_fraction` (TPMS: §3.6 ρ* check) |
+| min wall / min channel | per-slice run scan (same method as PixelPreview) | active DfAM rulebook |
+
+**Outputs:**
+
+1. **Measured-vs-nominal table** in the Verify tab (KPI-panel styling):
+   nominal · measured · Δ% · plain-words consequence note (§39-8).
+2. **The file gets its own manufacturability verdict**: measured min
+   wall/channel run through the same rulebook logic (`manufacturing.ts`) —
+   the *export* can FAIL while the nominal design PASSes (or vice versa),
+   and that is precisely the point.
+3. **"Re-score with measured geometry" button** → `/api/evaluate` with the
+   measured parameter overrides → side-by-side KPI delta (nominal vs
+   as-exported). Physics stays in the validated solver.
+4. **Trust badge** summarising the audit in one line ("geometry matches
+   solver inputs within 2 % — KPIs valid for this file").
+
+## 42. V4.3 — Raster conformance (pixel XOR diff — "what the printer sees")
+
+Extends the PixelPreview tab with a **"compare imported" mode** (the tab
+already owns the grid math, zoom/pan, hover measurement and violation
+overlays):
+
+- Worker slices the imported mesh at the 25 µm green layer pitch
+  (≈20.3 µm final), rasterizes each slice onto the 35 µm pixel grid —
+  even/odd fill on the slice contours, same grid registration as the
+  expected raster.
+- **XOR diff** vs the app's expected mask for the declared stage: mismatch
+  pixels drawn hot; per-layer mismatch count + a **worst-layer finder**
+  (jump-to button). Verdict sentence per §39: *"3 118 of 1.9 M pixels
+  differ (0.16 %), all single-pixel edge flicker — no feature-level
+  disagreement"* vs *"layer 214: a full fin row is missing."*
+- Catches exactly the class V4.1 can't: missing/extra features,
+  wrong-sign overpoly, un-applied shrink, off-by-one pixel snapping —
+  a file can pass §40's µm gates and still flip a whole pixel row on a
+  boundary-sitting fin edge, and vice versa quantization hides sub-pixel
+  error; the About copy states this two-check logic in words.
+- **Two-sided deviation** lands here too (BVH over the imported mesh,
+  `three-mesh-bvh`): sample points on the *design* surface, measure
+  distance to the mesh → upgrades V4.1's verdict to a true two-sided
+  Hausdorff-style check; one summary row feeds back into the §40 gate
+  table.
+
+## 43. V4.4 — Point-map field check (CSV) — the implicit-grade verification
+
+For verifying the *implicit math itself* with no mesh in the loop:
+
+1. Verify tab generates a **sampling recipe CSV** in the contract frame:
+   a few section planes (default: the PixelPreview default layer, one
+   x-normal and one y-normal mid-plane) at 50 µm pitch, plus jittered
+   probes concentrated near the predicted surface. MB-scale, not GB.
+2. Hieu imports the points in nTop, evaluates the implicit body on them
+   (**Point Map → CSV export**), drops the result back on the tab.
+3. The app compares **sign masks and zero-crossing locations along the
+   sampling lines** against the TS field — never raw field values (only
+   the zero level set is comparable across implicit representations,
+   §38-2). Same stats/verdict UI as §40, with the meshing-tolerance row
+   absent — this check has no meshing noise floor.
+
+Small by construction: recipe generation + CSV parse in the worker + the
+§40 verdict components. Independent of V4.1–V4.3.
+
+## 44. V4 roadmap (proposed)
+
+| Phase | Deliverable | Acceptance |
+|---|---|---|
+| V4.0 | `NTOP_REPLICATION.md` §6 export contract (frame, units, stage, format, meshing tolerance) + Verify tab teaching empty state (§39-1/2) | contract reviewed by Hieu; empty state readable by a non-specialist |
+| V4.1 | STL import, stage selector + alignment guard, one-sided deviation map, gates, ⓘ layer (§39-3…7) | app's own exported STL (fine) re-imported → PASS with deviation ≤ meshing tolerance; same STL scaled ×1.197 vs final stage → wrong-stage hint fires; hand-deformed fixture → FAIL with correct worst-spot |
+| V4.2 | measured-vs-nominal audit + file-level DfAM verdict + re-score button + trust badge | re-imported app STL reproduces `areas` within meshing error; a 0.10 mm-gap STL FAILs the file verdict while its nominal M2 design PASSes; re-score round-trips through `/api/evaluate` |
+| V4.3 | PixelPreview compare mode (slice + XOR + worst-layer) + two-sided BVH pass | re-imported app STL → 0 feature-level mismatches; deleted-fin fixture → flagged at the correct layers by XOR **and** by the two-sided pass, invisible to V4.1 one-sided (documented) |
+| V4.4 | point-map recipe generation + CSV import + zero-crossing diff | round-trip against the TS field itself → exact PASS; nTop-sampled gyroid (Hieu) agrees within grid pitch |
+
+All phases: client-side only, no API changes, `test_api_parity.py` 5/5
+after each merge; UI copy reviewed against §39 as an acceptance item, not a
+follow-up.
+
+**Status: all rows V4.0–V4.4 shipped 2026-07-17** (see the V4 changelog
+below). The engine acceptance suite is persisted in the repo as
+`frontend/test/verify-engine.test.cjs` — run with `npm run test:verify`
+(node only; compiles the pure verify modules to `.verify-build/`, no
+browser or server needed).
+
+## 45. V4 open questions (answer before/at acceptance)
+
+1. **Which stage(s) does Hieu actually export today** — final only, or the
+   CAD-for-print stage too? (Decides the stage-selector default and which
+   auto-detect hints matter most.)
+2. **Typical export sizes** — if TPMS exports run ≫200 MB, V4.1 adds an
+   import-time decimation toggle (display only; measurements stay
+   full-mesh). Below that, skip the toggle.
+3. **Gate values** — confirm ½ px / 1 px (14.6 / 29.2 µm) as the
+   PASS/MARGINAL split, or tie MARGINAL to the Incus coupon outcome.
+4. **Report integration** — does the verification verdict (and
+   measured-vs-nominal table) go into the exported report as a "Geometry
+   verification" section? (Proposed: yes, when a file has been verified in
+   the session.)
+5. **three-mesh-bvh dependency** (V4.3 only) — accept the (small, MIT)
+   runtime dependency, or hand-roll a minimal BVH like the surface-nets
+   mesher? Proposed: accept it.
+   **ANSWERED at build time: hand-rolled** (~150-line AABB BVH in
+   `verify/bvh.ts`) — the app stays dependency-free.
+6. **TPMS wall→iso calibration** (NEW, found by V4's audit — see changelog):
+   the V2 mapping `iso = wπ/c` draws TPMS walls ≈ w/|∇F̂| — roughly 30 %
+   thinner than nominal — so the drawn/exported lattice runs ~0.90 void
+   where the physics assumes 0.852 (analytic ρ*). Decide: calibrate the
+   mapping per TPMS type (multiply iso by the type's mean surface
+   |∇F̂|), or keep the drawn geometry and re-base the physics inputs.
+   Until then every TPMS verification will honestly show the ~5 %
+   void-fraction drift in the audit table — that is the tool working,
+   not a V4 bug.
+
+---
+
+### V4 changelog (V4.0–V4.4 ALL BUILT 2026-07-17)
+
+User direction at build time: proceed with P1+P2+P3, plus a full UI
+redesign — "less clustered", scroll-driven like an art-portfolio site
+(refs: noth.in, to-portfolio.com), interactive cursor, design delegated.
+
+- **Verify engine** (`frontend/src/verify/`, all client-side, zero new
+  endpoints, stdlib server untouched): binary-STL parser; bit-exact vertex
+  dedup + directed-edge watertight check; TS mirror of the full part
+  implicit field (`field.ts` — all families, gradient-normalized signed
+  distance); stage transforms + CAD-stage reference adjustment + worded
+  unit/stage/rotation hints (`stages.ts`); z-bucketed mesh slicing with
+  **nonzero-winding** scanline rasterization (correct across the STL
+  export's deliberate 0.05 mm shell overlaps, where even-odd fill breaks);
+  hand-rolled triangle BVH; per-layer XOR conformance profile; Web Worker
+  orchestration with progress + on-demand layer masks.
+- **Buried-vertex rule:** vertices > 1.25 px inside the reference are
+  classified internal faces of overlapping-shell unions, excluded from the
+  deviation gates and counted visibly; undersize at that depth is caught by
+  the two-sided pass + layer XOR instead (the app's own fin STL buries
+  ~half its vertices by design — EMBED).
+- **Verify tab** (spec §39 contract enforced): teaching empty state,
+  stage cards with captions, verdict-first banner sentence, four-field ⓘ
+  on every number, histogram with gate lines + meshing-tolerance noise
+  band, deviation-coloured 3-D mesh view (points fallback > 2 M tris),
+  measured-vs-nominal audit table with trust badge, file-level DfAM
+  verdict on measured minimums, ⟳ re-score via `/api/evaluate`, layer
+  mismatch strip with jump-to-worst into the pixel view.
+- **PixelPreview compare mode** (V4.3): magenta XOR overlay of the
+  verified STL's slice vs the expected exposure (stage-aware reference),
+  per-layer mismatch stats, hover explains diff pixels; overpoly disabled
+  while comparing (the diff must be against the design as drawn).
+- **UI V4 shell:** one long page — 100 vh hero (big type, live status
+  chips, candidate strip) → scroll runway that dollies the raymarch camera
+  from a far cinematic pose into the standard iso view (`IntroRig`) →
+  pinned studio: full-bleed viewer stage with glass drawers (candidates +
+  sliders left, KPIs right, comparison/optimizer as a collapsed bottom
+  drawer — the big declutter), segmented 3-D/Pixel/Verify switcher with a
+  verdict dot, custom dot+ring cursor ("drag" label over 3-D canvases;
+  fine pointers only, reduced-motion users keep native cursor + no intro).
+- **Findings from the engine acceptance tests** (node round-trip suite —
+  re-import the app's own STL, green-scaled copy, deleted-fin fixture,
+  fine gyroid):
+  1. **V3.3d PixelPreview modulo bug, fixed**: the JS positive-mod
+     `(x % p + 1.5p + p/2) % p − p/2` reduces to `mod(x,p) − p/2` — every
+     fin/pin was drawn **half a pitch off** its true position (aggregate
+     widths/solidity unaffected, so it shipped unnoticed; V4's absolute
+     position cross-check caught it). Correct form keeps `+p/2` inside the
+     mod; now shared in `verify/raster.ts` and used by both PixelPreview
+     and the worker.
+  2. **V2 TPMS wall→iso calibration gap** → logged as §45-6 above.
+  - Acceptance results: self round-trip PASS with p95 = max = 0.0 µm
+    (buried EMBED ring correctly excluded); volume matches analytic
+    2 905 mm³ exactly; straight-fin layer XOR **0 px**; wavy-fin XOR is
+    pure sub-pixel chord flicker (6.6 %, bounded, explained in-UI);
+    green-scaled copy fires the green-stage hint; deleted-fin fixture is
+    invisible to the one-sided check (documented) and caught by the
+    two-sided pass (0.86 % uncovered, max 0.15 mm) and the XOR
+    (3 832 px ≈ the fin's footprint).
+- **Gates:** golden parity 5/5 + all V2/V3 suites green; `tsc` clean;
+  production build clean (worker chunk split out); HTTP smoke OK
+  (health, catalog, UI, worker asset).
+
+**V4.4 built (same day):** the point-map field check (`verify/pointmap.ts` +
+`PointMapCheck.tsx`, a collapsible section of the Verify tab, independent of
+the STL import). Generates a probe-point CSV (three section planes — z
+mid-band / y = L/4 / x = 0 — at 0.1/0.05/0.025 mm pitch, written in the
+MODEL frame per the declared stage); nTop samples its implicit body at the
+points (Point Map → CSV with values); the app re-bins returned points onto
+the grid from their coordinates (row order irrelevant), auto-detects the
+sign convention, and compares **zero-crossing positions** along both grid
+directions of every plane — sub-pitch accuracy by interpolating the sampled
+values, zero meshing noise. Same ½/1-px gates + histogram as the mesh
+check; unmatched walls (a crossing in only one field) or sign disagreement
+force MARGINAL/FAIL regardless of µm stats. Note: crossing offsets are
+measured along the scan axis, so slanted walls read conservatively (offset
+/ cos θ). Acceptance (suite row E): self round-trip → exact PASS (p95 =
+0.000 µm over 149 003 crossings, 0 unmatched, 100 % sign agreement);
+fin t + 0.06 mm → FAIL detected (p95 74 µm, median oversize); inverted
+sign convention → auto-flipped, PASS.
+
+**Post-ship fixes from live use (2026-07-17, Hieu's real 357 MB nTop
+export):**
+
+1. `.stage` class collision — the shell's full-bleed viewer container class
+   matched the V2 `badge stage` KPI badges, inflating them into giant
+   fixed-position accent discs over the KPI panel. Renamed `.viewer-stage`.
+2. Gradient-normalized deviation clamped (|∇f| ≥ 0.5): field ridges (gap
+   centrelines) cancel the central differences and an unclamped quotient
+   exploded to "worst 423 mm". Values ≥ 1 mm now display as mm.
+3. Stage HUD / gizmo bleed: HUD + section bar + orientation gizmo hidden
+   when a pane covers the stage (which also dims); in 3-D mode they inset
+   past open drawers and the gizmo relocates left of the KPI drawer.
+4. **Fins-only mode** ("file has no base slab") — Hieu's workflow exports
+   the core and the base as separate STLs, and the base STL is the full
+   mechanical body (45.6 × 36.8 × 3.1 mm with mounting flanges, different
+   frame) that the implicit model does not describe. The toggle compares
+   against the reference minus its base (fins at z = 0), auto-suggested
+   when the file height equals the fin height alone; pixel compare/layer
+   scan re-align accordingly. The definitive pre-print check still wants a
+   single core+base export in the contract frame (noted in the ⓘ).
+5. Envelope-mismatch hints made axis-specific (file vs the ACTIVE
+   project's core dims), since the reference footprint comes from the
+   project, not the file.
+6. Pixel view: "layer shows design | imported STL" source switch — the
+   imported file's own slices render on the DLP grid with violations,
+   min-width readouts and hover measurement running on the STL's pixels.
+7. Deviation viewer: worker now ships the full indexed mesh; heavy files
+   (> 2 M tris) start as an instant point cloud with an explicit "render
+   full mesh" opt-in (normals built on demand).

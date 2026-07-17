@@ -224,3 +224,66 @@ formulas are bulk values).
 | pin Ø / pitch / pattern | d, p, stagger | cylinder + rectangular pattern(s) |
 | TPMS type | F̂ row in §3.1 | native block (A) or custom implicit (B) |
 | layout rectangular/cylinder | clip | Boolean Intersect volume |
+
+## 6. Export contract — files the Verify tab can check (V4, spec §38–45)
+
+The webapp's **Verify tab** (spec V4) imports an nTop export and verifies it
+against the same implicit field documented above — geometry deviation,
+solver-input audit, and DLP pixel raster. For the comparison to be
+meaningful, export exactly like this:
+
+1. **Format: binary STL, millimetres.** STL carries no units — export in mm
+   or note the scale (the tab can rescale, but say so). ASCII STL is
+   refused. 3MF may be accepted later; `.implicit` is deliberately **not**
+   supported (licensed SDK required, and implicit fields are only
+   comparable on the zero level set — see spec §38).
+2. **Frame: the §0 contract frame.** x = transverse (35 mm span),
+   y = flow (28 mm), z = height with the bottom face at z = 0, origin at
+   the core centre in x/y. The tab detects and offers to fix axis
+   swaps/offsets, but exporting in-frame avoids a registration step.
+3. **Declare the stage.** Know which geometry the file is — the tab asks:
+   - **final part** (design dimensions),
+   - **green** (×1.197 XY / ×1.230 Z), or
+   - **CAD-for-print** (green + pixel snap + fin −2 px / gap +2 px
+     overpoly compensation).
+   Comparing the wrong stage against the design shows a uniform ~1–2 %
+   "error" that is really the shrink/compensation — the tab warns when a
+   file looks like a different stage than declared.
+3b. **Core-only exports are supported.** If the export contains only the
+   fin/lattice core (the Proto2 workflow keeps the base as a separate
+   mechanical part), tick **"file has no base slab"** — the tab detects
+   this automatically when the body's height equals the fin height alone.
+   The reference then drops its base and fins land at z = 0 like the
+   floored file. Note the separate base STL (the full body with mounting
+   flanges, in its own frame) is a conventional CAD part outside this
+   implicit model — it cannot be verified here. For the **definitive
+   pre-print check**, export core + base as ONE body in the §0 frame once
+   per release: only then are the base raster and the fin-root junction
+   verified.
+3c. **The reference footprint comes from the ACTIVE PROJECT**, not from
+   the file: core_width × core_length (◆ chip in the top bar) plus the
+   selected candidate's base/fin heights. Verifying a 28×28 part while a
+   35×28 project is active FAILs honestly — select or create the project
+   the part was designed for first.
+4. **Record the meshing tolerance** used in nTop's mesh-from-implicit
+   block and enter it at import: it is the verification noise floor.
+   Recommended ≤ 10 µm (≈ ⅓ of a final-mapped pixel) — coarser tolerances
+   eat the entire PASS band (±14.6 µm, spec §40) with meshing error alone.
+5. **No repair/offset passes** between meshing and export (no smoothing,
+   thickening, or re-mesh) — the file should be the geometry you intend to
+   print, not a display copy.
+6. **Point-map check (mesh-free, spec §43 — BUILT).** The strongest
+   confirmation of a §3 rebuild, with no meshing tolerance in the loop:
+   1. In the Verify tab, open **"Point-map field check"** with the same
+      candidate/stage/settings selected and **⬇ generate the recipe CSV**
+      (three section planes, default 0.05 mm pitch; written in the model's
+      frame for the declared stage).
+   2. In nTop: **Import Point Map from CSV** → evaluate/sample your
+      implicit body at the points → **export the sampled map as CSV** —
+      the field value must ride along as the 4th column.
+   3. Drop the exported CSV back on the section. Points are re-binned from
+      their coordinates (row order doesn't matter) and either sign
+      convention (negative- or positive-inside) is auto-detected. The app
+      compares zero-crossing positions field-vs-field: same ½ / 1 px gates
+      as the mesh check; walls present in only one field force
+      MARGINAL/FAIL regardless of the µm statistics.

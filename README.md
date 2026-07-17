@@ -5,19 +5,62 @@ heat-sink designs as live implicit-body (SDF) 3D geometry next to their KPIs.
 Physics comes from the **validated** Cold Plate solvers — the browser never
 runs a second physics model.
 
-- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37)
+- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
-- **Status:** V3 complete — everything from V2 (projects & Design Studio:
-  coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts; fin +
-  TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros / Zukauskas); live
-  3D tuning, constrained optimizer, saved designs as candidates, report
-  export, mass/cost + R_jc uncertainty band, STL export, LAN hosting) **plus**
-  the V3 manufacturability layer: two-tier LMM/SLM DfAM rulebooks with live
-  PASS / MARGINAL / FAIL verdicts, per-design area readouts
-  (A_fin / A_eff / A_flow with ×N die amplification), Incus-compliant M1/M2/M3
-  presets (M1 = default), enforcement modes, green→CAD export chain, a DLP
-  pixel-preview tab, and a plain-language About rewrite.
+- **Status:** V4 complete (V4.0–V4.4) — everything from V2 (projects & Design
+  Studio: coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts;
+  fin + TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros /
+  Zukauskas); live 3D tuning, constrained optimizer, saved designs as
+  candidates, report export, mass/cost + R_jc uncertainty band, STL export,
+  LAN hosting) and V3 (two-tier LMM/SLM DfAM rulebooks with live
+  PASS / MARGINAL / FAIL verdicts, per-design area readouts, Incus-compliant
+  M1/M2/M3 presets (M1 = default), enforcement modes, green→CAD export chain,
+  DLP pixel-preview tab, plain-language About) **plus V4**: the **Verify
+  tab** and a full UI redesign.
+
+**Verify (V4).** Drop the binary STL Hieu exports from nTop onto the ✓ Verify
+tab and the app checks it against the same implicit geometry the solvers
+scored — entirely in the browser (a Web Worker; no new endpoints, no pip):
+**shape** (every vertex measured against the design surface; PASS = 95 % of
+the surface within ±15 µm — half an EVO35 pixel — and nothing beyond a full
+pixel), **solver inputs** (fin area, flow area, D_h, porosity, min fin/gap
+measured on the actual mesh vs what the KPIs assumed, with a file-level DfAM
+verdict and a ⟳ re-score through the validated solver), and **printer pixels**
+(every 25 µm layer rasterized on the DLP grid and XOR-diffed against the
+expected exposure — the pixel view gains a magenta "compare imported"
+overlay with a jump-to-worst-layer). A stage selector (final / green /
+CAD-for-print) compares against the right stage of the green→CAD chain —
+wrong stage, wrong units, 90° rotations and wrong-project footprints are
+detected and explained in words, never silently fixed; a **fins-only mode**
+("file has no base slab", auto-suggested) handles core-only exports like the
+Proto2 workflow, where the base is a separate mechanical part. The pixel view
+can show the **imported STL's own layers** on the DLP grid, not just the
+diff. Every number carries an ⓘ with what it is, how it was measured, the
+bound + source, and what to do if it fails. **V4.4 — point-map field check
+(mesh-free):** the Verify tab also generates a probe-point CSV; sample your
+nTop implicit body on it (Point Map → CSV with values) and drop it back —
+the app compares zero-crossing positions field-vs-field with no meshing
+tolerance in the loop, the strongest confirmation that the implicit math of
+a rebuild is right (self round-trip verifies exact: p95 = 0.0 µm over 149 k
+crossings).
+*Verification findings during the build:* the V3.3d pixel preview drew
+fins/pins half a pitch off their true position (a JS modulo bug — aggregate
+widths were right, so it went unnoticed; fixed), and the V2 TPMS wall→iso
+mapping draws lattice walls ~30 % thinner than nominal (drawn void ≈ 0.90 vs
+the analytic 0.852 the physics uses) — logged as spec §45-6 for calibration;
+the audit table shows this drift honestly on TPMS verifications until then.
+
+**UI (V4).** One long page in the spirit of scroll-driven studio sites: a
+100 vh hero (big type over the live implicit body, project status chips,
+clickable candidate strip) → scrolling dollies the camera from a far
+cinematic view into the working studio → a pinned workspace where the 3-D
+viewer is the full-bleed stage and everything else is a quiet glass overlay:
+candidates + sliders in a collapsible left drawer, KPIs right, the
+comparison/optimizer as a bottom drawer **collapsed by default**, and a
+3-D / ▦ Pixel / ✓ Verify switcher up top. Custom dot+ring cursor (grows on
+interactive elements, says "drag" over the 3-D view); reduced-motion users
+get no intro animation and keep the native cursor.
 
 **Optimizer.** The Optimizer tab sweeps two family-appropriate variables
 (fin t/b/H/A/λ · TPMS cell/wall/grading · pin Ø/pitch · flow) into an
@@ -132,9 +175,17 @@ For live-reload development (editing the UI), use the two-terminal setup under
 │  │                               webapp-native physics modules (V2)
 │  └─ data/                        master params + candidates + baseline cases
 └─ frontend/                       Vite + React + react-three-fiber UI
-   └─ src/                         App, SdfViewer (SDF shader), DesignControls,
-                                   KpiPanel, OptimizerPanel, PixelPreview,
-                                   GreenCad, About, …
+   ├─ src/                         App (V4 shell: hero → scroll → studio), SdfViewer
+   │  │                            (SDF shader + intro rig), DesignControls, KpiPanel,
+   │  │                            OptimizerPanel, PixelPreview (+ STL compare),
+   │  │                            VerifyTab / DeviationViewer / PointMapCheck,
+   │  │                            Hero, Cursor, GreenCad, About, …
+   │  └─ verify/                   V4 engine (all client-side, runs in a Web Worker):
+   │                               STL parse, vertex dedup + watertight check, implicit
+   │                               field mirror, stage transforms + hints, slicing +
+   │                               nonzero-winding raster, BVH, point-map field check
+   └─ test/verify-engine.test.cjs  V4 engine acceptance suite (node, no browser):
+                                   `npm run test:verify`
 ```
 
 ## Running the app
@@ -240,6 +291,15 @@ python test_v2_report.py             # V2.6 report / mass / uncertainty band
 python test_v2_sweep.py              # optimizer: family-aware + budget-constrained sweep
 python test_v3_manufacturing.py      # V3 rulebooks, verdicts, areas, presets, green→CAD recipe
 ```
+
+The V4 verify engine has its own node-based acceptance suite (no browser, no
+server): from `frontend/`, run **`npm run test:verify`** — it re-imports the
+app's own STL (expects an exact PASS with the EMBED ring classified as
+buried), checks green-stage detection, proves the deleted-fin fixture is
+caught by the reverse pass + layer XOR (and documented as invisible to the
+one-sided check), validates TPMS raster tracking, and round-trips the V4.4
+point-map check (exact PASS; a +0.06 mm fin perturbation must be detected;
+inverted sign conventions must be auto-handled).
 
 All V2/V3 features are **additive**: with no V2/V3 keys in a request,
 responses are bit-identical to V1 — `test_api_parity.py` enforces this after
