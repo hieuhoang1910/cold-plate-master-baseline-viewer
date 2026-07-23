@@ -708,44 +708,6 @@ function layoutArrows(g: ViewerGeom, code: number, nSeg: number): Arrow[] {
   return a
 }
 
-// V5.5 — follow-a-parcel: the camera rides the longest solved streamline at
-// slow-motion speed; Esc or the button exits. The 30-second design-review demo.
-function RideRig({ field, x0, y0, z }: {
-  field: FlowFieldResult; x0: number; y0: number; z: number
-}) {
-  const camera = useThree((s) => s.camera)
-  const line = useMemo(() => {
-    const offs = field.lineOffsets
-    let best = 0, bestT = -1
-    for (let l = 0; l < offs.length - 1; l++) {
-      const T = field.linePoints[3 * (offs[l + 1] - 1) + 2]
-      if (T > bestT) { bestT = T; best = l }
-    }
-    return { a: offs[best], b: offs[best + 1], T: bestT }
-  }, [field])
-  useFrame((state) => {
-    const { a, b, T } = line
-    if (!(T > 0) || b - a < 2) return
-    const P = field.linePoints
-    const tt = ((state.clock.elapsedTime / SLOWMO) % T + T) % T
-    let lo = a, hi = b - 1
-    while (lo + 1 < hi) {
-      const mid = (lo + hi) >> 1
-      if (P[3 * mid + 2] <= tt) lo = mid
-      else hi = mid
-    }
-    const f = P[3 * hi + 2] > P[3 * lo + 2] ? (tt - P[3 * lo + 2]) / (P[3 * hi + 2] - P[3 * lo + 2]) : 0
-    const px = x0 + P[3 * lo] + f * (P[3 * hi] - P[3 * lo])
-    const py = y0 + P[3 * lo + 1] + f * (P[3 * hi + 1] - P[3 * lo + 1])
-    const ax = P[3 * hi] - P[3 * lo], ay = P[3 * hi + 1] - P[3 * lo + 1]
-    const al = Math.hypot(ax, ay) || 1
-    camera.up.set(0, 0, 1)
-    camera.position.set(px - (ax / al) * 6, py - (ay / al) * 6, z + 4)
-    camera.lookAt(px + (ax / al) * 3, py + (ay / al) * 3, z)
-  })
-  return null
-}
-
 const _up = new THREE.Vector3(0, 1, 0)
 
 function FlowGlyphs({ g, code, nSeg }: { g: ViewerGeom; code: number; nSeg: number }) {
@@ -843,6 +805,8 @@ export function SdfViewer({
   const [flowOn, setFlowOn] = useState(false)
   const [colorMode, setColorMode] = useState<'steel' | 'thermal' | 'dp'>('steel')
   const [riding, setRiding] = useState(false)
+  const [soloRide, setSoloRide] = useState(true)
+  const [ridePov, setRidePov] = useState(false)
   const [showExplain, setShowExplain] = useState(false)
   const [probe, setProbe] = useState<{ x: number; y: number; text: string } | null>(null)
   const camRef = useRef<THREE.Camera | null>(null)
@@ -996,10 +960,8 @@ export function SdfViewer({
             coreWidth={g.coreWidth} coreLength={g.coreLength}
             z={g.baseThickness + g.finHeight * 0.62}
             mode={colorMode}
-            thermal={flow.thermal ? { TIn: flow.thermal.TIn, dTcal: flow.thermal.dTcal } : null} />
-        )}
-        {riding && field && (
-          <RideRig field={field} x0={-(field.nx * field.dx) / 2} y0={-(field.ny * field.dy) / 2} z={sheetZ} />
+            thermal={flow.thermal ? { TIn: flow.thermal.TIn, dTcal: flow.thermal.dTcal } : null}
+            riding={riding} solo={soloRide} pov={ridePov} />
         )}
         <OrbitControls
           makeDefault
@@ -1124,10 +1086,24 @@ export function SdfViewer({
               ≈ Flow
             </button>
             <button className={`vo-flowbtn ${riding ? 'on' : ''}`} disabled={!field || !flowOn}
-              onClick={() => setRiding(!riding)}
-              title="Follow a parcel: ride the longest solved streamline inlet → outlet at slow-motion speed (Esc exits)">
+              onClick={() => { if (!riding) setSoloRide(true); setRiding(!riding) }}
+              title="Follow a parcel: chase a bottom-layer parcel through its dive, run and exit — thermal colors live (Esc exits)">
               ▶ ride
             </button>
+            {riding && (
+              <>
+                <button className={`vo-flowbtn ${soloRide ? 'on' : ''}`}
+                  onClick={() => setSoloRide(!soloRide)}
+                  title="Solo: hide every parcel except the ridden one (its thin path streamline stays visible through the metal)">
+                  ◐ solo
+                </button>
+                <button className={`vo-flowbtn ${ridePov ? 'on' : ''}`}
+                  onClick={() => setRidePov(!ridePov)}
+                  title="POV: first-person from the parcel — the camera rides ON the path just behind the head, so you fly the wavy slot and watch the head warm">
+                  👁 pov
+                </button>
+              </>
+            )}
             <button className="vo-flowbtn" onClick={() => setShowExplain(true)}
               title="How the flow & thermal layers work — tiers, physics, chips, and what CFD confirms">
               ⓘ

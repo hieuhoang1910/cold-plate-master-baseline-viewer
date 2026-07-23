@@ -8,8 +8,8 @@
 // endings to the base level (lattce_lmm_rev3 geometry, user-confirmed).
 //
 // Distributed-jet (ICE) keeps the solved-streamline mode (short crossings).
-import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { SLOWMO } from '../flowviz'
 import type { FlowFieldResult } from '../flowfield/useFlowField'
@@ -35,6 +35,7 @@ interface Paths {
   linePts: Float32Array   // guide polylines (mid layer only in channel mode)
   lineOffs: Int32Array
   perLine: number         // comets per line
+  lineLayer: Int32Array   // depth-layer index per line (0 = bottom)
 }
 
 // JS mirror of the shader's heatmap colormap (4 stops).
@@ -51,6 +52,7 @@ function heat(t: number, out: THREE.Color) {
 
 export function FlowFieldLayer({
   field, g, coreWidth, coreLength, z, code = 1, mode = 'steel', thermal = null,
+  riding = false, solo = true, pov = false,
 }: {
   field: FlowFieldResult
   g: ViewerGeom
@@ -61,6 +63,12 @@ export function FlowFieldLayer({
   /** V5.7 — parcels carry the field values: thermal → fluid T, dp → pressure */
   mode?: 'steel' | 'thermal' | 'dp'
   thermal?: { TIn: number; dTcal: number } | null
+  /** V5.8 — parcel ride: camera chases a bottom-layer parcel */
+  riding?: boolean
+  /** hide all parcels except the ridden one */
+  solo?: boolean
+  /** first-person view: camera ON the path just behind the parcel head */
+  pov?: boolean
 }) {
   const x0 = -(field.nx * field.dx) / 2
   const y0 = -coreLength / 2
@@ -91,6 +99,7 @@ export function FlowFieldLayer({
     const offs: number[] = [0]
     const linePts: number[] = []
     const lineOffs: number[] = [0]
+    const lineLayer: number[] = []
 
     for (let li = 0; li < N_LAYERS; li++) {
       const lf = LAYER_LO + ((LAYER_HI - LAYER_LO) * li) / (N_LAYERS - 1)
@@ -160,6 +169,7 @@ export function FlowFieldLayer({
           }
           if (count >= 2) {
             offs.push(offs[offs.length - 1] + count)
+            lineLayer.push(li)
             if (isLineLayer) lineOffs.push(lineOffs[lineOffs.length - 1] + count)
           }
         }
@@ -168,7 +178,7 @@ export function FlowFieldLayer({
     return {
       pts: new Float32Array(pts), offs: new Int32Array(offs),
       linePts: new Float32Array(linePts), lineOffs: new Int32Array(lineOffs),
-      perLine: 1,
+      perLine: 1, lineLayer: new Int32Array(lineLayer),
     }
   }, [field, g, code, y0])
 
@@ -213,7 +223,10 @@ export function FlowFieldLayer({
     }
     const arr = new Float32Array(pts)
     const off = new Int32Array(offsOut)
-    return { pts: arr, offs: off, linePts: arr, lineOffs: off, perLine: 3 }
+    return {
+      pts: arr, offs: off, linePts: arr, lineOffs: off, perLine: 3,
+      lineLayer: new Int32Array(off.length - 1),
+    }
   }, [field, g, code, x0, y0])
 
   const ext = chan ?? solved
@@ -238,6 +251,54 @@ export function FlowFieldLayer({
   const maxInst = Math.max(1, nLines * ext.perLine * (1 + TRAIL))
   const cometRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])
+  const { camera } = useThree()
+
+  // V5.8 — the ridden parcel: a BOTTOM-layer line nearest mid-plate (the one
+  // that dives deepest); solved-streamline fallback rides the longest line.
+  const rideIdx = useMemo(() => {
+    const { offs, pts, lineLayer } = ext
+    const n = offs.length - 1
+    if (n === 0) return -1
+    let best = -1, bestScore = Infinity
+    for (let l = 0; l < n; l++) {
+      if (lineLayer[l] !== 0) continue
+      const score = Math.abs(pts[4 * offs[l]])
+      if (score < bestScore) { bestScore = score; best = l }
+    }
+    if (best >= 0 && ext !== solved) return best
+    let bt = -1
+    for (let l = 0; l < n; l++) {
+      const T = pts[4 * (offs[l + 1] - 1) + 3]
+      if (T > bt) { bt = T; best = l }
+    }
+    return best
+  }, [ext, solved])
+
+  // thin streamline tracing the ridden parcel's full path (through-metal)
+  const rideLineObj = useMemo(() => {
+    if (rideIdx < 0) return null
+    const { pts, offs } = ext
+    const arr: number[] = []
+    for (let k = offs[rideIdx]; k < offs[rideIdx + 1]; k++) {
+      arr.push(pts[4 * k], pts[4 * k + 1], pts[4 * k + 2])
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3))
+    const obj = new THREE.Line(geo, new THREE.LineBasicMaterial({
+      color: 0xd8f4ff, transparent: true, opacity: 0.65, depthTest: false,
+    }))
+    obj.frustumCulled = false
+    return obj
+  }, [ext, rideIdx])
+
+  const _ridePos = useMemo(() => new THREE.Vector3(), [])
+  const _rideDir = useMemo(() => new THREE.Vector3(0, 1, 0), [])
+  const _povPos = useMemo(() => new THREE.Vector3(), [])
+  useEffect(() => () => {
+    if (!rideLineObj) return
+    rideLineObj.geometry.dispose()
+    ;(rideLineObj.material as THREE.Material).dispose()
+  }, [rideLineObj])
 
   // max solved pressure (ΔP-mode particle normalization)
   const pMax = useMemo(() => {
@@ -252,7 +313,7 @@ export function FlowFieldLayer({
     const { pts: P, offs } = ext
     const tReal = state.clock.elapsedTime / SLOWMO
     let inst = 0
-    const place = (a: number, b: number, tt: number, ghost: number) => {
+    const place = (a: number, b: number, tt: number, ghost: number, big = false) => {
       let lo = a, hi = b - 1
       while (lo + 1 < hi) {
         const mid = (lo + hi) >> 1
@@ -272,8 +333,9 @@ export function FlowFieldLayer({
       if (dl > 1e-9) {
         _dir.divideScalar(dl)
         dummy.quaternion.setFromUnitVectors(_yAxis, _dir)
-        const shrink = 1 - ghost * 0.14
-        dummy.scale.set(shrink, COMET_STRETCH * (1 - ghost * 0.06), shrink)
+        const mag = big ? 2.1 : 1
+        const shrink = (1 - ghost * 0.14) * mag
+        dummy.scale.set(shrink, COMET_STRETCH * (1 - ghost * 0.06) * mag, shrink)
       } else {
         dummy.quaternion.identity()
         dummy.scale.set(1, 1, 1)
@@ -302,14 +364,22 @@ export function FlowFieldLayer({
       inst++
     }
     for (let l = 0; l < nLines; l++) {
+      if (riding && solo && l !== rideIdx) continue      // solo: only the ridden parcel
       const a = offs[l], b = offs[l + 1]
       const T = P[4 * (b - 1) + 3]
       if (!(T > 0)) continue
+      const isRide = riding && l === rideIdx
       for (let c = 0; c < ext.perLine; c++) {
         const head = ((tReal + (c / ext.perLine) * T + l * 0.37 * T) % T + T) % T
         for (let k = 0; k <= TRAIL; k++) {
           const tt = head - k * TRAIL_DT * T
-          if (tt >= 0) place(a, b, tt, k)
+          if (tt >= 0) {
+            place(a, b, tt, k, isRide && c === 0 && k === 0)
+            if (isRide && c === 0 && k === 0) {
+              _ridePos.copy(_pos)
+              if (_dir.lengthSq() > 1e-12) _rideDir.copy(_dir)
+            }
+          }
         }
       }
     }
@@ -322,13 +392,56 @@ export function FlowFieldLayer({
     }
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+
+    // V5.8 — ride cameras. CHASE tracks from just above the fin tips (a
+    // 0.15 mm channel can't host the camera; parcel + path render through
+    // the metal). POV sits ON the path just behind the head — first-person
+    // through the wavy slot, the warming head visible ahead.
+    if (riding && rideIdx >= 0) {
+      const a = offs[rideIdx], b = offs[rideIdx + 1]
+      const T = P[4 * (b - 1) + 3]
+      camera.up.set(0, 0, 1)
+      if (pov && T > 0) {
+        const head = ((tReal + rideIdx * 0.37 * T) % T + T) % T
+        const tBack = Math.max(head - 0.06 * T, 0)
+        // sample the path at the trailing time for the eye position
+        let lo = a, hi = b - 1
+        while (lo + 1 < hi) {
+          const m = (lo + hi) >> 1
+          if (P[4 * m + 3] <= tBack) lo = m
+          else hi = m
+        }
+        const t0 = P[4 * lo + 3], t1 = P[4 * hi + 3]
+        const f = t1 > t0 ? (tBack - t0) / (t1 - t0) : 0
+        _povPos.set(
+          P[4 * lo] + f * (P[4 * hi] - P[4 * lo]),
+          P[4 * lo + 1] + f * (P[4 * hi + 1] - P[4 * lo + 1]),
+          P[4 * lo + 2] + f * (P[4 * hi + 2] - P[4 * lo + 2]),
+        )
+        camera.position.set(_povPos.x, _povPos.y, _povPos.z + 0.35)
+        camera.lookAt(_ridePos.x, _ridePos.y, _ridePos.z + 0.05)
+      } else {
+        const zTopObj = g.baseThickness + g.finHeight
+        const dx2 = _rideDir.x, dy2 = _rideDir.y
+        const dl2 = Math.hypot(dx2, dy2) || 1
+        camera.position.set(
+          _ridePos.x - (dx2 / dl2) * 5.5,
+          _ridePos.y - (dy2 / dl2) * 5.5,
+          Math.max(_ridePos.z + 2.4, zTopObj + 1.1),
+        )
+        camera.lookAt(_ridePos.x + (dx2 / dl2) * 1.6, _ridePos.y + (dy2 / dl2) * 1.6, _ridePos.z)
+      }
+    }
   })
 
   return (
     <group>
-      <lineSegments geometry={lines} frustumCulled={false}>
-        <lineBasicMaterial color="#57c8ff" transparent opacity={0.22} depthTest={false} />
-      </lineSegments>
+      {!(riding && solo) && (
+        <lineSegments geometry={lines} frustumCulled={false}>
+          <lineBasicMaterial color="#57c8ff" transparent opacity={0.22} depthTest={false} />
+        </lineSegments>
+      )}
+      {riding && rideLineObj && <primitive object={rideLineObj} />}
       {/* comets depth-test against the raymarcher's written depth: fins occlude
           them, section cuts reveal them. key re-buffers when counts change */}
       <instancedMesh key={maxInst} ref={cometRef} args={[undefined, undefined, maxInst]}
