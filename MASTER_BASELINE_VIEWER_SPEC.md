@@ -1764,6 +1764,7 @@ probe that confirms it:
 | FC-4 | outlet temperature | T_in + ΔT_cal | 1-D | outlet probe |
 | FC-5 | low-flow zones | F1 map excerpt | T2 | recirculation / stagnation check |
 | FC-6 | jet aimed at the rib crown | geometric | T0 | stagnation-line location |
+| FC-7 | impingement-shaped rib crown softens the central turn → gentler flow-down, better fin wetting (hypothesis, no sim — user 2026-07-23) | geometric intent | T0 | wall-shear / wetting coverage + header-loss vs a sharp rib |
 
 This is the TD-10 / TD-11 work order, produced by the design itself — and
 because splits/uniformity are now *predicted*, an Ansys run genuinely
@@ -1801,6 +1802,14 @@ The id scheme exists now so the claims are machine-checkable later.
    word — are the top windows the pump-inlet side or the outlet side —
    which by network symmetry changes no S6 number, only the V5.2 arrow
    directions.
+   **RESOLVED 2026-07-23 (user):** the top windows are the **pump inlet**
+   — ducts feed downward, the interdigitated gaps return to the side
+   exits. Also recorded for the plain wavy-fin part (V1+2 hero /
+   `Wavy 28x28`): it uses top-down bi-directional centre-feed where the
+   middle rib is **impingement-jet-shaped on purpose** — the crown
+   softens the abrupt downward turn so the flow spreads and wets the fin
+   surface better. Stated as a design hypothesis, no simulation yet —
+   captured as checklist claim FC-7 (§52) for CFD to confirm.
 2. **Computed uniformity → KPI default** — proposal: always *shown*, feeds
    the KPI solve opt-in only, flipped to default after the first Ansys
    cross-check confirms S6 within ~10 %.

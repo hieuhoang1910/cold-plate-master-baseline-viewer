@@ -278,7 +278,10 @@ def compute(case, stack, op, arch, relative_roughness: float = 0.03,
         n_nodes, inlet, outlet = 2, 0, 1
         if layout.startswith("top_jet"):
             assumptions.append("jet slot entry loss is inside header_K_total "
-                               "(v6 convention); slot detail pending CFD (TD-11).")
+                               "(v6 convention); slot detail pending CFD (TD-11). "
+                               "The rib crown is impingement-shaped to soften the "
+                               "central turn (design hypothesis, FC-7 — uncredited "
+                               "until CFD).")
 
     elif layout == "serpentine_n_pass":
         # Series chain: each pass uses 1/n of the transverse width (velocity ×n).
@@ -385,9 +388,11 @@ def compute(case, stack, op, arch, relative_roughness: float = 0.03,
             f"{pitch * 1e3:.2f}. Duct distribution along its span treated as lumped "
             "(L/4 effective); slot/turn K values are estimates pending CFD (TD-10/11).")
         assumptions.append(
-            "feed-vs-return assignment is symmetric for this network — which "
-            "system connects to the pump only sets the arrow directions "
-            "(spec §54 Q1, pending Hieu).")
+            "ducts are the FEED side — the pump inlet enters via the top "
+            "windows; the interdigitated gaps return to the side exits "
+            "(user 2026-07-23, spec §54 Q1 resolved). The network is "
+            "symmetric under feed/return swap, so this sets the arrow "
+            "directions, not the numbers.")
 
     else:  # pragma: no cover — guarded above
         return {"supported": False, "model": MODEL, "layout": layout}
