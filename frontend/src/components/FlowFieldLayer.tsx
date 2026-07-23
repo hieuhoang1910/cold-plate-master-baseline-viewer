@@ -422,26 +422,42 @@ export function FlowFieldLayer({
         const head = ((tReal + rideIdx * 0.37 * T) % T + T) % T
         camera.up.set(0, 0, 1)
         const zTopObj = g.baseThickness + g.finHeight
+        // the route's straight rail (chord of the ride line) — the chase
+        // camera dollies along it with FIXED orientation; the parcel weaves
+        // within the frame (POV is the fixating view, per user)
+        const sx = P[4 * a], sy = P[4 * a + 1]
+        let rx = P[4 * (b - 1)] - sx, ry = P[4 * (b - 1) + 1] - sy
+        const rl = Math.hypot(rx, ry) || 1
+        rx /= rl; ry /= rl
         if (pov) {
           sampleLine(Math.max(head - 0.06 * T, 0), _povPos)
           _povPos.z += 0.35
+          const k = 1 - Math.exp(-10 * delta)
+          if (!rideActive.current) {
+            _camSm.copy(_povPos)
+            _tgtSm.copy(_ridePos)
+            rideActive.current = true
+          } else {
+            _camSm.lerp(_povPos, k)
+            _tgtSm.lerp(_ridePos, 1 - Math.exp(-8 * delta))
+          }
+          camera.position.copy(_camSm)
+          camera.lookAt(_tgtSm.x, _tgtSm.y, _tgtSm.z + 0.05)
         } else {
-          // chase: hover above a point trailing the parcel on its own path
-          sampleLine(Math.max(head - 0.16 * T, 0), _povPos)
-          _povPos.z = Math.max(_ridePos.z + 2.4, zTopObj + 1.1)
+          // rigid dolly: project the lagged path point onto the rail
+          sampleLine(Math.max(head - 0.10 * T, 0), _povPos)
+          const s = (_povPos.x - sx) * rx + (_povPos.y - sy) * ry
+          _povPos.set(sx + rx * (s - 3.0), sy + ry * (s - 3.0), zTopObj + 1.2)
+          const k = 1 - Math.exp(-4 * delta)
+          if (!rideActive.current) {
+            _camSm.copy(_povPos)
+            rideActive.current = true
+          } else {
+            _camSm.lerp(_povPos, k)
+          }
+          camera.position.copy(_camSm)
+          camera.lookAt(_camSm.x + rx * 6.5, _camSm.y + ry * 6.5, _camSm.z - 3.6)
         }
-        // smooth position + look target (snap on ride start)
-        const k = 1 - Math.exp(-(pov ? 10 : 4) * delta)
-        if (!rideActive.current) {
-          _camSm.copy(_povPos)
-          _tgtSm.copy(_ridePos)
-          rideActive.current = true
-        } else {
-          _camSm.lerp(_povPos, k)
-          _tgtSm.lerp(_ridePos, 1 - Math.exp(-8 * delta))
-        }
-        camera.position.copy(_camSm)
-        camera.lookAt(_tgtSm.x, _tgtSm.y, _tgtSm.z + (pov ? 0.05 : 0))
       }
     } else {
       rideActive.current = false
