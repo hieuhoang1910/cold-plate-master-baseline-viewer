@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { fmt, milliKW } from '../format'
 import { ENFORCEMENT_MODES, type Enforcement } from '../manufacturing'
+import { FlowSchematic } from './FlowSchematic'
 import type { AppSchema, Project, ProjectSummary } from '../types'
 
 // A blank problem template for "New project".
@@ -206,6 +207,15 @@ export function DesignStudio({
                 onChange={(v) => patchA({ path_length_mm: v })} />
               <Num label="Header K" value={A.header_K_total ?? 1.5} step={0.1}
                 onChange={(v) => patchA({ header_K_total: v })} />
+
+              {/* V5.2 — routing preview for the chosen layout (topology only;
+                  the S6-computed fractions appear on the live card in Explore) */}
+              <FlowSchematic layout={A.name ?? 'center_feed_bidirectional'}
+                coreWidth={P.core_width_mm} coreLength={P.core_length_mm}
+                nSeg={A.name === 'serpentine_n_pass'
+                  ? Math.max(2, Math.round((A.path_length_mm ?? 3 * P.core_length_mm) / Math.max(P.core_length_mm, 1)))
+                  : Math.max(1, Math.floor((A.n_parallel_paths ?? 2) / 2))}
+                block={null} defaultOpen />
             </section>
           </div>
 

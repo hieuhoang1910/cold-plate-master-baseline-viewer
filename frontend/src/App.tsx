@@ -18,6 +18,8 @@ import { Cursor } from './components/Cursor'
 import { VerifyTab } from './components/VerifyTab'
 import { useVerify } from './verify/useVerify'
 import { geomFromCase } from './viewerGeom'
+import { flowVizFrom } from './flowviz'
+import { FlowSchematic } from './components/FlowSchematic'
 import { milliKW } from './format'
 import { normalizeRoute, type Enforcement } from './manufacturing'
 
@@ -173,6 +175,14 @@ export default function App() {
     [design, catalog],
   )
 
+  // V5.2 — flow-intent layer: layout routing at the S6 network-solved speed.
+  const flowViz = useMemo(
+    () => (design && catalog
+      ? flowVizFrom(design.family, catalog.basis, live?.flow_network ?? null, live?.velocity_m_s ?? null)
+      : null),
+    [design, catalog, live],
+  )
+
   const patchDesign = (p: Partial<DesignState>) =>
     setDesign((d) => (d ? { ...d, ...p } : d))
   const resetDesign = () => {
@@ -282,7 +292,7 @@ export default function App() {
         data-cursor="drag">
         {geom && design
           ? <SdfViewer g={geom} designId={design.design_id} family={design.family} introT={introT}
-              hud={viewMode === '3d'} gizmoMargin={[rightOpen ? 476 : 110, 116]} />
+              hud={viewMode === '3d'} gizmoMargin={[rightOpen ? 476 : 110, 116]} flow={flowViz} />
           : <div className="stage-empty">{catalog && <ViewerPlaceholder r={selected} />}</div>}
       </div>
 
@@ -403,6 +413,13 @@ export default function App() {
                     : <div className="card muted" style={{ fontSize: 14 }}>
                         Live tuning covers wavy / straight fin and gyroid designs.
                       </div>}
+
+                  {flowViz && (
+                    <FlowSchematic layout={flowViz.layout} nSeg={flowViz.nSeg}
+                      coreWidth={catalog.basis.stack.core_width_mm}
+                      coreLength={catalog.basis.stack.core_length_mm}
+                      block={live?.flow_network ?? null} />
+                  )}
 
                   {design && (
                     <button className="save-cand" onClick={saveAsCandidate}

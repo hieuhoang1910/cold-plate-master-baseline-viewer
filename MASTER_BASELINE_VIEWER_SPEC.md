@@ -1874,3 +1874,35 @@ The id scheme exists now so the claims are machine-checkable later.
   with header sensitivity and U≠Z, distributed-jet mirror symmetry and ΔP
   decomposition, opt-in coupling semantics, additive discipline). Full
   suite green: parity 5/5 golden-exact + all V2/V3 suites.
+
+**V5.2 BUILT 2026-07-23 (same day) — the T0 visual layer.**
+
+- **Flow-intent lanes in the raymarcher** (`SdfViewer.tsx`): a translucent
+  fluid sheet at 0.58·H with dashes advected along the per-layout path
+  field `s(p)` in GLSL — single-pass/U-flow straight-through, center-feed
+  radiating outward from the rib, serpentine alternating per pass band,
+  distributed-jet radiating from the feed-duct lines (period 2·pitch).
+  Masked to the open channel by the same SDF (`coreField`), clipped by the
+  section cuts, so lanes weave between the wavy fins automatically. Dash
+  speed = the **mean S6 per-path velocity** at ×50 slow-motion (§54 Q5).
+  ICE dash registration to the exact duct positions is nominal (period-
+  aligned, not mesh-registered) — refined when F1 lands (V5.3).
+- **Routing glyphs** (`FlowGlyphs`): cone-arrow annotations per layout —
+  ICE draws feed arrows DOWN at the duct lines, returns UP between them
+  and side-exit arrows out both faces (the §54 Q1 resolved directions);
+  center-feed draws the jet down onto the rib crown + outward split.
+- **HUD**: `≈ Flow` toggle in the viewer controls; when on, chips state
+  the contract — "design intent — confirm by CFD", the time-scale + real
+  velocity ("×50 slow-mo · 1 s ≈ 20 ms real · v X m/s"), the §49
+  reconciliation ✓/⚠, and the computed uniformity U.
+- **Flow-route schematic card** (`FlowSchematic.tsx`): plan-view SVG with
+  CSS marching-dash routing per layout; ICE shows the feed windows
+  (labelled "pump in, from top"), side-venting returns and **per-duct
+  computed fractions** from S6; footer states U computed vs assumed, the
+  ΔP friction + minor split, and the reconciliation verdict. Mounted live
+  in the left drawer (V5-D7) and as a topology-only preview under the
+  Design Studio layout selector (§54 Q5).
+- **Plumbing**: `flowviz.ts` (layout→shader-code map, SLOWMO const),
+  `FlowNetworkBlock` types, `flow_network` carried on `BaselineResult`.
+- **Gates**: `tsc` + production build clean; server untouched — parity
+  5/5 + V5 suite re-run green.

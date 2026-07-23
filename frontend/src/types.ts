@@ -61,6 +61,37 @@ export interface MfgInfo {
   checks: MfgCheck[]
 }
 
+// V5.1 — S6 flow-network block (fin families only; additive, spec §47).
+export interface FlowPathInfo {
+  label: string
+  flow_fraction: number
+  velocity_m_s: number
+  Re: number
+}
+export interface FlowNetworkBlock {
+  supported: boolean
+  model: string
+  layout: string
+  n_paths?: number
+  deltaP_Pa?: number
+  deltaP_breakdown?: { friction_Pa?: number; minor_Pa?: number }
+  per_path?: FlowPathInfo[]
+  uniformity_computed?: number
+  uniformity_assumed?: number
+  assumptions?: string[]
+  warnings?: string[]
+  applied_to_kpis?: boolean
+  reconciliation?: {
+    solver_deltaP_Pa: number
+    network_deltaP_Pa: number
+    ratio: number
+    within_tolerance: boolean
+    tolerance: number
+  }
+  note?: string
+  error?: string
+}
+
 // Mirrors the master engine BaselineResult (asdict) returned by the API.
 export interface BaselineResult {
   design_id: string
@@ -113,6 +144,8 @@ export interface BaselineResult {
   manufacturability?: MfgInfo
   // V3.3 — set on the built-in Incus M-presets.
   preset?: boolean
+  // V5.1 — S6 flow-network block (fin families; spec §47).
+  flow_network?: FlowNetworkBlock
 }
 
 // V2.1 — /api/schema (wizard metadata). Only the parts the viewer uses today.

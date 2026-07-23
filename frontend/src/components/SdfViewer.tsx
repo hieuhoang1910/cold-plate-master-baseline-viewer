@@ -4,6 +4,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import * as THREE from 'three'
 import { fmt } from '../format'
 import { buildStl, type StlQuality } from '../stl'
+import { timeScaleLabel, type FlowViz } from '../flowviz'
 import type { ViewerGeom } from '../viewerGeom'
 
 function fmtBytes(n: number): string {
@@ -38,6 +39,14 @@ uniform float uPinD, uPinPitch, uPinStagger;
 uniform vec3 uCut;       // plane position per axis (mm)
 uniform vec3 uCutSign;   // +1 removes the +side, -1 removes the -side
 uniform vec3 uCutOn;     // 1 = plane enabled, 0 = off
+// V5.2 flow-intent layer (T0): dashes advected along the layout's route at the
+// S6-solved speed (slow-motion). Drawn on a mid-height fluid plane, masked to
+// the open channel by the same SDF — design intent, not CFD.
+uniform float uFlowOn;     // 1 = layer visible
+uniform float uTime;       // seconds
+uniform float uFlowLayout; // 0 single/u-flow · 1 center-feed · 2 serpentine · 3 distributed-jet
+uniform float uFlowSpeed;  // dash speed, mm/s (slow-motion already applied)
+uniform float uNSeg;       // serpentine passes / distributed-jet duct count
 
 const float PI = 3.14159265359;
 
@@ -72,11 +81,7 @@ float tpmsField(vec3 p, float k, float ty) {
        + cos(2.0 * z) * sin(x) * cos(y);
 }
 
-float mapScene(vec3 p) {
-  // base slab: z in [0, uBase]
-  float base = sdBox(p - vec3(0.0, 0.0, uBase * 0.5),
-                     vec3(uW * 0.5, uL * 0.5, uBase * 0.5));
-
+float coreField(vec3 p) {
   float zc = uBase + uH * 0.5;
   float core;
 
@@ -127,13 +132,43 @@ float mapScene(vec3 p) {
     }
   }
 
-  float solid = min(base, core);
+  return core;
+}
 
-  // section planes (each removes one side of one axis when enabled)
-  if (uCutOn.x > 0.5) solid = max(solid, uCutSign.x * (p.x - uCut.x));
-  if (uCutOn.y > 0.5) solid = max(solid, uCutSign.y * (p.y - uCut.y));
-  if (uCutOn.z > 0.5) solid = max(solid, uCutSign.z * (p.z - uCut.z));
-  return solid;
+// > 0 where a section plane has removed the point.
+float cutsRemove(vec3 p) {
+  float d = -1e6;
+  if (uCutOn.x > 0.5) d = max(d, uCutSign.x * (p.x - uCut.x));
+  if (uCutOn.y > 0.5) d = max(d, uCutSign.y * (p.y - uCut.y));
+  if (uCutOn.z > 0.5) d = max(d, uCutSign.z * (p.z - uCut.z));
+  return d;
+}
+
+float mapScene(vec3 p) {
+  // base slab: z in [0, uBase]
+  float base = sdBox(p - vec3(0.0, 0.0, uBase * 0.5),
+                     vec3(uW * 0.5, uL * 0.5, uBase * 0.5));
+  float solid = min(base, coreField(p));
+  return max(solid, cutsRemove(p));
+}
+
+// V5.2 — distance along the layout's intended route (mm). Dash phase moves
+// toward increasing s, so the animation direction IS the routing direction
+// (ICE: outward from the feed lines — top windows are the pump inlet, §54 Q1).
+float flowPhase(vec3 p) {
+  float yy = p.y + uL * 0.5;                      // 0 at the -y edge
+  if (uFlowLayout < 0.5) return yy;               // single pass / u-flow
+  if (uFlowLayout < 1.5) return abs(p.y);         // center-feed: outward from the rib
+  if (uFlowLayout < 2.5) {                        // serpentine: alternating passes
+    float bandW = uW / max(uNSeg, 1.0);
+    float seg = floor((p.x + uW * 0.5) / bandW);
+    float along = (mod(seg, 2.0) < 0.5) ? yy : (uL - yy);
+    return seg * uL + along;
+  }
+  // distributed-jet compartments: feed lines every 2·pitch (duct pitch),
+  // dashes radiate from each feed line to its two neighbouring return gaps
+  float pc = uL / (2.0 * max(uNSeg, 1.0));        // compartment pitch
+  return abs(mod(yy, 2.0 * pc) - pc);
 }
 
 vec3 calcNormal(vec3 p) {
@@ -163,25 +198,44 @@ void main() {
     if (t > 500.0) break;
   }
 
+  vec3 col;
   if (hit < 0.0) {
-    vec3 bg = mix(vec3(0.055, 0.075, 0.10), vec3(0.10, 0.13, 0.17), vUv.y);
-    gl_FragColor = vec4(bg, 1.0);
-    return;
+    col = mix(vec3(0.055, 0.075, 0.10), vec3(0.10, 0.13, 0.17), vUv.y);
+  } else {
+    vec3 nor = calcNormal(pos);
+    vec3 vdir = -rd;
+    vec3 L1 = normalize(vec3(0.45, 0.35, 0.82));
+    vec3 L2 = normalize(vec3(-0.5, -0.6, 0.4));
+    float d1 = max(dot(nor, L1), 0.0);
+    float d2 = max(dot(nor, L2), 0.0);
+    float amb = 0.28 + 0.12 * clamp(nor.z, 0.0, 1.0);
+    float h = clamp((pos.z - uBase) / max(uH, 1e-3), 0.0, 1.0);
+    vec3 steel = mix(vec3(0.50, 0.53, 0.57), vec3(0.80, 0.82, 0.85), h); // stainless, brighter at tips
+    col = steel * (amb + 0.75 * d1) + vec3(1.0) * (0.20 * d2);
+    float fres = pow(1.0 - max(dot(nor, vdir), 0.0), 3.0);
+    col += fres * 0.14;
+    col = pow(col, vec3(0.4545));                   // gamma (solid only, as V1)
   }
 
-  vec3 nor = calcNormal(pos);
-  vec3 vdir = -rd;
-  vec3 L1 = normalize(vec3(0.45, 0.35, 0.82));
-  vec3 L2 = normalize(vec3(-0.5, -0.6, 0.4));
-  float d1 = max(dot(nor, L1), 0.0);
-  float d2 = max(dot(nor, L2), 0.0);
-  float amb = 0.28 + 0.12 * clamp(nor.z, 0.0, 1.0);
-  float h = clamp((pos.z - uBase) / max(uH, 1e-3), 0.0, 1.0);
-  vec3 steel = mix(vec3(0.50, 0.53, 0.57), vec3(0.80, 0.82, 0.85), h);   // stainless steel, brighter at fin tips
-  vec3 col = steel * (amb + 0.75 * d1) + vec3(1.0) * (0.20 * d2);
-  float fres = pow(1.0 - max(dot(nor, vdir), 0.0), 3.0);
-  col += fres * 0.14;
-  col = pow(col, vec3(0.4545));                       // gamma
+  // V5.2 — flow-intent lanes: a translucent fluid sheet at mid-fin height,
+  // masked to the open channel, dashes advected along the route at S6 speed.
+  if (uFlowOn > 0.5 && abs(rd.z) > 1e-5) {
+    float zPlane = uBase + uH * 0.58;
+    float tp = (zPlane - ro.z) / rd.z;
+    if (tp > 0.0 && (hit < 0.0 || tp < hit)) {
+      vec3 fp = ro + rd * tp;
+      bool inCore = abs(fp.x) < uW * 0.5 - uMargin && abs(fp.y) < uL * 0.5;
+      if (inCore && cutsRemove(fp) < 0.0 && coreField(fp) > 0.012) {
+        float dashLen = max(uLambda, 1.2);
+        float ph = (flowPhase(fp) - uFlowSpeed * uTime) / dashLen;
+        float dash = smoothstep(0.50, 0.28, abs(fract(ph) - 0.5));
+        vec3 water = vec3(0.22, 0.72, 1.0);         // display-space accent
+        float alpha = 0.10 + 0.42 * dash;
+        col = mix(col, water, alpha);
+      }
+    }
+  }
+
   gl_FragColor = vec4(col, 1.0);
 }
 `
@@ -194,7 +248,15 @@ const TPMS_IDX: Record<string, number> = {
 interface Cut { on: boolean; pos: number; flip: boolean }
 interface Cuts { x: Cut; y: Cut; z: Cut }
 
-function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
+/** V5.2 — what the flow layer animates (from flowVizFrom, null = layer off). */
+export interface FlowLayer {
+  on: boolean
+  code: number
+  speedMmS: number
+  nSeg: number
+}
+
+function RayMarcher({ g, cuts, flow }: { g: ViewerGeom; cuts: Cuts; flow: FlowLayer | null }) {
   const { camera } = useThree()
   const matRef = useRef<THREE.ShaderMaterial>(null)
 
@@ -226,9 +288,23 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
       uCut: { value: new THREE.Vector3(cuts.x.pos, cuts.y.pos, cuts.z.pos) },
       uCutSign: { value: new THREE.Vector3(1, 1, 1) },
       uCutOn: { value: new THREE.Vector3(0, 0, 0) },
+      uFlowOn: { value: 0 },
+      uTime: { value: 0 },
+      uFlowLayout: { value: 1 },
+      uFlowSpeed: { value: 0 },
+      uNSeg: { value: 2 },
     }),
     [], // created once; kept in sync by the effects below
   )
+
+  useEffect(() => {
+    const u = matRef.current?.uniforms
+    if (!u) return
+    u.uFlowOn.value = flow?.on ? 1 : 0
+    u.uFlowLayout.value = flow?.code ?? 1
+    u.uFlowSpeed.value = flow?.speedMmS ?? 0
+    u.uNSeg.value = flow?.nSeg ?? 2
+  }, [flow])
 
   useEffect(() => {
     const u = matRef.current?.uniforms
@@ -265,13 +341,14 @@ function RayMarcher({ g, cuts }: { g: ViewerGeom; cuts: Cuts }) {
     u.uCutOn.value.set(cuts.x.on ? 1 : 0, cuts.y.on ? 1 : 0, cuts.z.on ? 1 : 0)
   }, [cuts])
 
-  useFrame(() => {
+  useFrame((state) => {
     const u = matRef.current?.uniforms
     if (!u) return
     u.uInvViewProj.value
       .copy(camera.projectionMatrix)
       .multiply(camera.matrixWorldInverse)
       .invert()
+    u.uTime.value = state.clock.elapsedTime
   })
 
   const positions = useMemo(() => new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), [])
@@ -365,6 +442,84 @@ function ViewController({
   return null
 }
 
+// ---------------------------------------------------------------------------
+// V5.2 — routing glyphs: cone+shaft arrows stating the layout's intended flow
+// directions (annotations drawn over the raymarch — design intent, not CFD).
+// Directions follow §54 Q1: ICE top windows are the pump INLET (feed down),
+// returns vent at the part sides; center-feed splits outward at the rib.
+// ---------------------------------------------------------------------------
+interface Arrow { pos: [number, number, number]; dir: [number, number, number]; len: number; feed?: boolean }
+
+function layoutArrows(g: ViewerGeom, code: number, nSeg: number): Arrow[] {
+  const W = g.coreWidth, L = g.coreLength
+  const zTop = g.baseThickness + g.finHeight
+  const a: Arrow[] = []
+  if (code === 0) {
+    // single pass / u-flow: in at -y, straight through, out at +y
+    a.push({ pos: [0, -L / 2 - 5, zTop / 2], dir: [0, 1, 0], len: 4.5, feed: true })
+    a.push({ pos: [0, L / 2 + 1.5, zTop / 2], dir: [0, 1, 0], len: 4.5 })
+  } else if (code === 1) {
+    // center-feed: down onto the rib crown, split outward, out both ends
+    a.push({ pos: [0, 0, zTop + 5.5], dir: [0, 0, -1], len: 4.5, feed: true })
+    a.push({ pos: [0, L / 8, zTop + 1.2], dir: [0, 1, 0], len: 3.2 })
+    a.push({ pos: [0, -L / 8, zTop + 1.2], dir: [0, -1, 0], len: 3.2 })
+    a.push({ pos: [0, L / 2 + 1.5, zTop / 2], dir: [0, 1, 0], len: 4 })
+    a.push({ pos: [0, -L / 2 - 5.5, zTop / 2], dir: [0, -1, 0], len: 4 })
+  } else if (code === 2) {
+    // serpentine: alternating passes with 180° turns
+    const bandW = W / nSeg
+    for (let k = 0; k < nSeg; k++) {
+      const x = -W / 2 + (k + 0.5) * bandW
+      const up = k % 2 === 0
+      a.push({ pos: [x, up ? -L / 4 : L / 4, zTop + 1.2], dir: [0, up ? 1 : -1, 0], len: 3.4, feed: k === 0 })
+    }
+    a.push({ pos: [-W / 2 + 0.5 * bandW, -L / 2 - 5, zTop / 2], dir: [0, 1, 0], len: 4, feed: true })
+  } else {
+    // distributed-jet (ICE rev 3): feed DOWN at each duct line (top windows =
+    // pump inlet), returns UP between them, collected out BOTH part sides
+    const pc = L / (2 * nSeg)
+    for (let k = 0; k < nSeg; k++) {
+      const y = -L / 2 + (2 * k + 1) * pc
+      a.push({ pos: [0, y, zTop + 4.6], dir: [0, 0, -1], len: 3.6, feed: true })
+    }
+    for (let k = 1; k < nSeg; k++) {
+      const y = -L / 2 + 2 * k * pc
+      a.push({ pos: [W / 4, y, zTop + 1.0], dir: [0, 0, 1], len: 2.6 })
+      a.push({ pos: [-W / 4, y, zTop + 1.0], dir: [0, 0, 1], len: 2.6 })
+    }
+    a.push({ pos: [W / 2 + 1.5, 0, zTop - 1], dir: [1, 0, 0], len: 4 })
+    a.push({ pos: [-W / 2 - 1.5, 0, zTop - 1], dir: [-1, 0, 0], len: 4 })
+  }
+  return a
+}
+
+const _up = new THREE.Vector3(0, 1, 0)
+
+function FlowGlyphs({ g, code, nSeg }: { g: ViewerGeom; code: number; nSeg: number }) {
+  const arrows = useMemo(() => layoutArrows(g, code, nSeg), [g, code, nSeg])
+  return (
+    <group>
+      {arrows.map((ar, i) => {
+        const dir = new THREE.Vector3(...ar.dir).normalize()
+        const quat = new THREE.Quaternion().setFromUnitVectors(_up, dir)
+        const color = ar.feed ? '#38c0ff' : '#7fd7ff'
+        return (
+          <group key={i} position={ar.pos} quaternion={quat}>
+            <mesh position={[0, ar.len * 0.32, 0]}>
+              <cylinderGeometry args={[0.28, 0.28, ar.len * 0.64, 10]} />
+              <meshBasicMaterial color={color} transparent opacity={0.85} depthTest={false} />
+            </mesh>
+            <mesh position={[0, ar.len * 0.78, 0]}>
+              <coneGeometry args={[0.75, ar.len * 0.44, 14]} />
+              <meshBasicMaterial color={color} transparent opacity={0.9} depthTest={false} />
+            </mesh>
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 const VIEW_BUTTONS: { key: string; label: string }[] = [
   { key: 'iso', label: 'Iso' },
   { key: 'top', label: 'Top' },
@@ -406,7 +561,7 @@ function AxisCut({
 }
 
 export function SdfViewer({
-  g, designId, family, introT = 1, hud = true, gizmoMargin = [56, 56],
+  g, designId, family, introT = 1, hud = true, gizmoMargin = [56, 56], flow = null,
 }: {
   g: ViewerGeom
   designId: string
@@ -417,6 +572,8 @@ export function SdfViewer({
   hud?: boolean
   /** gizmo offset — pushed left of the KPI drawer in stage mode */
   gizmoMargin?: [number, number]
+  /** V5.2 — flow-intent layer descriptor (null = fin-flow viz unavailable) */
+  flow?: FlowViz | null
 }) {
   const xMax = g.coreWidth / 2
   const yMax = g.coreLength / 2
@@ -430,6 +587,7 @@ export function SdfViewer({
     z: { on: false, pos: cz, flip: false },
   })
   const [cuts, setCuts] = useState<Cuts>(defaultCuts)
+  const [flowOn, setFlowOn] = useState(false)
   const [viewCmd, setViewCmd] = useState({ view: 'iso', n: 0 })
   const [stl, setStl] = useState<{ busy: boolean; note: string }>({ busy: false, note: '' })
   const [stlQuality, setStlQuality] = useState<StlQuality>('standard')
@@ -477,7 +635,9 @@ export function SdfViewer({
         camera={{ position: [-42, -52, 40], up: [0, 0, 1], fov: 40, near: 1, far: 4000 }}
         gl={{ antialias: true }}
       >
-        <RayMarcher g={g} cuts={cuts} />
+        <RayMarcher g={g} cuts={cuts}
+          flow={flow ? { on: flowOn, code: flow.code, speedMmS: flow.speedMmS, nSeg: flow.nSeg } : null} />
+        {flow && flowOn && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
         <OrbitControls
           makeDefault
           enabled={introT >= 1}
@@ -510,6 +670,27 @@ export function SdfViewer({
             </button>
           ))}
         </div>
+        {flow && flowOn && (
+          <div className="vo-flowchips">
+            <span className="vo-chip vo-chip-intent" title="Everything animated is the layout's routing at the S6 network-solved speed — a statement of design intent for CFD to confirm, not a simulation.">
+              design intent — confirm by CFD
+            </span>
+            <span className="vo-chip" title={`Dashes move at the S6 mean channel velocity (${fmt(flow.realV, 2)} m/s) slowed for readability.`}>
+              {timeScaleLabel()} · v {fmt(flow.realV, 2)} m/s
+            </span>
+            {flow.block?.reconciliation && (
+              <span className={`vo-chip ${flow.block.reconciliation.within_tolerance ? 'vo-chip-ok' : 'vo-chip-warn'}`}
+                title={`S6 network ΔP ${fmt(flow.block.reconciliation.network_deltaP_Pa / 1000, 1)} kPa vs solver ${fmt(flow.block.reconciliation.solver_deltaP_Pa / 1000, 1)} kPa (ratio ${fmt(flow.block.reconciliation.ratio, 3)}). KPI numbers are always the solver's.`}>
+                {flow.block.reconciliation.within_tolerance ? '✓ reconciled' : '⚠ ΔP diverges'}
+              </span>
+            )}
+            {flow.block?.uniformity_computed != null && (
+              <span className="vo-chip" title="S6 network-computed flow uniformity (1.0 = perfectly even split across paths).">
+                U {fmt(flow.block.uniformity_computed, 3)}
+              </span>
+            )}
+          </div>
+        )}
         <div className="vo-dims">
           {g.family === 'gyroid_tpms'
             ? (g.isPin
@@ -525,6 +706,15 @@ export function SdfViewer({
           pointerEvents: hud && introT >= 1 ? 'auto' : 'none',
           transition: 'opacity 0.4s ease',
         }}>
+        {flow && (
+          <>
+            <button className={`vo-flowbtn ${flowOn ? 'on' : ''}`} onClick={() => setFlowOn(!flowOn)}
+              title="Flow-intent layer: the layout's routing animated at the S6 network-solved speed (design intent — confirm by CFD)">
+              ≈ Flow
+            </button>
+            <span className="vo-sep" />
+          </>
+        )}
         <span className="vo-cuts-label">Section</span>
         <AxisCut axis="x" min={-xMax} max={xMax} cut={cuts.x} onChange={(p) => patch('x', p)} />
         <AxisCut axis="y" min={-yMax} max={yMax} cut={cuts.y} onChange={(p) => patch('y', p)} />
