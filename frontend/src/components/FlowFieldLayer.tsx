@@ -9,11 +9,12 @@ import { SLOWMO } from '../flowviz'
 import type { FlowFieldResult } from '../flowfield/useFlowField'
 import type { ViewerGeom } from '../viewerGeom'
 
-const COMETS_PER_LINE = 4
-const COMET_R = 0.09          // mm — well under a channel gap
-const COMET_STRETCH = 7       // elongation along the motion direction
-const TRAIL = 4               // fading ghosts behind each comet
-const TRAIL_DT = 0.012        // ghost spacing as a fraction of the line transit
+const COMETS_PER_LINE = 5
+const COMET_R = 0.085         // mm — well under a channel gap
+const COMET_STRETCH = 2.4     // gentle elongation — the TRAIL carries the motion
+const TRAIL = 6               // fading ghosts behind each comet
+const TRAIL_DT = 0.008        // ghost spacing as a fraction of the line transit
+const LEG_SPEED = 4           // vertical intent legs run at ~jet speed (× channel v)
 const _yAxis = new THREE.Vector3(0, 1, 0)
 const _dir = new THREE.Vector3()
 const _pos = new THREE.Vector3()
@@ -72,9 +73,11 @@ export function FlowFieldLayer({
   const ext = useMemo(() => {
     const P = snapped
     const offs = field.lineOffsets
-    const vertical = code === 1 || code === 3
+    const descend = code === 1 || code === 3    // fed from the manifold above
+    const riseEnd = code === 3                  // ICE returns rise (mesh-verified);
+    const outEnd = code === 1                   // center-feed exits into the end plenum
     const zTop = g.baseThickness + g.finHeight
-    const zM = zTop + 1.8                       // manifold level (visual intent)
+    const zM = zTop + 1.0                       // manifold level (visual intent)
     const pts: number[] = []
     const offsOut: number[] = [0]
     for (let l = 0; l < offs.length - 1; l++) {
@@ -87,10 +90,11 @@ export function FlowFieldLayer({
         return dt > 1e-12 ? d / dt : 0
       }
       let tShift = 0
-      if (vertical) {
+      if (descend) {
+        // dive in at ~jet speed — a brief plunge, not a standing column
         const v0 = segSpeed(a, a + 1)
         if (v0 > 0) {
-          tShift = (zM - z) / v0
+          tShift = (zM - z) / (v0 * LEG_SPEED)
           pts.push(x0 + P[3 * a], y0 + P[3 * a + 1], zM, 0)
           count++
         }
@@ -99,12 +103,25 @@ export function FlowFieldLayer({
         pts.push(x0 + P[3 * k], y0 + P[3 * k + 1], z, P[3 * k + 2] + tShift)
         count++
       }
-      if (vertical) {
-        const vE = segSpeed(b - 2, b - 1)
-        if (vE > 0) {
-          const tEnd = P[3 * (b - 1) + 2] + tShift
-          pts.push(x0 + P[3 * (b - 1)], y0 + P[3 * (b - 1) + 1], zM, tEnd + (zM - z) / vE)
+      const vE = segSpeed(b - 2, b - 1)
+      if (vE > 0) {
+        const tEnd = P[3 * (b - 1) + 2] + tShift
+        if (riseEnd) {
+          pts.push(x0 + P[3 * (b - 1)], y0 + P[3 * (b - 1) + 1], zM,
+                   tEnd + (zM - z) / (vE * LEG_SPEED))
           count++
+        } else if (outEnd) {
+          // horizontal exit into the end plenum, continuing the last direction
+          const dxE = P[3 * (b - 1)] - P[3 * (b - 2)]
+          const dyE = P[3 * (b - 1) + 1] - P[3 * (b - 2) + 1]
+          const dl = Math.hypot(dxE, dyE)
+          if (dl > 1e-9) {
+            const run = 2.5
+            pts.push(x0 + P[3 * (b - 1)] + (dxE / dl) * run,
+                     y0 + P[3 * (b - 1) + 1] + (dyE / dl) * run,
+                     z, tEnd + run / vE)
+            count++
+          }
         }
       }
       if (count >= 2) offsOut.push(offsOut[offsOut.length - 1] + count)
