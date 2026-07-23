@@ -320,11 +320,15 @@ void main() {
     }
   }
 
+  // three maps gl_FragDepthEXT -> gl_FragDepth in its WebGL2 prefix; using
+  // the EXT alias keeps the shader in three's compatibility path (an explicit
+  // glslVersion: GLSL3 would drop the gl_FragColor/varying defines — that
+  // exact mistake shipped once and blacked out the stage)
   if (hit >= 0.0) {
     vec4 clip = uViewProj * vec4(pos, 1.0);
-    gl_FragDepth = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
+    gl_FragDepthEXT = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
   } else {
-    gl_FragDepth = 1.0;
+    gl_FragDepthEXT = 1.0;
   }
   gl_FragColor = vec4(col, 1.0);
 }
@@ -562,7 +566,6 @@ function RayMarcher({ g, cuts, flow, tint, field }: {
         vertexShader={VERT}
         fragmentShader={FRAG}
         uniforms={uniforms}
-        glslVersion={THREE.GLSL3}
         depthTest={false}
         depthWrite
       />
