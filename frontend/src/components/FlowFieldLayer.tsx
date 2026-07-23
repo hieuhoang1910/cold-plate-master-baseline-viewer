@@ -109,8 +109,11 @@ export function FlowFieldLayer({
           // (no continued sinking — pressure equalizes across the 0.15 mm
           // gap instantly by comparison). Exits stay straight out.
           const legs = code === 1
-          const zHi = g.baseThickness + g.finHeight * 0.92
-          const settle = 0.8 * g.finHeight     // development length ≈ one channel height
+          const zHi = g.baseThickness + g.finHeight * 0.95
+          // settle shortened below the ~1·H physics estimate so the descent
+          // fan reads clearly as DESIGN INTENT (user 2026-07-23); CFD will
+          // measure the real development length (FC checklist)
+          const settle = 0.45 * g.finHeight
           let t = 0
           let count = 0
           const emit = (xo: number, yo: number, zo: number, tt: number) => {
