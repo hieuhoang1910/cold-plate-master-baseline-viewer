@@ -955,7 +955,8 @@ export function SdfViewer({
         <RayMarcher g={g} cuts={cuts}
           flow={flow ? { on: vizActive, code: flow.code, speedMmS: flow.speedMmS, nSeg: flow.nSeg } : null}
           tint={tint} field={vizActive ? field : null} />
-        {flow && flowOn && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
+        {/* routing glyphs hidden while riding — they block the chase view */}
+        {flow && flowOn && !riding && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
         {flow && flowOn && field && (
           <FlowFieldLayer field={field} g={g} code={flow.code}
             coreWidth={g.coreWidth} coreLength={g.coreLength}
