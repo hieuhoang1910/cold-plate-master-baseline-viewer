@@ -52,7 +52,7 @@ function heat(t: number, out: THREE.Color) {
 
 export function FlowFieldLayer({
   field, g, coreWidth, coreLength, z, code = 1, mode = 'steel', thermal = null,
-  riding = false, solo = true, pov = false,
+  riding = false, solo = true, pov = false, rideLayer = 'bottom',
 }: {
   field: FlowFieldResult
   g: ViewerGeom
@@ -69,6 +69,8 @@ export function FlowFieldLayer({
   solo?: boolean
   /** first-person view: camera ON the path just behind the parcel head */
   pov?: boolean
+  /** which depth layer's parcel to ride (chase and POV) */
+  rideLayer?: 'bottom' | 'middle' | 'top'
 }) {
   const x0 = -(field.nx * field.dx) / 2
   const y0 = -coreLength / 2
@@ -253,15 +255,17 @@ export function FlowFieldLayer({
   const dummy = useMemo(() => new THREE.Object3D(), [])
   const { camera } = useThree()
 
-  // V5.8 — the ridden parcel: a BOTTOM-layer line nearest mid-plate (the one
-  // that dives deepest); solved-streamline fallback rides the longest line.
+  // V5.8 — the ridden parcel: a line on the CHOSEN depth layer nearest
+  // mid-plate; solved-streamline fallback rides the longest line.
   const rideIdx = useMemo(() => {
     const { offs, pts, lineLayer } = ext
     const n = offs.length - 1
     if (n === 0) return -1
+    const want = rideLayer === 'top' ? N_LAYERS - 1
+      : rideLayer === 'middle' ? Math.floor(N_LAYERS / 2) : 0
     let best = -1, bestScore = Infinity
     for (let l = 0; l < n; l++) {
-      if (lineLayer[l] !== 0) continue
+      if (lineLayer[l] !== want) continue
       const score = Math.abs(pts[4 * offs[l]])
       if (score < bestScore) { bestScore = score; best = l }
     }
@@ -272,7 +276,7 @@ export function FlowFieldLayer({
       if (T > bt) { bt = T; best = l }
     }
     return best
-  }, [ext, solved])
+  }, [ext, solved, rideLayer])
 
   // thin streamline tracing the ridden parcel's full path (through-metal)
   const rideLineObj = useMemo(() => {

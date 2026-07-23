@@ -807,6 +807,7 @@ export function SdfViewer({
   const [riding, setRiding] = useState(false)
   const [soloRide, setSoloRide] = useState(true)
   const [ridePov, setRidePov] = useState(false)
+  const [rideLayer, setRideLayer] = useState<'bottom' | 'middle' | 'top'>('bottom')
   const [showExplain, setShowExplain] = useState(false)
   const [probe, setProbe] = useState<{ x: number; y: number; text: string } | null>(null)
   const camRef = useRef<THREE.Camera | null>(null)
@@ -961,7 +962,7 @@ export function SdfViewer({
             z={g.baseThickness + g.finHeight * 0.62}
             mode={colorMode}
             thermal={flow.thermal ? { TIn: flow.thermal.TIn, dTcal: flow.thermal.dTcal } : null}
-            riding={riding} solo={soloRide} pov={ridePov} />
+            riding={riding} solo={soloRide} pov={ridePov} rideLayer={rideLayer} />
         )}
         <OrbitControls
           makeDefault
@@ -1102,6 +1103,13 @@ export function SdfViewer({
                   title="POV: first-person from the parcel — the camera rides ON the path just behind the head, so you fly the wavy slot and watch the head warm">
                   👁 pov
                 </button>
+                <select className="vo-stlq" value={rideLayer}
+                  title="Which depth layer's parcel to ride — top enters near the fin tips, bottom skims the floor"
+                  onChange={(e) => setRideLayer(e.target.value as 'bottom' | 'middle' | 'top')}>
+                  <option value="bottom">bottom layer</option>
+                  <option value="middle">middle layer</option>
+                  <option value="top">top layer</option>
+                </select>
               </>
             )}
             <button className="vo-flowbtn" onClick={() => setShowExplain(true)}
