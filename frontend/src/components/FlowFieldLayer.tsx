@@ -9,12 +9,16 @@ import { SLOWMO } from '../flowviz'
 import type { FlowFieldResult } from '../flowfield/useFlowField'
 import type { ViewerGeom } from '../viewerGeom'
 
-const COMETS_PER_LINE = 5
-const COMET_R = 0.085         // mm — well under a channel gap
-const COMET_STRETCH = 2.4     // gentle elongation — the TRAIL carries the motion
+const COMETS_PER_LINE = 4
+const COMET_R = 0.07          // mm — reads as a particle, not a shape
+const COMET_STRETCH = 1.35    // near-round head — the TRAIL carries the motion
 const TRAIL = 6               // fading ghosts behind each comet
 const TRAIL_DT = 0.008        // ghost spacing as a fraction of the line transit
-const LEG_SPEED = 4           // vertical intent legs run at ~jet speed (× channel v)
+const LEG_SPEED = 2           // vertical intent legs (visible dive, not a column)
+// depth layers: particles fill the channel height, upper layers entering high
+// and all drifting DOWN along the run (center-feed intent: down at mid-top,
+// sloping along the fins, out the 45° ramps at the fin endings — lattce_lmm_rev3)
+const LAYER_F = [0.80, 0.55, 0.30]
 const _yAxis = new THREE.Vector3(0, 1, 0)
 const _dir = new THREE.Vector3()
 const _pos = new THREE.Vector3()
@@ -35,6 +39,7 @@ export function FlowFieldLayer({
   const x0 = -(field.nx * field.dx) / 2
   const y0 = -coreLength / 2
   void coreWidth
+  void z // layers/drift set their own z now (LAYER_F); prop kept for API stability
 
   // V5.5 — snap streamline points onto the nearest wavy channel centerline.
   // The F1 field is homogenized (per-cell, not fin-resolved); snapping makes
@@ -74,61 +79,68 @@ export function FlowFieldLayer({
     const P = snapped
     const offs = field.lineOffsets
     const descend = code === 1 || code === 3    // fed from the manifold above
-    const riseEnd = code === 3                  // ICE returns rise (mesh-verified);
-    const outEnd = code === 1                   // center-feed exits into the end plenum
+    const riseEnd = code === 3                  // ICE returns rise (mesh-verified)
+    const rampEnd = code === 1                  // 45° ramp down-and-out at the fin endings
+    const drift = code === 1                    // continuous downward drift along the run
     const zTop = g.baseThickness + g.finHeight
     const zM = zTop + 1.0                       // manifold level (visual intent)
+    const zExit = g.baseThickness + g.finHeight * 0.18
     const pts: number[] = []
     const offsOut: number[] = [0]
-    for (let l = 0; l < offs.length - 1; l++) {
-      const a = offs[l], b = offs[l + 1]
-      if (b - a < 2) continue
-      let count = 0
-      const segSpeed = (k1: number, k2: number) => {
-        const d = Math.hypot(P[3 * k2] - P[3 * k1], P[3 * k2 + 1] - P[3 * k1 + 1])
-        const dt = P[3 * k2 + 2] - P[3 * k1 + 2]
-        return dt > 1e-12 ? d / dt : 0
-      }
-      let tShift = 0
-      if (descend) {
-        // dive in at ~jet speed — a brief plunge, not a standing column
-        const v0 = segSpeed(a, a + 1)
-        if (v0 > 0) {
-          tShift = (zM - z) / (v0 * LEG_SPEED)
-          pts.push(x0 + P[3 * a], y0 + P[3 * a + 1], zM, 0)
-          count++
-        }
-      }
-      for (let k = a; k < b; k++) {
-        pts.push(x0 + P[3 * k], y0 + P[3 * k + 1], z, P[3 * k + 2] + tShift)
-        count++
-      }
-      const vE = segSpeed(b - 2, b - 1)
-      if (vE > 0) {
-        const tEnd = P[3 * (b - 1) + 2] + tShift
-        if (riseEnd) {
-          pts.push(x0 + P[3 * (b - 1)], y0 + P[3 * (b - 1) + 1], zM,
-                   tEnd + (zM - z) / (vE * LEG_SPEED))
-          count++
-        } else if (outEnd) {
-          // horizontal exit into the end plenum, continuing the last direction
-          const dxE = P[3 * (b - 1)] - P[3 * (b - 2)]
-          const dyE = P[3 * (b - 1) + 1] - P[3 * (b - 2) + 1]
-          const dl = Math.hypot(dxE, dyE)
-          if (dl > 1e-9) {
-            const run = 2.5
-            pts.push(x0 + P[3 * (b - 1)] + (dxE / dl) * run,
-                     y0 + P[3 * (b - 1) + 1] + (dyE / dl) * run,
-                     z, tEnd + run / vE)
+    const segSpeed = (k1: number, k2: number) => {
+      const d = Math.hypot(P[3 * k2] - P[3 * k1], P[3 * k2 + 1] - P[3 * k1 + 1])
+      const dt = P[3 * k2 + 2] - P[3 * k1 + 2]
+      return dt > 1e-12 ? d / dt : 0
+    }
+    for (const lf of LAYER_F) {
+      const zS = g.baseThickness + g.finHeight * lf
+      const zE = drift ? zExit : zS
+      for (let l = 0; l < offs.length - 1; l++) {
+        const a = offs[l], b = offs[l + 1]
+        if (b - a < 2) continue
+        const T = P[3 * (b - 1) + 2] || 1
+        let count = 0
+        let tShift = 0
+        if (descend) {
+          const v0 = segSpeed(a, a + 1)
+          if (v0 > 0) {
+            tShift = (zM - zS) / (v0 * LEG_SPEED)
+            pts.push(x0 + P[3 * a], y0 + P[3 * a + 1], zM, 0)
             count++
           }
         }
+        for (let k = a; k < b; k++) {
+          const zk = zS + (P[3 * k + 2] / T) * (zE - zS)   // continuous descent
+          pts.push(x0 + P[3 * k], y0 + P[3 * k + 1], zk, P[3 * k + 2] + tShift)
+          count++
+        }
+        const vE = segSpeed(b - 2, b - 1)
+        if (vE > 0) {
+          const tEnd = P[3 * (b - 1) + 2] + tShift
+          if (riseEnd) {
+            pts.push(x0 + P[3 * (b - 1)], y0 + P[3 * (b - 1) + 1], zM,
+                     tEnd + (zM - zS) / (vE * LEG_SPEED))
+            count++
+          } else if (rampEnd) {
+            // down the sloped edge and out to the side (lattce_lmm_rev3 ramps)
+            const dxE = P[3 * (b - 1)] - P[3 * (b - 2)]
+            const dyE = P[3 * (b - 1) + 1] - P[3 * (b - 2) + 1]
+            const dl = Math.hypot(dxE, dyE)
+            if (dl > 1e-9) {
+              const drop = Math.max(zE - 0.15, 0.4)
+              pts.push(x0 + P[3 * (b - 1)] + (dxE / dl) * drop,
+                       y0 + P[3 * (b - 1) + 1] + (dyE / dl) * drop,
+                       zE - drop, tEnd + (drop * 1.41) / vE)
+              count++
+            }
+          }
+        }
+        if (count >= 2) offsOut.push(offsOut[offsOut.length - 1] + count)
+        else pts.length = offsOut[offsOut.length - 1] * 4
       }
-      if (count >= 2) offsOut.push(offsOut[offsOut.length - 1] + count)
-      else pts.length = offsOut[offsOut.length - 1] * 4
     }
     return { pts: new Float32Array(pts), offs: new Int32Array(offsOut) }
-  }, [field, snapped, g, code, x0, y0, z])
+  }, [field, snapped, g, code, x0, y0])
 
   const lines = useMemo(() => {
     const segs: number[] = []
