@@ -72,11 +72,13 @@ export function FlowExplainer({ onClose }: { onClose: () => void }) {
             <p><b>Plain words:</b> the water enters cold and warms as it collects heat; the
             copper is hottest at the fin roots and coolest at the tips. The tint draws
             exactly that story with the solver&apos;s own numbers.</p>
-            <p><b>The math:</b> fluid = the F1-solved temperature field (or the 1-D caloric
-            ramp T_in + ΔT_cal·s when F1 is off); its outlet closes the energy balance
-            to T_in + Q/(ṁ·c_p) exactly. Fins = the conduction profile
-            cosh(m(H−z))/cosh(mH), with mH inverted from the solver&apos;s η_f; the root
-            sits Q·R_conv above the local fluid. Base slab ≈ the fin roots.</p>
+            <p><b>The math:</b> the metal tint is the FINS&apos; own story — the conduction
+            profile cosh(m(H−z))/cosh(mH) with mH inverted from the solver&apos;s η_f;
+            the root sits Q·R_conv above the local fluid, the base slab ≈ the roots.
+            The FLUID story rides on the parcels: with ≈ Flow on, each parcel is
+            colored by the local F1-solved temperature and visibly warms blue → red
+            along its journey (outlet closes the energy balance to T_in + Q/(ṁ·c_p)
+            exactly). In ΔP mode the parcels carry remaining pressure instead.</p>
             <p><b>Honesty:</b> this is the 1-D model drawn in place — screening, not
             conjugate CFD. Near-stagnant cells shade <span className="fx-magenta">dark
             magenta</span>: low-flow <i>candidates</i>, counted in the chip, confirmed only

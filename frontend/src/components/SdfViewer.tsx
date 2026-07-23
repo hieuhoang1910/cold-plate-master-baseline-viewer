@@ -275,7 +275,9 @@ void main() {
 
   // V5.2 — flow-intent lanes: a translucent fluid sheet at mid-fin height,
   // masked to the open channel, dashes advected along the route at S6 speed.
-  if (uFlowOn > 0.5 && abs(rd.z) > 1e-5) {
+  // V5.7 — hidden in THERMAL mode: the fluid story lives on the moving
+  // parcels there; the tint stays the FINS' own conduction picture.
+  if (uFlowOn > 0.5 && abs(rd.z) > 1e-5 && (uColorMode < 0.5 || uColorMode > 1.5)) {
     float zPlane = uBase + uH * 0.58;
     float tp = (zPlane - ro.z) / rd.z;
     if (tp > 0.0 && (hit < 0.0 || tp < hit)) {
@@ -983,7 +985,9 @@ export function SdfViewer({
         {flow && flowOn && field && (
           <FlowFieldLayer field={field} g={g} code={flow.code}
             coreWidth={g.coreWidth} coreLength={g.coreLength}
-            z={g.baseThickness + g.finHeight * 0.62} />
+            z={g.baseThickness + g.finHeight * 0.62}
+            mode={colorMode}
+            thermal={flow.thermal ? { TIn: flow.thermal.TIn, dTcal: flow.thermal.dTcal } : null} />
         )}
         {riding && field && (
           <RideRig field={field} x0={-(field.nx * field.dx) / 2} y0={-(field.ny * field.dy) / 2} z={sheetZ} />
@@ -1041,10 +1045,10 @@ export function SdfViewer({
             )}
             {colorMode === 'thermal' && flow.thermal && (
               <span className="vo-chip vo-legend"
-                title={`Thermal intent: fluid = ${field?.tGrid ? 'F1 solved T field' : '1-D caloric ramp'}; fins = cosh conduction profile (mH ${fmt(flow.thermal.mH, 2)} from η_f); base ≈ fin roots. Endpoints are solver numbers — screening, not CHT.`}>
+                title={`Thermal intent: the METAL tint is the fins' own conduction picture (cosh profile, mH ${fmt(flow.thermal.mH, 2)} from η_f; base ≈ fin roots). With ≈ Flow on, the PARCELS carry the fluid temperature (${field?.tGrid ? 'F1 solved T field' : '1-D caloric ramp'}) — they warm blue → red along their journey. Solver-anchored screening, not CHT.`}>
                 <i className="vo-lgrad" />
-                {fmt(flow.thermal.TIn, 1)}→{fmt(flow.thermal.TIn + flow.thermal.dTcal, 1)} °C fluid
-                {' · root +'}{fmt(flow.thermal.dTwall, 1)} K
+                parcels {fmt(flow.thermal.TIn, 1)}→{fmt(flow.thermal.TIn + flow.thermal.dTcal, 1)} °C
+                {' · fin root +'}{fmt(flow.thermal.dTwall, 1)} K
                 {flow.thermal.tjC != null && ` · Tj ${fmt(flow.thermal.tjC, 1)}${flow.thermal.tjMaxC != null ? `/${fmt(flow.thermal.tjMaxC, 0)}` : ''} °C`}
               </span>
             )}

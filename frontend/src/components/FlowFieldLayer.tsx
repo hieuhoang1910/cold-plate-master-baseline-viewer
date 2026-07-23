@@ -37,8 +37,20 @@ interface Paths {
   perLine: number         // comets per line
 }
 
+// JS mirror of the shader's heatmap colormap (4 stops).
+const H1 = [0.13, 0.25, 0.70], H2 = [0.05, 0.65, 0.85]
+const H3 = [0.95, 0.85, 0.25], H4 = [0.90, 0.20, 0.12]
+function heat(t: number, out: THREE.Color) {
+  t = Math.min(1, Math.max(0, t))
+  let a: number[], b: number[], f: number
+  if (t < 0.34) { a = H1; b = H2; f = t / 0.34 }
+  else if (t < 0.67) { a = H2; b = H3; f = (t - 0.34) / 0.33 }
+  else { a = H3; b = H4; f = (t - 0.67) / 0.33 }
+  out.setRGB(a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2]))
+}
+
 export function FlowFieldLayer({
-  field, g, coreWidth, coreLength, z, code = 1,
+  field, g, coreWidth, coreLength, z, code = 1, mode = 'steel', thermal = null,
 }: {
   field: FlowFieldResult
   g: ViewerGeom
@@ -46,6 +58,9 @@ export function FlowFieldLayer({
   coreLength: number
   z: number
   code?: number
+  /** V5.7 — parcels carry the field values: thermal → fluid T, dp → pressure */
+  mode?: 'steel' | 'thermal' | 'dp'
+  thermal?: { TIn: number; dTcal: number } | null
 }) {
   const x0 = -(field.nx * field.dx) / 2
   const y0 = -coreLength / 2
@@ -224,6 +239,13 @@ export function FlowFieldLayer({
   const cometRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])
 
+  // max solved pressure (ΔP-mode particle normalization)
+  const pMax = useMemo(() => {
+    let m = 0
+    for (let k = 0; k < field.pGrid.length; k++) if (field.pGrid[k] > m) m = field.pGrid[k]
+    return m || 1
+  }, [field])
+
   useFrame((state) => {
     const mesh = cometRef.current
     if (!mesh) return
@@ -258,7 +280,23 @@ export function FlowFieldLayer({
       }
       dummy.updateMatrix()
       mesh.setMatrixAt(inst, dummy.matrix)
-      mesh.setColorAt(inst, _col.setScalar(Math.pow(0.66, ghost)))
+      // V5.7 — parcels CARRY the field: thermal mode colors each parcel by
+      // the local fluid temperature (they visibly warm along their journey);
+      // ΔP mode by remaining pressure; geo stays water-cyan. Trail fades.
+      const fade = Math.pow(0.66, ghost)
+      if (mode === 'thermal' && field.tGrid && thermal) {
+        const gi = Math.min(field.nx - 1, Math.max(0, Math.floor((_pos.x + (field.nx * field.dx) / 2) / field.dx)))
+        const gj = Math.min(field.ny - 1, Math.max(0, Math.floor((_pos.y + (field.ny * field.dy) / 2) / field.dy)))
+        heat((field.tGrid[gj * field.nx + gi] - thermal.TIn) / Math.max(thermal.dTcal, 1e-3), _col)
+      } else if (mode === 'dp') {
+        const gi = Math.min(field.nx - 1, Math.max(0, Math.floor((_pos.x + (field.nx * field.dx) / 2) / field.dx)))
+        const gj = Math.min(field.ny - 1, Math.max(0, Math.floor((_pos.y + (field.ny * field.dy) / 2) / field.dy)))
+        heat(field.pGrid[gj * field.nx + gi] / pMax, _col)
+      } else {
+        _col.setRGB(0.68, 0.94, 1.0)
+      }
+      _col.multiplyScalar(fade)
+      mesh.setColorAt(inst, _col)
       inst++
     }
     for (let l = 0; l < nLines; l++) {
@@ -294,7 +332,8 @@ export function FlowFieldLayer({
       <instancedMesh key={maxInst} ref={cometRef} args={[undefined, undefined, maxInst]}
         frustumCulled={false}>
         <sphereGeometry args={[COMET_R, 6, 6]} />
-        <meshBasicMaterial color="#aef0ff" transparent opacity={0.92} depthTest />
+        {/* white base — per-instance colors carry the mode (water/T/p) */}
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.92} depthTest />
       </instancedMesh>
     </group>
   )
