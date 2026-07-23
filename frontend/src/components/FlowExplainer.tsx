@@ -52,20 +52,25 @@ export function FlowExplainer({ onClose }: { onClose: () => void }) {
             solvers, and the ✓/⚠ chips show the reconciliation live.</p>
           </S>
 
-          <S title="≈ Flow — lanes, streamlines, comet trails">
-            <p><b>Plain words:</b> the dashes on the translucent water sheet move along the
-            layout&apos;s route at the real channel velocity, slowed ×50 so your eye can
-            follow (1 s on screen ≈ 20 ms real). The comet streaks with fading trails
-            ride the F1-<i>solved</i> field: they race through favoured channels and crawl
-            through starved ones — maldistribution made visible.</p>
-            <p><b>The math:</b> dash speed = the S6 mean per-path velocity; comet timing =
-            true time-of-flight integrated along each solved streamline. Streamlines
-            snap to the wavy channel centerlines where the motion is channel-aligned
-            (presentation only — the F1 grid is homogenized at ~0.35 mm cells).</p>
-            <p><b>What to do:</b> look from <b>Top</b> or Iso — the routing reads at a glance.
-            Watch for streaks bunching or crawling: that is computed starvation, and it
-            becomes FC-5 in the report for CFD to confirm. <b>▶ ride</b> follows one
-            parcel inlet → outlet.</p>
+          <S title="≈ Flow — per-gap particle streams">
+            <p><b>Plain words:</b> one particle stream runs through <b>every physical fin
+            gap</b>, on seven depth layers filling the channel height, at ×150
+            slow-motion (1 s ≈ 7 ms real). The journey is the design&apos;s story: dive
+            at the mid-rib, a gradual settling into depth (entrance effects decay over
+            ~one channel height), a level run weaving the sine channel — parcels hold
+            their height in laminar flow — and a straight, pump-driven exit at the fin
+            endings into the collector trough. Parcels warm blue → red as they collect
+            heat, in every mode.</p>
+            <p><b>The math:</b> each gap&apos;s speed is its own F1-solved column velocity, so
+            starved channels visibly run slow AND hot; parcel timing is true
+            time-of-flight; the vertical legs are stated intent (F1 is a plan-view
+            solver). The lowest layer skims the floor — the channel is flooded, and
+            that floor contact is the model&apos;s wetted A_base.</p>
+            <p><b>▶ ride:</b> follow one parcel — <b>chase</b> (a steadicam dolly on the
+            channel&apos;s straight rail, parcel always mid-frame) or <b>👁 pov</b>
+            (first-person, the warming head just ahead), on the <b>depth layer</b> you
+            pick; <b>◐ solo</b> hides the crowd and draws the ridden path as a thin
+            streamline through the metal. Esc exits.</p>
           </S>
 
           <S title="Thermal — where the heat goes">

@@ -25,7 +25,7 @@ export function Hero({
   return (
     <section className="hero">
       <div className="hero-nav">
-        <span className="hero-mark">VINNOTEK</span>
+        <span className="hero-mark">VINNOTEK<em className="hero-byline">· Hieu Hoang</em></span>
         <span className="hero-navlinks">
           <button onClick={onStudio}>design studio</button>
           <button onClick={onEnter}>viewer</button>

@@ -5,7 +5,9 @@ heat-sink designs as live implicit-body (SDF) 3D geometry next to their KPIs.
 Physics comes from the **validated** Cold Plate solvers — the browser never
 runs a second physics model.
 
-- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45)
+Project lead: **Hieu Hoang** — Vinnotek.
+
+- **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
 - **Status:** V4 complete (V4.0–V4.4) — everything from V2 (projects & Design
@@ -16,8 +18,35 @@ runs a second physics model.
   LAN hosting) and V3 (two-tier LMM/SLM DfAM rulebooks with live
   PASS / MARGINAL / FAIL verdicts, per-design area readouts, Incus-compliant
   M1/M2/M3 presets (M1 = default), enforcement modes, green→CAD export chain,
-  DLP pixel-preview tab, plain-language About) **plus V4**: the **Verify
-  tab** and a full UI redesign.
+  DLP pixel-preview tab, plain-language About), V4 (the **Verify tab** and a
+  full UI redesign) **plus V5**: the solver-backed **flow & thermal intent
+  viewer** — see below.
+
+**Flow & thermal intent (V5).** The viewer shows how the design *wants* the
+water to move and the heat to leave — solved, never simulated, and never a
+substitute for CFD (the workflow is: design for best intent here → Ansys
+confirms → print). Underneath: **S6**, a server-side flow-network solver
+(the manifold → slots → compartments → channels system as a hydraulic
+circuit built from the same Shah–London fRe + minor-loss correlations as the
+KPI solvers — it *computes* per-path splits and the flow uniformity that was
+previously an assumed scalar, and reconciles its ΔP against the KPI solver
+on every evaluate), and **F1**, a browser-worker depth-integrated
+Darcy/Hele-Shaw field solve (solved p/v fields + upwind thermal transport
+whose outlet closes the energy balance exactly; 26-check node suite in
+`npm run test:verify`). On top: `≈ Flow` runs a particle stream through
+**every fin gap** on seven depth layers at each gap's own solved speed —
+dive at the mid-rib, gradual settling, level run, straight pressure-driven
+exit — with parcels **warming blue → red** as they collect heat; `Thermal`
+tints the metal itself (cosh fin profile, hot rib strip); `ΔP` paints where
+the pressure budget is spent; `▶ ride` follows one parcel (steadicam chase
+or first-person POV, any depth layer, solo + path streamline); the `ⓘ`
+overlay explains every layer's physics in plain words. The Report gains the
+**FC-1…FC-7 CFD confirmation checklist** — machine-checkable claims (splits,
+uniformity, ΔP decomposition, outlet T, low-flow zones, jet aim, the
+wedge-rib hypothesis) that the eventual Ansys run either confirms or
+corrects. ICE rev 3's distribution topology (10 feed ducts, interdigitated
+side-venting returns, 1.40 mm compartment pitch) was mesh-extracted from the
+actual INCUS part during the build, resolving spec §54 Q1.
 
 **Verify (V4).** Drop the binary STL Hieu exports from nTop onto the ✓ Verify
 tab and the app checks it against the same implicit geometry the solvers

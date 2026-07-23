@@ -318,6 +318,7 @@ export default function App() {
         <section className="workspace" style={{ opacity: Math.max(0, (introT - 0.55) / 0.45) }}>
           <div className="ws-top">
             <button className="ws-mark" onClick={backToTop} title="back to the landing view">COLD PLATE</button>
+            <span className="ws-byline" title="Cold plate R&D — Vinnotek">Hieu Hoang</span>
             {activeProject && (
               <button className="proj-chip" onClick={() => setShowStudio(true)}
                 title="Open the Design Studio to edit or switch the problem">

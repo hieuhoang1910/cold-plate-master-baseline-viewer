@@ -8,8 +8,9 @@ umbrella: "[[R&D Projects]]"
 status: Active
 priority: High
 date_created: 2026-07-01
-date_updated: 2026-07-02
+date_updated: 2026-07-24
 document_role: webapp_design_spec
+author: Hieu Hoang — Vinnotek
 tags:
   - vinnotek/projects
   - umbrella/r-and-d
@@ -2011,3 +2012,62 @@ The id scheme exists now so the claims are machine-checkable later.
   Remaining V5-adjacent items: TPMS F1 permeability, mesh-registered ICE
   duct positions, S6 literature maldistribution anchor (§54 Q6), and the
   V6 watch item (Ansys-import overlay against the FC ids).
+
+**V5 post-ship — the live-use iteration round (2026-07-23/24, with the
+user in the loop on every physics call).** The particle/ride system was
+rebuilt from live feedback into its final form; each decision below is a
+recorded engineering judgement, not styling.
+
+- **Stage blackout, fixed + lesson**: an explicit `glslVersion: GLSL3`
+  drops three.js's `gl_FragColor`/`varying` compatibility defines — the
+  raymarch shader silently failed and the model vanished. Correct pattern
+  (kept, commented in-shader): default compat path + `gl_FragDepthEXT`,
+  which three maps to native `gl_FragDepth` on WebGL2.
+- **Per-gap particle streams**: one stream per PHYSICAL fin gap following
+  its exact sine centerline, timed by the F1 per-column solved velocity
+  (per-gap maldistribution is visible); **seven depth layers** (0.10–0.88
+  H) fill the channel; heads are 0.07 mm near-round droplets whose
+  6-ghost fading wakes carry the motion; ×150 slow-motion (was ×50).
+- **The flow story, physics-settled with the user** (each step was
+  proposed, challenged, and corrected live):
+  1. *Dive* at the mid-rib from the manifold (legs at ~jet speed — the
+     standing-column look at channel speed was wrong);
+  2. *Gradual exponential settling* from the top entry — slot-entrance
+     redistribution decays ~e^(−x/H); drawn at settle = 0.45·H
+     (deliberately shorter than the ~1·H physics estimate for intent
+     readability, noted in-code; CFD measures the real length);
+  3. *Level run* — parcels hold their height (laminar flow, no bulk
+     sinking; the flooded channel's bottom layer skims the floor = the
+     wetted A_base, defended as expert fact);
+  4. *Straight, pressure-driven exits* at the fin endings (faces
+     PARALLEL to the mid rib) into the sunken collector trough — the
+     45° pocket faces in `lattce_lmm_rev3.step` are AM chamfers/trough
+     walls, NOT flow directors; a trough-hook exit variant was built
+     from an annotated screenshot and **reverted by user preference**
+     (don't re-add).
+- **V5.7 — thermal rides the parcels** (user idea): parcels are colored
+  by the local F1 fluid temperature in EVERY mode, visibly warming
+  blue → red along the journey (ΔP mode swaps to remaining pressure);
+  the Thermal tint became the SOLID story only (cosh fin profile +
+  base; the mid-plane fluid wash is hidden in thermal mode). The
+  **unfinned rib strip draws hot** (user-validated: flow passes
+  over/around it, so it is area-starved over the die's hottest zone —
+  ×3 wall offset at its base, jet-cooled crown; tempered by Cu
+  spreading + stagnation h; magnitude labelled screening → FC-6/7).
+- **V5.8 — the parcel ride, final form**: rides a real parcel on a
+  chosen depth layer (bottom/middle/top dropdown, both cameras);
+  `◐ solo` (default on) hides all other parcels and draws the ridden
+  path as a thin through-metal streamline; `👁 pov` = first-person
+  (eye ON the path 0.06·T behind the warming head). **Chase = rigid
+  rail dolly**: yaw-locked translation along the ride line's straight
+  chord, look-target riding the rail at the parcel's station and
+  tracking only its smoothed depth — the parcel stays mid-frame while
+  the weave can't rotate the camera (two failure modes found live:
+  per-segment direction stepping and head-fixation wobble; both cameras
+  now anchor exclusively to time-lagged interpolated path points).
+  Routing glyph arrows hide while riding.
+- **ⓘ FlowExplainer overlay** (user request): collapsible in-app
+  explainer in the About voice — the T0/S6/F1 tiers, each mode's
+  physics, the chips, the rib strip, and what only CFD confirms.
+- Docs synced 2026-07-24: About tab gains the V5 section, README the V5
+  status, this changelog written.

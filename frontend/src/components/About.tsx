@@ -26,7 +26,7 @@ export function About({ onClose }: { onClose: () => void }) {
     <div className="about-overlay" onClick={onClose}>
       <div className="about-card" onClick={(e) => e.stopPropagation()}>
         <div className="about-head">
-          <h2>About — Cold Plate Master Baseline Viewer</h2>
+          <h2>About — Cold Plate Master Baseline Viewer <em className="hero-byline">· Hieu Hoang — Vinnotek</em></h2>
           <button className="about-close" onClick={onClose}>✕</button>
         </div>
 
@@ -305,6 +305,33 @@ export function About({ onClose }: { onClose: () => void }) {
             </Plain>
             <Eq>ΔP = fRe · (2μ·v·L_arc / D_h²) + ½·ρ·v²·K_header &nbsp;·&nbsp; W_pump = V̇ · ΔP</Eq>
             <p>Friction (Shah-London fRe with a roughness correction) plus a lumped manifold minor-loss term. A design that wins thermally is useless if it costs too much pressure.</p>
+          </section>
+
+          <section>
+            <h3>Flow &amp; thermal visualization (V5) — watching the design intent</h3>
+            <Plain>
+              The viewer can <b>show the water doing its job</b>: toggle <b>≈ Flow</b> and particle
+              streams run through <b>every fin gap</b> — diving in at the mid-rib, settling into
+              their depth, weaving the sine channels and exiting straight at the fin endings —
+              each parcel <b>warming blue → red</b> as it collects heat. Nothing is a simulation:
+              lane speeds come from the S6 network solve, parcel temperatures from the F1 field
+              solve, and the route is the layout's stated intent — the same claims the Report
+              hands to CFD as the FC-1…FC-7 checklist.
+            </Plain>
+            <Eq>parcels: F1 T(x, y), outlet closes to T_in + Q/(ṁ·c_p) exactly &nbsp;·&nbsp; ×150 slow-motion &nbsp;·&nbsp; 7 depth layers</Eq>
+            <p>
+              Color modes: <b>Thermal</b> tints the metal itself — the cosh fin-conduction profile
+              (mH inverted from η_f), with the unfinned <b>rib strip drawn hot</b> (area-starved over
+              the die's hottest zone; a screening estimate CFD will quantify). <b>ΔP</b> paints
+              where the pressure budget is spent, red (unspent) → blue (spent). <b>▶ ride</b>
+              follows one parcel — steadicam chase or first-person <b>👁 pov</b>, on the depth
+              layer of your choice, with <b>◐ solo</b> isolating it and its thin path streamline.
+              The <b>ⓘ</b> button beside the ride controls opens the full explainer; the chips
+              state the reconciliation (S6 vs solver ΔP, F1 vs S6 friction) live.
+            </p>
+            <DoIt>read a layout's routing from Top view with ≈ Flow on; ride the bottom layer to
+              feel the dive; treat every picture as design intent for the Ansys run to confirm —
+              never as CFD.</DoIt>
           </section>
 
           <section>

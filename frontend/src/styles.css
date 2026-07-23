@@ -1124,3 +1124,7 @@ body.has-cursor input[type=checkbox] { cursor: none; }
 .fx-body i { color: var(--muted); }
 .fx-note { color: var(--muted); font-size: 12.5px; border-left: 2px solid rgba(56, 192, 255, 0.5); padding-left: 9px; }
 .fx-magenta { color: #d36bc0; }
+
+/* ---- project byline ---- */
+.hero-byline { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: 0.08em; font-size: 0.85em; }
+.ws-byline { color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }

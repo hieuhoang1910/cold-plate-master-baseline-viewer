@@ -30,7 +30,7 @@ export function generateReport(
   const L: string[] = []
 
   L.push(`# Cold Plate Design Review — ${project?.name ?? 'design'}`)
-  L.push(`_Generated ${dateStr} · Cold Plate Master Baseline Viewer · numbers from the validated Python solvers_`)
+  L.push(`_Generated ${dateStr} · Cold Plate Master Baseline Viewer · Hieu Hoang — Vinnotek · numbers from the validated Python solvers_`)
   L.push('')
 
   // 1. Problem
