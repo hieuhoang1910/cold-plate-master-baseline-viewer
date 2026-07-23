@@ -135,17 +135,11 @@ export function FlowFieldLayer({
             emit(xw + wave(yObj), yObj, zk, t)
             if (s < n) t += span / n / vMm
           }
-          // exit (user-annotated 2026-07-23): straight out of the channel,
-          // then hook DOWN into the sunken collector trough — the pump-driven
-          // discharge leaves horizontally and settles into the deeper trough
+          // exit: straight out into the collector trough at this height
           if (legs) {
             const yEnd = y0 + r.yB
-            const run1 = 0.9, run2 = 0.9
-            const zTrough = g.baseThickness * 0.35
-            emit(xw + wave(yEnd), yEnd + dirY * run1, zS, t + run1 / vMm)
-            const drop = Math.max(zS - zTrough, 0.1)
-            emit(xw + wave(yEnd), yEnd + dirY * (run1 + run2), zTrough,
-                 t + run1 / vMm + Math.hypot(run2, drop) / vMm)
+            const run = 2.2
+            emit(xw + wave(yEnd), yEnd + dirY * run, zS, t + run / vMm)
           }
           if (count >= 2) {
             offs.push(offs[offs.length - 1] + count)
