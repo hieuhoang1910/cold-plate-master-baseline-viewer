@@ -444,19 +444,24 @@ export function FlowFieldLayer({
           camera.position.copy(_camSm)
           camera.lookAt(_tgtSm.x, _tgtSm.y, _tgtSm.z + 0.05)
         } else {
-          // rigid dolly: project the lagged path point onto the rail
-          sampleLine(Math.max(head - 0.10 * T, 0), _povPos)
-          const s = (_povPos.x - sx) * rx + (_povPos.y - sy) * ry
-          _povPos.set(sx + rx * (s - 3.0), sy + ry * (s - 3.0), zTopObj + 1.2)
+          // rigid dolly, parcel-centred: camera trails on the straight rail
+          // (yaw locked — the weave can't shake it); the look target sits ON
+          // the rail at the parcel's station and tracks only its smoothed
+          // depth, so the parcel stays mid-frame through dive, run and exit
+          const sP = (_ridePos.x - sx) * rx + (_ridePos.y - sy) * ry
+          _povPos.set(sx + rx * (sP - 4.5), sy + ry * (sP - 4.5), zTopObj + 2.2)
           const k = 1 - Math.exp(-4 * delta)
           if (!rideActive.current) {
             _camSm.copy(_povPos)
+            _tgtSm.set(sx + rx * sP, sy + ry * sP, _ridePos.z)
             rideActive.current = true
           } else {
             _camSm.lerp(_povPos, k)
+            _povPos.set(sx + rx * sP, sy + ry * sP, _ridePos.z)
+            _tgtSm.lerp(_povPos, 1 - Math.exp(-6 * delta))
           }
           camera.position.copy(_camSm)
-          camera.lookAt(_camSm.x + rx * 6.5, _camSm.y + ry * 6.5, _camSm.z - 3.6)
+          camera.lookAt(_tgtSm)
         }
       }
     } else {
