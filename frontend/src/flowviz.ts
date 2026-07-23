@@ -4,8 +4,10 @@
 
 import type { BaselineResult, Basis, FlowNetworkBlock } from './types'
 
-/** Screen slow-motion factor: dashes move at v_real / SLOWMO (§54 Q5, ~×50). */
-export const SLOWMO = 50
+/** Screen slow-motion factor: dashes move at v_real / SLOWMO.
+ *  ×150 (user request 2026-07-23 — "much slower"): the ~14 mm half-path
+ *  crosses the screen in ~10 s instead of ~3 s. */
+export const SLOWMO = 150
 
 // Shader layout codes (uFlowLayout).
 export const FLOW_LAYOUTS: Record<string, number> = {

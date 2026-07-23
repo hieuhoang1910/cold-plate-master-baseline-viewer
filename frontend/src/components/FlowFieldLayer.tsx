@@ -102,15 +102,16 @@ export function FlowFieldLayer({
           const dirY = Math.sign(r.yB - r.yA)
           const n = Math.max(3, Math.round(span / DS_Y))
           // z-profile (laminar channel physics, user-verified 2026-07-23):
-          // parcels FILL the channel depth near the entry, hold their height
-          // along the run (no bulk sinking in laminar flow — only the bottom
-          // layer touches the floor throughout), then ALL turn down the 45°
-          // ramp together at the fin endings.
+          // parcels FILL the channel depth near the entry, then hold their
+          // height for the whole run — no bulk sinking in laminar flow. The
+          // channel is flooded, so the bottom layer skims the floor (that is
+          // the wetted A_base, thermally the hottest contact). Exits are
+          // STRAIGHT OUT at each height — the flow is pump/pressure-driven;
+          // the base pocket's 45° faces are AM chamfers / diffuser walls,
+          // not flow directors (user correction, fins+base assembled).
           const legs = code === 1
           const zHi = g.baseThickness + g.finHeight * 0.92
-          const zRamp = g.baseThickness + g.finHeight * 0.12
           const sFill = legs ? Math.min(0.25, 2.5 / Math.max(span, 1e-6)) : 0
-          const sExit = legs ? 1 - Math.min(0.18, 1.6 / Math.max(span, 1e-6)) : 1
           let t = 0
           let count = 0
           const emit = (xo: number, yo: number, zo: number, tt: number) => {
@@ -130,18 +131,15 @@ export function FlowFieldLayer({
             let zk = zS
             if (legs && frac < sFill) {
               zk = zHi + (zS - zHi) * (frac / sFill)        // jet fills the depth
-            } else if (legs && frac > sExit) {
-              zk = zS + (Math.min(zS, zRamp) - zS) * ((frac - sExit) / (1 - sExit))
             }
             emit(xw + wave(yObj), yObj, zk, t)
             if (s < n) t += span / n / vMm
           }
-          // exit: down the sloped fin ending and out (lattce_lmm_rev3 ramps)
+          // exit: straight out into the collector trough at this height
           if (legs) {
             const yEnd = y0 + r.yB
-            const zAt = Math.min(zS, zRamp)
-            const drop = Math.max(zAt - g.baseThickness * 0.3, 0.5)
-            emit(xw + wave(yEnd), yEnd + dirY * drop, zAt - drop, t + (drop * 1.41) / vMm)
+            const run = 2.2
+            emit(xw + wave(yEnd), yEnd + dirY * run, zS, t + run / vMm)
           }
           if (count >= 2) {
             offs.push(offs[offs.length - 1] + count)
