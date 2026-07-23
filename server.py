@@ -63,6 +63,7 @@ import coolants                                       # noqa: E402  (V2 fluid li
 import targets                                        # noqa: E402  (V2 targets->gate)
 import projects                                       # noqa: E402  (V2.2 project store)
 import manufacturing                                  # noqa: E402  (V3.3 DfAM rulebooks)
+import flow_network                                   # noqa: E402  (V5.1 S6 network)
 
 from cold_plate_v6.architecture import FlowArchitecture as V6Arch   # noqa: E402
 from cold_plate_v6.geometry import Geometry                          # noqa: E402
@@ -543,9 +544,34 @@ def evaluate_payload(payload: dict) -> dict:
             gate_overrides["limit_pump_W"] = float(tgt["limit_pump_W"])
         op = replace(op, **gate_overrides)
 
+    # --- V5.1 (S6): flow-network block (fin families) — additive; optional
+    # KPI coupling via use_computed_uniformity (spec §47, default off) --------
+    fn_block = None
+    if str(case.family).lower().strip() in {"straight_fin", "wavy_fin"}:
+        try:
+            fn_block = flow_network.compute(
+                case, stack, op, arch, relative_roughness=rr,
+                params=payload.get("flow_network_params"))
+        except Exception as exc:  # the viz solver must never break evaluate
+            fn_block = {"supported": False, "error": str(exc)}
+        if (payload.get("use_computed_uniformity") and fn_block.get("supported")
+                and fn_block.get("uniformity_computed") is not None):
+            arch = replace(arch, flow_uniformity=float(fn_block["uniformity_computed"]))
+            fn_block["applied_to_kpis"] = True
+
     result = mbc.evaluate_case(case, stack, op, arch, relative_roughness=rr)
     out = _sanitize(asdict(result))
     _augment(out, case_in, payload.get("stack"))   # V3: areas + manufacturability
+
+    if fn_block is not None:
+        if fn_block.get("supported"):
+            flow_network.reconcile(fn_block, result.DeltaP_Pa)
+            if fn_block.get("applied_to_kpis"):
+                out["warnings"] = list(out.get("warnings") or []) + [
+                    "flow_uniformity replaced by the S6 network-computed value "
+                    f"({fn_block['uniformity_computed']:.4f}) — user opt-in "
+                    "(use_computed_uniformity), pending Ansys cross-check."]
+        out["flow_network"] = _sanitize(fn_block)
 
     # --- V2: attach coolant + exact junction temperature (when requested) ----
     if coolant_info is not None:

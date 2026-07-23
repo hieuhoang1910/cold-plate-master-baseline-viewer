@@ -81,7 +81,7 @@ def resolve(layout: str, core_length_mm: float,
         # ICE Proto2 rib-array: n compartments, each fed by a jet and split
         # bidirectionally by its rib -> 2n parallel half-paths, short paths,
         # and a (still centre-peaked per compartment) jet flux.
-        n = _clampi(p.get("n_jets", 3), 1, 8)
+        n = _clampi(p.get("n_jets", 3), 1, 16)   # ICE rev 3 has 10 ducts (V5.1)
         arch = dict(n_parallel_paths=2 * n, path_length_mm=L / (2 * n),
                     header_K_total=1.5, flow_uniformity=1.0, jet_flux_peaking=1.0)
         warns.append(

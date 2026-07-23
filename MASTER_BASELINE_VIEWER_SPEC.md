@@ -1560,3 +1560,298 @@ export):**
 7. Deviation viewer: worker now ships the full indexed mesh; heavy files
    (> 2 M tris) start as an instant point cloud with an explicit "render
    full mesh" opt-in (normals built on demand).
+
+---
+
+## V5 — "Design-Intent Flow & Thermal Viewer" (ACCEPTED 2026-07-23, rev 2 — solver-backed)
+
+> **Status: ACCEPTED 2026-07-23 (user), same day as draft — build started at
+> V5.1 per the §53 roadmap.** §54 defaults adopted as proposed unless noted;
+> Q1 (feed/return compartment assignment) remains open with Hieu — S6
+> assumes alternating and labels it.
+>
+> **Rev 2 (same day) supersedes rev 1.** User direction: the intent
+> visualization must carry legitimate solved physics, not just annotated
+> assumptions — "the intent must be accurate with the physics we are
+> dealing with." Rev 2 adds two reduced-order solvers behind the visual
+> layers — **S6 flow network** (engine) and **F1 depth-integrated field**
+> (browser) — with a reconciliation contract binding them to the validated
+> 1-D solvers. Rev 1's pure-annotation framing is kept only as the T0 tier.
+
+## 46. V5 concept, scope & principles
+
+**What it is.** A visualization layer that shows **how the design makes the
+coolant move and the heat leave** — backed by three fidelity tiers, each
+labelled, each anchored to the tier below it:
+
+| Tier | What it is | Where it runs | Status label |
+|---|---|---|---|
+| **T0 — intent** | the route the layout defines: ports, splits, turns, jet-aim glyphs, 2-D schematic | frontend | DESIGN INTENT |
+| **T1 — network (S6)** | per-channel / per-compartment flow split + ΔP decomposition, **computed** from the same laminar fRe + minor-loss K correlations the KPI solvers use | **engine (server)** | ANALYTICAL |
+| **T2 — field (F1)** | plan-view **solved** pressure / velocity / temperature fields driving lanes, streamlines, particles and the thermal tint | browser worker | REDUCED-ORDER, reconciled |
+
+**Workflow it serves** (unchanged from rev 1):
+
+```
+design for best intent (this app) ──▶ CFD confirms the intent (Ansys, TD-10/11) ──▶ print
+   T1/T2 make the intent PREDICTIVE        §52's checklist is exactly what CFD checks
+```
+
+**What it is NOT.** Still not CFD: no Navier–Stokes, no turbulence, no jet
+stagnation detail, no recirculation prediction. The reduced-order class
+chosen — **flow-network modelling + depth-integrated Darcy/Hele-Shaw** — is
+established engineering practice for precisely this regime (deeply laminar,
+Re ≈ 100–200, thin channels) and is cheap enough to re-solve on every
+slider release. Browser LBM / NS remains **rejected**: transient,
+resolution-hungry, and it would imply a fidelity the app cannot verify. The
+reduced-order tier captures distribution and continuity — what the viz
+needs — without overclaiming; separation/recirculation stay CFD's job.
+
+**Key decisions (brainstorm log, rev 2):**
+
+| # | Decision | Rationale |
+|---|---|---|
+| V5-D1 | **Solved, not assumed**: every animated quantity comes from S6/F1 or a named solver output | user direction 2026-07-23; honesty by provenance |
+| V5-D2 | The layout remains the routing authority; S6/F1 discretize it | `layouts.py` defines the graph topology and boundary conditions |
+| V5-D3 | S6 lives in the **engine** (server-side) | it is physics at the same correlation grade as the KPI solvers → D8 applies; ships with fixtures |
+| V5-D4 | F1 lives in a **browser worker** but is reconciliation-bound (§49) | interactivity (re-solve on release); KPIs never read from it; every run must close against server numbers |
+| V5-D5 | S6's computed uniformity may feed the KPI solve as an **opt-in flag** | upgrades the assumed `flow_uniformity` scalar (pending TD-10 since V2) to a computed one; default off until an Ansys cross-check (§54 Q2) |
+| V5-D6 | The viz doubles as the CFD handoff: claims become **predictions** | §52 checklist upgrades from "we assume" to "we predict" |
+| V5-D7 | **Overlay layers on the 3-D viewer, not a separate tab** (decided 2026-07-23): a `Geometry · Flow · Thermal · ΔP` chip group on the stage HUD (+ particles toggle); color modes mutually exclusive, lanes/particles composite over the active tint; follow-a-parcel is a temporary camera mode (Esc exits); schematic + reconciliation chips are drawer/HUD cards | flow/thermal are renderings *of the same body* — same camera, same section cuts — and the §9 drag-loop (slider → geometry → flow → gauges) only reads in-place; the segmented 3-D/Pixel/Verify switcher stays reserved for *representations*; an off chip costs zero GPU |
+
+**Principles:** the §39 explanation-first contract applies to every mode; a
+permanent tier badge ("network-solved" / "reduced-order field — reconciled
+✓" / "intent annotation") wherever a V5 layer is on; golden parity 5/5
+untouched (S6 is additive, F1 is browser-only).
+
+## 47. S6 — Flow-network solver (engine, the backbone)
+
+The manifold → slots → compartments → channels system as a hydraulic
+network, built from the active layout + geometry:
+
+- **Nodes**: inlet plenum, feed-slot segments, compartment volumes,
+  return-slot segments, outlet plenum — per layout (center-feed = the
+  2-path degenerate case; serpentine = a series chain with bend nodes;
+  distributed-jet = the full compartment graph).
+- **Edges**: channel groups (the parallel bundle of fin channels in a
+  compartment/pass) with laminar resistance from the same fRe slot model
+  the KPI solver uses (ΔP ∝ v — linear), plus minor-loss K edges (turns,
+  slot entries, headers; ΔP ∝ v² — mildly nonlinear → fixed-point
+  iteration, converges in a few passes at these Re).
+- **Solve**: Kirchhoff on the graph (tens-to-hundreds of nodes;
+  hand-rolled Gaussian elimination, pure stdlib — same dependency
+  discipline as the V4 BVH). Milliseconds.
+- **Outputs** (additive `flow_network` block on evaluate results):
+  per-compartment / per-pass flow fractions; **computed uniformity** (the
+  flow-weighted statistic that the assumed `flow_uniformity` scalar
+  approximates); per-segment ΔP decomposition (friction vs minor losses);
+  per-channel velocity table.
+- **KPI coupling (opt-in, V5-D5)**: `"use_computed_uniformity": true`
+  replaces the layout's assumed scalar with S6's value in the KPI solve —
+  flagged in warnings; default off until cross-checked against the first
+  Ansys run.
+- **Fixtures**: symmetric center-feed → exactly 50/50 and uniformity 1.0
+  (regression anchor); serpentine total ΔP = the closed-form path sum;
+  the 9-compartment distributed-jet case reproduces a hand-solved
+  network; parity 5/5 untouched.
+
+## 48. F1 — Depth-integrated field solver (browser worker)
+
+The 2-D plan-view field the visual layers render. Model class:
+**anisotropic Darcy / Hele-Shaw** — a legitimate asymptotic model for
+laminar flow in thin gaps — solved on the core footprint:
+
+- **Grid**: the core planform at 128–256 cells on the long axis (~50 k
+  cells), rebuilt from the same TS geometry mirror the viewer already
+  uses.
+- **Conductance per cell**, from the same correlations as the physics:
+  - **fin field**: anisotropic — along-channel conductance from the
+    laminar slot model (∝ b³ per unit width, the fRe math), zero
+    transverse (fins block); the wavy path enters via the √(1 + χ²/2)
+    length factor;
+  - **open header / manifold / turnaround zones**: plain gap-flow
+    conductance;
+  - **TPMS**: isotropic permeability derived from the family's f(Re)
+    correlation at the local cell size (grading-aware);
+  - **jet layouts**: feed/return slots = source/sink strips per
+    compartment with strengths taken from **S6's computed split** — F1
+    inherits T1, never the bare assumption.
+- **Solve** `∇·(K∇p) = 0` (SOR / red-black Gauss–Seidel in the worker;
+  WebGL Jacobi only if profiling demands), then `v = −K·∇p`.
+- **Thermal transport**: steady upwind advection–diffusion for the
+  depth-mixed fluid temperature, wall heat source from the same h
+  correlation per cell; solid temperatures composited from the cosh
+  profile in z (2.5-D: solved in-plane × analytical in-height).
+- **Perf budget**: solve on slider release (debounced alongside the
+  physics call), target < 100 ms at the default grid; progressive
+  refinement while idle; never blocks the frame loop (worker).
+
+## 49. The reconciliation contract (what "legit-checked" means)
+
+F1 is visualization-grade physics; the validated solvers are the anchor.
+**Every** F1 solve must close against them, and the closure is displayed:
+
+| Check | Bound | On failure |
+|---|---|---|
+| F1 integrated inlet→outlet ΔP vs the solver's ΔP | within tolerance (proposed 15 %, §54 Q4) | ⚠ badge: "field diverges from solver — numbers shown are the solver's; field is shape-only" |
+| F1 mixed outlet T vs T_in + ΔT_cal | exact (energy-conservation check) | assertion — a miss is an F1 bug, surfaced loudly |
+| F1 per-compartment splits vs S6 | within a few % | ⚠ badge + both values shown |
+
+KPIs, gates, the optimizer and the report **never** read F1 values — D8
+preserved: correctness lives server-side. The chips make the anchoring
+visible instead of implicit: the same discipline as `test_api_parity.py`,
+applied per interaction.
+
+## 50. Visual layers (tiers composited)
+
+**Presentation (per V5-D7):** every layer lives *inside* the 3-D viewer,
+switched by a stage-HUD chip group — `Geometry · Flow · Thermal · ΔP` plus
+a particles toggle. Color modes are mutually exclusive; lanes and particles
+composite over whichever tint is active (warm particles over tinted fins is
+the reference view). No new switcher segment — 3-D / Pixel / Verify stays
+as-is; V5 never leaves the 3-D scene.
+
+1. **Flow lanes / streamlines** — traced on F1's solved v-field. Fin lanes
+   still follow the sine centerline, but their *speed* is the local solved
+   velocity — maldistribution becomes visible (starved outer channels
+   visibly run slower). Fallback chain while F1 converges: S6 per-channel
+   speeds → T0 route only. Time-scale chip states the slow-motion factor
+   (~×50, §54 Q5) — real transit is ~30 ms.
+2. **Particles + follow-a-parcel** — advected on the F1 field (replaces
+   rev 1's heuristic drift-and-slide; the SDF still keeps particles out of
+   solid and provides `gl_FragDepth` compositing). Particle color =
+   accumulated temperature from the F1 thermal field. Click a particle →
+   the camera rides it inlet → outlet while it warms: the 30-second
+   design-review demo.
+3. **Thermal tint** — fluid = F1 T-field (fallback: the 1-D caloric ramp
+   when F1 is off); fins = cosh profile in z anchored to the local fluid
+   T; base = solved base-side T; legend in real °C with the T_j chip vs
+   the 100 °C gate / 90 °C soft line. Resolves §15 Q3 at higher fidelity
+   than originally deferred.
+4. **Pressure mode** — the solved p(x, y) directly, plus S6's friction-vs-
+   minor-loss decomposition as a stackup-style bar: *where the 50 kPa
+   budget is spent*. Endpoint pinned to the solver ΔP per §49.
+5. **T0 layer stays** — port/turn/jet-aim glyphs + the 2-D layout
+   schematic card, now annotated with S6's **computed** fractions instead
+   of assumed ones. Jet impingement detail remains an *aim annotation*
+   (stagnation structure is CFD's job; stated in the ⓘ).
+6. **Dead-zone candidates** — cells with solved |v| below a threshold,
+   shaded on request, labelled "low-flow candidates (reduced-order) —
+   confirm in CFD". A prediction to check, never a verdict.
+7. **Hover probe** — local solved v, p, T_fluid, T_solid(z), path %,
+   local gap.
+
+## 51. Where each piece runs (architecture note)
+
+| Piece | Home | Why |
+|---|---|---|
+| S6 network | `engine/flow_network.py` + additive API block | physics → server (D8); fixtures + goldens |
+| F1 field | `frontend/src/flowfield/` worker | interactivity; reconciliation-bound; KPI-free |
+| T0 glyphs / schematic / lane rendering | viewer shader + a schematic component | pure presentation |
+| Reconciliation chips | frontend, comparing F1 vs the live evaluate result | the visible anchor |
+
+## 52. CFD confirmation checklist (report integration — predictions, not assumptions)
+
+With S6/F1 behind it, the Report's **"Flow & thermal intent"** section
+states predictions, each with an id, the predicting tier, and the CFD
+probe that confirms it:
+
+| id | Prediction | Value (live) | Tier | CFD confirms by |
+|---|---|---|---|---|
+| FC-1 | per-compartment flow split | S6 table | T1 | mass flow per compartment |
+| FC-2 | uniformity | computed (S6) vs assumed, both shown | T1 | velocity histogram across channels |
+| FC-3 | ΔP total + friction/minor split | S6 / solver | T1 | pressure taps |
+| FC-4 | outlet temperature | T_in + ΔT_cal | 1-D | outlet probe |
+| FC-5 | low-flow zones | F1 map excerpt | T2 | recirculation / stagnation check |
+| FC-6 | jet aimed at the rib crown | geometric | T0 | stagnation-line location |
+
+This is the TD-10 / TD-11 work order, produced by the design itself — and
+because splits/uniformity are now *predicted*, an Ansys run genuinely
+tests the model rather than merely filling in an assumption.
+**Deferred (V6 watch item):** importing Ansys results back against the FC
+ids for an intent-vs-CFD overlay — the flow twin of the V4 Verify tab.
+The id scheme exists now so the claims are machine-checkable later.
+
+## 53. V5 roadmap (rev 2, proposed)
+
+| Phase | Deliverable | Acceptance |
+|---|---|---|
+| V5.1 | **S6 network solver** in the engine + additive `flow_network` block + fixtures | symmetric center-feed → exact 50/50; serpentine ΔP = closed-form path sum; 9-compartment case = hand solve; parity 5/5 |
+| V5.2 | T0 layer: glyphs, lanes at S6 speeds, schematic card with computed fractions | routes match the `layouts.py` resolution for every layout; lane speeds = the S6 table |
+| V5.3 | **F1 pressure solve** + streamlines + reconciliation chips | ΔP closure within tolerance on all 8 catalog candidates; a deliberately-starved demo case shows visible maldistribution |
+| V5.4 | F1 thermal + tint + probe + dead-zone layer (§15 Q3 closed) | outlet-T closure exact; tint endpoints = solver numbers whenever F1 is off |
+| V5.5 | Particles + follow-a-parcel + `gl_FragDepth` compositing | particles never enter solid (SDF test in the sim step); 60 fps alongside the raymarcher |
+| V5.6 | Pressure mode + Report checklist (FC ids) | report reproduces live S6/F1 values; every FC row carries tier + probe text |
+
+## 54. V5 open questions (answer before/at acceptance)
+
+1. **Feed/return compartment assignment** for
+   `distributed_jet_compartments` (§25-6, still open with Hieu) — S6's
+   graph needs it; until answered, alternating is assumed and labelled.
+   **Mostly resolved by mesh extraction (2026-07-23):** slicing
+   `ICE rev 3 scaled - Remeshed.stl` (the current INCUS part, which —
+   unlike the V1+2 fin-only mesh — contains the full distribution layer)
+   verified the topology: fins −3.5…+3.4 green, manifold +3.6…+5.5;
+   **10 transverse feed ducts** (≈1.17 × 1.48 mm final) with top windows
+   at 2.79 mm pitch, **interdigitated return gaps** (≈1.15 × 1.9 mm)
+   venting at BOTH part sides into the housing plenum, fin-field
+   compartment walls at **1.40 mm final pitch** (2× finer than V1+2's
+   3.0 mm). The return manifold is therefore *inside* the part and its
+   finite conductance is modelled by S6. Remaining ask for Hieu is one
+   word — are the top windows the pump-inlet side or the outlet side —
+   which by network symmetry changes no S6 number, only the V5.2 arrow
+   directions.
+2. **Computed uniformity → KPI default** — proposal: always *shown*, feeds
+   the KPI solve opt-in only, flipped to default after the first Ansys
+   cross-check confirms S6 within ~10 %.
+3. **F1 grid + perf budget** — 256 cells long-axis / < 100 ms target OK?
+   WebGL solver only if profiling demands it.
+4. **ΔP reconciliation tolerance** — 15 % proposed (Darcy carries no
+   inertial core losses; the residual gap between F1 and the 1-D solver is
+   itself informative and displayed, not hidden).
+5. **Animation time-scale default** (~×50 slow-motion). Schematic-card
+   placement is resolved with V5-D7 (2026-07-23): collapsible card under
+   the layout selector; reconciliation chips sit beside the HUD mode
+   chips.
+6. **S6 validation anchor** — beyond fixtures, adopt one literature anchor
+   for manifold maldistribution (e.g. a published Z-type/U-type manifold
+   dataset), per the S1/S2 discipline? Proposed: yes, one.
+
+---
+
+### V5 changelog
+
+**V5.1 BUILT 2026-07-23 (same day as acceptance).**
+
+- **Engine:** new `engine/flow_network.py` — the S6 solver per §47: generic
+  node/edge network with laminar channel-bundle edges (identical Shah–London
+  fRe + roughness math as `_evaluate_fin_family`, expressed as R(q)),
+  quadratic minor-loss edges, fixed-point outer loop, hand-rolled Gaussian
+  elimination (stdlib-only, zero deps). Graph builders for single-pass,
+  center-feed / top-jet (2-branch), serpentine (per-pass width/n — finer
+  than the screening solver, divergence flagged), U-flow (feed/return
+  header ladder, U/Z port option, assumed header width stated) and
+  distributed-jet (ICE rev 3 mesh-measured geometry: 10 ducts → 20 crossing
+  paths, interdigitated return gaps venting both sides). Uniformity metric
+  U = (Σq)²/(N·Σq²).
+- **Server:** every fin-family evaluate carries an additive `flow_network`
+  block (splits, computed vs assumed uniformity, ΔP + friction/minor
+  decomposition, per-path v/Re, assumptions, §49 reconciliation row vs the
+  solver ΔP at 15 % tolerance). `use_computed_uniformity: true` (opt-in,
+  §V5-D5) re-bases the KPI solve on the computed value with a warning.
+  Non-fin families carry no block (honest: their ΔP models are not
+  channel-resolved). `layouts.py` n_jets clamp widened 8 → 16 for the
+  rev-3 part.
+- **First predictions:** single-pass and center-feed reconcile with the
+  lumped solver EXACTLY (ratio 1.0 — same math, finer topology, solved
+  50/50 split); ICE rev 3 distributed-jet computes **uniformity ≈ 0.87**
+  from return-gap end effects — the first non-assumed maldistribution
+  number in the project (pending the §54 Q6 literature anchor + CFD).
+- **§54 Q1 largely closed by mesh extraction** (see the Q1 note): ICE rev 3
+  distribution layer sliced and measured; only the pump-side port
+  assignment (arrows, not numbers) remains with Hieu.
+- **Tests:** `test_v5_flow_network.py` (25 checks: exact reconciliation,
+  solved symmetric splits, serpentine hand path-sum, U-flow maldistribution
+  with header sensitivity and U≠Z, distributed-jet mirror symmetry and ΔP
+  decomposition, opt-in coupling semantics, additive discipline). Full
+  suite green: parity 5/5 golden-exact + all V2/V3 suites.
