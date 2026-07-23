@@ -9,7 +9,11 @@ import { SLOWMO } from '../flowviz'
 import type { FlowFieldResult } from '../flowfield/useFlowField'
 import type { ViewerGeom } from '../viewerGeom'
 
-const COMETS_PER_LINE = 3
+const COMETS_PER_LINE = 4
+const COMET_R = 0.09          // mm — well under a channel gap
+const COMET_STRETCH = 7       // elongation along the motion direction
+const _yAxis = new THREE.Vector3(0, 1, 0)
+const _dir = new THREE.Vector3()
 
 export function FlowFieldLayer({
   field, g, coreWidth, coreLength, z,
@@ -101,11 +105,25 @@ export function FlowFieldLayer({
           y0 + P[3 * lo + 1] + f * (P[3 * hi + 1] - P[3 * lo + 1]),
           z + 0.05,
         )
+        // streak: stretch the sphere along the local motion direction so the
+        // particle field READS as flow, not as static pearls
+        _dir.set(P[3 * hi] - P[3 * lo], P[3 * hi + 1] - P[3 * lo + 1], 0)
+        const dl = _dir.length()
+        if (dl > 1e-9) {
+          _dir.divideScalar(dl)
+          dummy.quaternion.setFromUnitVectors(_yAxis, _dir)
+          dummy.scale.set(1, COMET_STRETCH, 1)
+        } else {
+          dummy.quaternion.identity()
+          dummy.scale.set(1, 1, 1)
+        }
         dummy.updateMatrix()
         mesh.setMatrixAt(inst++, dummy.matrix)
       }
     }
     // park unused instances out of view
+    dummy.quaternion.identity()
+    dummy.scale.set(1, 1, 1)
     for (; inst < nLines * COMETS_PER_LINE; inst++) {
       dummy.position.set(0, 0, -9999)
       dummy.updateMatrix()
@@ -117,14 +135,14 @@ export function FlowFieldLayer({
   return (
     <group>
       <lineSegments geometry={lines} frustumCulled={false}>
-        <lineBasicMaterial color="#57c8ff" transparent opacity={0.28} depthTest={false} />
+        <lineBasicMaterial color="#57c8ff" transparent opacity={0.34} depthTest={false} />
       </lineSegments>
       {/* V5.5 — comets depth-test against the raymarcher's written depth:
           fins occlude them; section cuts reveal them */}
       <instancedMesh ref={cometRef} args={[undefined, undefined, Math.max(1, nLines * COMETS_PER_LINE)]}
         frustumCulled={false}>
-        <sphereGeometry args={[0.26, 8, 8]} />
-        <meshBasicMaterial color="#aef0ff" transparent opacity={0.95} depthTest />
+        <sphereGeometry args={[COMET_R, 8, 8]} />
+        <meshBasicMaterial color="#aef0ff" transparent opacity={0.92} depthTest />
       </instancedMesh>
     </group>
   )
