@@ -294,6 +294,9 @@ export function FlowFieldLayer({
   const _ridePos = useMemo(() => new THREE.Vector3(), [])
   const _rideDir = useMemo(() => new THREE.Vector3(0, 1, 0), [])
   const _povPos = useMemo(() => new THREE.Vector3(), [])
+  const _camSm = useMemo(() => new THREE.Vector3(), [])    // smoothed camera pos
+  const _tgtSm = useMemo(() => new THREE.Vector3(), [])    // smoothed look target
+  const rideActive = useRef(false)
   useEffect(() => () => {
     if (!rideLineObj) return
     rideLineObj.geometry.dispose()
@@ -307,7 +310,7 @@ export function FlowFieldLayer({
     return m || 1
   }, [field])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const mesh = cometRef.current
     if (!mesh) return
     const { pts: P, offs } = ext
@@ -393,44 +396,55 @@ export function FlowFieldLayer({
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
 
-    // V5.8 — ride cameras. CHASE tracks from just above the fin tips (a
-    // 0.15 mm channel can't host the camera; parcel + path render through
-    // the metal). POV sits ON the path just behind the head — first-person
-    // through the wavy slot, the warming head visible ahead.
+    // V5.8 — ride cameras. Both anchor to time-lagged POINTS ON THE PATH
+    // (continuous by interpolation) — never to the per-segment direction,
+    // whose discrete steps through the wavy samples made the chase camera
+    // teleport sideways (found live). Exponential smoothing on top.
     if (riding && rideIdx >= 0) {
       const a = offs[rideIdx], b = offs[rideIdx + 1]
       const T = P[4 * (b - 1) + 3]
-      camera.up.set(0, 0, 1)
-      if (pov && T > 0) {
-        const head = ((tReal + rideIdx * 0.37 * T) % T + T) % T
-        const tBack = Math.max(head - 0.06 * T, 0)
-        // sample the path at the trailing time for the eye position
-        let lo = a, hi = b - 1
-        while (lo + 1 < hi) {
-          const m = (lo + hi) >> 1
-          if (P[4 * m + 3] <= tBack) lo = m
-          else hi = m
+      if (T > 0) {
+        const sampleLine = (tt: number, out: THREE.Vector3) => {
+          let lo = a, hi = b - 1
+          while (lo + 1 < hi) {
+            const m = (lo + hi) >> 1
+            if (P[4 * m + 3] <= tt) lo = m
+            else hi = m
+          }
+          const t0 = P[4 * lo + 3], t1 = P[4 * hi + 3]
+          const f = t1 > t0 ? (tt - t0) / (t1 - t0) : 0
+          out.set(
+            P[4 * lo] + f * (P[4 * hi] - P[4 * lo]),
+            P[4 * lo + 1] + f * (P[4 * hi + 1] - P[4 * lo + 1]),
+            P[4 * lo + 2] + f * (P[4 * hi + 2] - P[4 * lo + 2]),
+          )
         }
-        const t0 = P[4 * lo + 3], t1 = P[4 * hi + 3]
-        const f = t1 > t0 ? (tBack - t0) / (t1 - t0) : 0
-        _povPos.set(
-          P[4 * lo] + f * (P[4 * hi] - P[4 * lo]),
-          P[4 * lo + 1] + f * (P[4 * hi + 1] - P[4 * lo + 1]),
-          P[4 * lo + 2] + f * (P[4 * hi + 2] - P[4 * lo + 2]),
-        )
-        camera.position.set(_povPos.x, _povPos.y, _povPos.z + 0.35)
-        camera.lookAt(_ridePos.x, _ridePos.y, _ridePos.z + 0.05)
-      } else {
+        const head = ((tReal + rideIdx * 0.37 * T) % T + T) % T
+        camera.up.set(0, 0, 1)
         const zTopObj = g.baseThickness + g.finHeight
-        const dx2 = _rideDir.x, dy2 = _rideDir.y
-        const dl2 = Math.hypot(dx2, dy2) || 1
-        camera.position.set(
-          _ridePos.x - (dx2 / dl2) * 5.5,
-          _ridePos.y - (dy2 / dl2) * 5.5,
-          Math.max(_ridePos.z + 2.4, zTopObj + 1.1),
-        )
-        camera.lookAt(_ridePos.x + (dx2 / dl2) * 1.6, _ridePos.y + (dy2 / dl2) * 1.6, _ridePos.z)
+        if (pov) {
+          sampleLine(Math.max(head - 0.06 * T, 0), _povPos)
+          _povPos.z += 0.35
+        } else {
+          // chase: hover above a point trailing the parcel on its own path
+          sampleLine(Math.max(head - 0.16 * T, 0), _povPos)
+          _povPos.z = Math.max(_ridePos.z + 2.4, zTopObj + 1.1)
+        }
+        // smooth position + look target (snap on ride start)
+        const k = 1 - Math.exp(-(pov ? 10 : 4) * delta)
+        if (!rideActive.current) {
+          _camSm.copy(_povPos)
+          _tgtSm.copy(_ridePos)
+          rideActive.current = true
+        } else {
+          _camSm.lerp(_povPos, k)
+          _tgtSm.lerp(_ridePos, 1 - Math.exp(-8 * delta))
+        }
+        camera.position.copy(_camSm)
+        camera.lookAt(_tgtSm.x, _tgtSm.y, _tgtSm.z + (pov ? 0.05 : 0))
       }
+    } else {
+      rideActive.current = false
     }
   })
 
