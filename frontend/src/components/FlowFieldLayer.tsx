@@ -101,17 +101,16 @@ export function FlowFieldLayer({
           const span = Math.abs(r.yB - r.yA)
           const dirY = Math.sign(r.yB - r.yA)
           const n = Math.max(3, Math.round(span / DS_Y))
-          // z-profile (laminar channel physics, user-verified 2026-07-23):
-          // parcels FILL the channel depth near the entry, then hold their
-          // height for the whole run — no bulk sinking in laminar flow. The
-          // channel is flooded, so the bottom layer skims the floor (that is
-          // the wetted A_base, thermally the hottest contact). Exits are
-          // STRAIGHT OUT at each height — the flow is pump/pressure-driven;
-          // the base pocket's 45° faces are AM chamfers / diffuser walls,
-          // not flow directors (user correction, fins+base assembled).
+          // z-profile (laminar channel physics, user-validated 2026-07-23):
+          // the top-entry redistribution is GRADUAL — entrance effects in a
+          // slot decay ~e^(−x/H), so parcels keep descending over roughly one
+          // channel height of travel (~40% of this half-path), deep-bound
+          // parcels the longest; beyond that the streamlines run parallel
+          // (no continued sinking — pressure equalizes across the 0.15 mm
+          // gap instantly by comparison). Exits stay straight out.
           const legs = code === 1
           const zHi = g.baseThickness + g.finHeight * 0.92
-          const sFill = legs ? Math.min(0.25, 2.5 / Math.max(span, 1e-6)) : 0
+          const settle = 0.8 * g.finHeight     // development length ≈ one channel height
           let t = 0
           let count = 0
           const emit = (xo: number, yo: number, zo: number, tt: number) => {
@@ -129,8 +128,8 @@ export function FlowFieldLayer({
             const frac = s / n
             const yObj = y0 + r.yA + dirY * span * frac
             let zk = zS
-            if (legs && frac < sFill) {
-              zk = zHi + (zS - zHi) * (frac / sFill)        // jet fills the depth
+            if (legs) {
+              zk = zS + (zHi - zS) * Math.exp(-(span * frac) / settle)
             }
             emit(xw + wave(yObj), yObj, zk, t)
             if (s < n) t += span / n / vMm
