@@ -1906,3 +1906,44 @@ The id scheme exists now so the claims are machine-checkable later.
   `FlowNetworkBlock` types, `flow_network` carried on `BaselineResult`.
 - **Gates**: `tsc` + production build clean; server untouched — parity
   5/5 + V5 suite re-run green.
+
+**V5.3 BUILT 2026-07-23 (same day) — the F1 field solver (§48).**
+
+- **Solver core** (`frontend/src/flowfield/field.ts`, pure TS —
+  node-testable like `verify/*`): depth-integrated anisotropic
+  Darcy/Hele-Shaw on the fin-band planform. Fin channels give
+  `K_y = b·H·Dh²/(fRe·rough·2μ·arc·pitch)` per unit width — the same
+  Shah–London chain as the solvers — and block x entirely; headers/turn
+  plena open x locally. Per-layout grids and boundary conditions:
+  single-pass (edge in/out), center-feed (rib source, both-end sinks),
+  serpentine (band walls + full-width turn plena at alternating ends),
+  U-flow (feed/return header rows, U/Z port), distributed-jet (feed rows
+  at the duct lines, sink rows at the returns — ICE rev 3 registration).
+- **Numerics**: alternating line relaxation — exact Thomas solves per
+  column (channels) and per x-coupled row (headers/turns, ADI-style) —
+  plus a **global level correction** each sweep (the Neumann-source /
+  sparse-sink "constant mode" is projected out by shifting to close the
+  mass balance; convergence judged on the pre-shift imbalance). Uniform
+  cases converge in 2 sweeps; every fixture closes mass to ≤1e-12.
+- **Streamlines with time-of-flight**: RK2 traces from source-nudged
+  seeds, each vertex stamped with real transit time; packed transferable
+  arrays. Rendered by `FlowFieldLayer.tsx` as faint polylines + **comet
+  particles that ride the SOLVED field** — comets race in favoured
+  channels and crawl in starved ones, so maldistribution is directly
+  visible. Runs in a worker (`useFlowField`, 250 ms debounce, solve only
+  while the Flow layer is on).
+- **Reconciliation (§49)**: F1 resolves friction only, so the anchor is
+  **S6's friction component**, never the total. HUD chip: ✓ within 15 % /
+  ⚠ diverges, with grid, sweeps, mass error, and both ΔP values in the ⓘ;
+  plus F1's own field uniformity. KPIs never read from F1.
+- **Acceptance** (`frontend/test/flowfield.test.cjs`, 17 checks, in
+  `npm run test:verify`): single-pass ΔP == the analytic slot formula to
+  1e-6 (7 915.7 Pa reproduced exactly); wavy/straight ΔP ratio == arc
+  factor to 1e-3; center-feed == 0.250× (L/2 at Q/2); U-flow U < 1 with
+  header-width sensitivity; ICE distributed-jet crossings ~300× cheaper
+  than a full pass, mass exact; serpentine 8.7× single-pass (≈9
+  expected; turn plena account for the gap). `tsc` + build clean; verify
+  suite + parity 5/5 + V5 API tests all green.
+- **Still open for V5.3 scope**: TPMS isotropic permeability (F1 is
+  fin-families-only, same as S6); mesh-registered ICE duct positions
+  (period-nominal). Deferred to the V5.4+ passes.

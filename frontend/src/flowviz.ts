@@ -24,6 +24,11 @@ export interface FlowViz {
   realV: number           // the S6/solver velocity behind it (m/s)
   nSeg: number            // serpentine passes / distributed-jet duct count
   block: FlowNetworkBlock | null
+  // V5.3 — operating inputs the F1 field solver needs (SI)
+  mu: number
+  rho: number
+  flowM3s: number
+  meanRe: number
 }
 
 /** Build the viz descriptor from the live result + basis. Null = no flow layer
@@ -33,6 +38,7 @@ export function flowVizFrom(
   basis: Basis,
   block: FlowNetworkBlock | null | undefined,
   fallbackV: number | null,
+  flowLpm?: number | null,
 ): FlowViz | null {
   if (!['wavy_fin', 'straight_fin'].includes(family)) return null
   const layout = String(basis.architecture?.name ?? 'center_feed_bidirectional')
@@ -41,6 +47,9 @@ export function flowVizFrom(
   const realV = paths.length
     ? paths.reduce((s, p) => s + p.velocity_m_s, 0) / paths.length
     : (fallbackV ?? 0)
+  const meanRe = paths.length
+    ? paths.reduce((s, p) => s + p.Re, 0) / paths.length
+    : 150
   const nPaths = Number(basis.architecture?.n_parallel_paths ?? 2)
   let nSeg = 2
   if (layout === 'serpentine_n_pass') {
@@ -49,11 +58,16 @@ export function flowVizFrom(
   } else if (layout === 'distributed_jet_compartments') {
     nSeg = Math.max(1, Math.floor(nPaths / 2))
   }
+  const lpm = Number(flowLpm ?? basis.operating?.flow_lpm ?? 2.65)
   return {
     layout, code,
     speedMmS: (realV * 1000) / SLOWMO,
     realV, nSeg,
     block: block?.supported ? block : null,
+    mu: Number(basis.operating?.mu_Pa_s ?? 0.00089),
+    rho: Number(basis.operating?.rho_kg_m3 ?? 997),
+    flowM3s: lpm / 60000,
+    meanRe,
   }
 }
 

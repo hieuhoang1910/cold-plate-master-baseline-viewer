@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:verify": "tsc src/stl.ts src/manufacturing.ts src/viewerGeom.ts src/verify/types.ts src/verify/field.ts src/verify/geometry.ts src/verify/slice.ts src/verify/stages.ts src/verify/raster.ts src/verify/stlParse.ts src/verify/bvh.ts src/verify/pointmap.ts --outDir .verify-build --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node test/verify-engine.test.cjs"
+    "test:verify": "tsc src/stl.ts src/manufacturing.ts src/viewerGeom.ts src/verify/types.ts src/verify/field.ts src/verify/geometry.ts src/verify/slice.ts src/verify/stages.ts src/verify/raster.ts src/verify/stlParse.ts src/verify/bvh.ts src/verify/pointmap.ts src/flowfield/field.ts --outDir .verify-build --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node test/verify-engine.test.cjs && node test/flowfield.test.cjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.3",

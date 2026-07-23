@@ -178,7 +178,8 @@ export default function App() {
   // V5.2 — flow-intent layer: layout routing at the S6 network-solved speed.
   const flowViz = useMemo(
     () => (design && catalog
-      ? flowVizFrom(design.family, catalog.basis, live?.flow_network ?? null, live?.velocity_m_s ?? null)
+      ? flowVizFrom(design.family, catalog.basis, live?.flow_network ?? null,
+          live?.velocity_m_s ?? null, design.flow_lpm)
       : null),
     [design, catalog, live],
   )

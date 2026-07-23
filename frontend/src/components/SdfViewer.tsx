@@ -5,6 +5,9 @@ import * as THREE from 'three'
 import { fmt } from '../format'
 import { buildStl, type StlQuality } from '../stl'
 import { timeScaleLabel, type FlowViz } from '../flowviz'
+import { useFlowField } from '../flowfield/useFlowField'
+import type { FieldInput } from '../flowfield/field'
+import { FlowFieldLayer } from './FlowFieldLayer'
 import type { ViewerGeom } from '../viewerGeom'
 
 function fmtBytes(n: number): string {
@@ -589,6 +592,24 @@ export function SdfViewer({
   const [cuts, setCuts] = useState<Cuts>(defaultCuts)
   const [flowOn, setFlowOn] = useState(false)
   const [viewCmd, setViewCmd] = useState({ view: 'iso', n: 0 })
+
+  // V5.3 — F1 field solve (worker, debounced) while the flow layer is on.
+  const fieldInput = useMemo((): FieldInput | null => {
+    if (!flow || g.family === 'gyroid_tpms') return null
+    return {
+      coreWidth: g.coreWidth, coreLength: g.coreLength, finHeight: g.finHeight,
+      finThickness: g.finThickness, gap: g.gap, sideMargin: g.sideMargin,
+      waveAmp: g.waveAmp, waveLen: g.waveLen,
+      layout: flow.layout, nSeg: flow.nSeg,
+      mu: flow.mu, rho: flow.rho, flowM3s: flow.flowM3s,
+      meanRe: flow.meanRe, relRoughness: 0.03,
+    }
+  }, [g, flow])
+  const { result: field, solving: fieldSolving } = useFlowField(fieldInput, flowOn && !!flow)
+  // §49 anchor: F1 resolves friction only → reconcile against S6's friction
+  // component, never the total (minor losses live outside the sheet).
+  const s6Friction = flow?.block?.deltaP_breakdown?.friction_Pa ?? null
+  const f1Ratio = field && s6Friction ? field.deltaP / s6Friction : null
   const [stl, setStl] = useState<{ busy: boolean; note: string }>({ busy: false, note: '' })
   const [stlQuality, setStlQuality] = useState<StlQuality>('standard')
   // sheet/solid lattices are meshed from the implicit field, so they get a
@@ -638,6 +659,10 @@ export function SdfViewer({
         <RayMarcher g={g} cuts={cuts}
           flow={flow ? { on: flowOn, code: flow.code, speedMmS: flow.speedMmS, nSeg: flow.nSeg } : null} />
         {flow && flowOn && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
+        {flow && flowOn && field && (
+          <FlowFieldLayer field={field} coreWidth={g.coreWidth} coreLength={g.coreLength}
+            z={g.baseThickness + g.finHeight * 0.62} />
+        )}
         <OrbitControls
           makeDefault
           enabled={introT >= 1}
@@ -687,6 +712,15 @@ export function SdfViewer({
             {flow.block?.uniformity_computed != null && (
               <span className="vo-chip" title="S6 network-computed flow uniformity (1.0 = perfectly even split across paths).">
                 U {fmt(flow.block.uniformity_computed, 3)}
+              </span>
+            )}
+            {fieldSolving && <span className="vo-chip">F1 solving…</span>}
+            {field && !fieldSolving && (
+              <span className={`vo-chip ${f1Ratio == null ? '' : Math.abs(f1Ratio - 1) <= 0.15 ? 'vo-chip-ok' : 'vo-chip-warn'}`}
+                title={`F1 field solve: ${field.nx}×${field.ny} grid, ${field.iters} sweeps, mass error ${(field.massErr * 100).toFixed(3)}%. Friction ΔP ${fmt(field.deltaP / 1000, 2)} kPa${s6Friction ? ` vs S6 friction ${fmt(s6Friction / 1000, 2)} kPa (ratio ${fmt(f1Ratio ?? 0, 3)})` : ''}. Streamline comets ride the SOLVED field — fast where the flow is favoured. KPIs never read from F1 (spec §49).`}>
+                {f1Ratio == null ? `F1 ${fmt(field.deltaP / 1000, 1)} kPa`
+                  : Math.abs(f1Ratio - 1) <= 0.15 ? '✓ F1 field' : '⚠ F1 diverges'}
+                {` · U ${fmt(field.uniformity, 3)}`}
               </span>
             )}
           </div>
