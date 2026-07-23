@@ -61,6 +61,29 @@ check(dj.lineOffsets.length > 20, `streamlines traced (${dj.lineOffsets.length -
 check(dj.deltaP < sp.deltaP / 5,
   `short crossings are far cheaper than a full pass (${dj.deltaP.toFixed(0)} << ${sp.deltaP.toFixed(0)} Pa)`)
 
+console.log('F1 thermal (V5.4) — outlet closure is exact energy conservation')
+const THERM = { heatW: 450, cp: 4181, TIn: 25 }
+const dTcal = THERM.heatW / (BASE.rho * BASE.flowM3s * THERM.cp)
+for (const [name, extra] of [
+  ['single-pass', {}],
+  ['center-feed', { layout: 'center_feed_bidirectional' }],
+  ['distributed-jet', { coreWidth: 28, layout: 'distributed_jet_compartments', nSeg: 10 }],
+]) {
+  const r = solveField({ ...BASE, ...extra, ...THERM })
+  check(r.tGrid != null && approx(r.outletT, THERM.TIn + dTcal, 1e-6),
+    `${name}: outlet T ${r.outletT.toFixed(4)} °C == T_in + dT_cal ${(THERM.TIn + dTcal).toFixed(4)} °C`)
+  check(r.tMax >= r.outletT - 1e-9 && r.tMax < THERM.TIn + 3 * dTcal + 1e-9,
+    `${name}: hottest live cell ${r.tMax.toFixed(2)} °C within [outlet, cap]`)
+}
+const uT = solveField({ ...BASE, layout: 'u_flow_side_feed', headerWidthMm: 1.0, ...THERM })
+check(approx(uT.outletT, THERM.TIn + dTcal, 1e-6),
+  `u-flow: outlet closure holds under maldistribution (${uT.outletT.toFixed(4)} °C)`)
+check(uT.tMax > THERM.TIn + dTcal,
+  `u-flow: starved channels run hotter than the mixed outlet (${uT.tMax.toFixed(2)} °C)`)
+const noT = solveField({ ...BASE })
+check(noT.tGrid === null && noT.pGrid.length === noT.nx * noT.ny && noT.vGrid.length === noT.nx * noT.ny,
+  'no heat inputs -> tGrid null; p/v grids always present')
+
 console.log('F1 serpentine — passes multiply the friction path')
 const se = solveField({ ...BASE, layout: 'serpentine_n_pass', nSeg: 3 })
 // 3 passes at 1/3 width: q per pass x3, path x3 -> ~9x the single-pass friction

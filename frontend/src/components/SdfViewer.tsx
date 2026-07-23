@@ -4,8 +4,8 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import * as THREE from 'three'
 import { fmt } from '../format'
 import { buildStl, type StlQuality } from '../stl'
-import { timeScaleLabel, type FlowViz } from '../flowviz'
-import { useFlowField } from '../flowfield/useFlowField'
+import { SLOWMO, timeScaleLabel, type FlowViz } from '../flowviz'
+import { useFlowField, type FlowFieldResult } from '../flowfield/useFlowField'
 import type { FieldInput } from '../flowfield/field'
 import { FlowFieldLayer } from './FlowFieldLayer'
 import type { ViewerGeom } from '../viewerGeom'
@@ -13,6 +13,7 @@ import type { ViewerGeom } from '../viewerGeom'
 function fmtBytes(n: number): string {
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
 }
+const pct01 = (f: number) => `${Math.round(f * 100)}%`
 
 // Fullscreen triangle: the vertex shader writes clip space directly, so the
 // pass ignores the scene camera. Rays are reconstructed in the fragment shader
@@ -50,6 +51,18 @@ uniform float uTime;       // seconds
 uniform float uFlowLayout; // 0 single/u-flow · 1 center-feed · 2 serpentine · 3 distributed-jet
 uniform float uFlowSpeed;  // dash speed, mm/s (slow-motion already applied)
 uniform float uNSeg;       // serpentine passes / distributed-jet duct count
+// V5.4/V5.6 — colour modes. 0 steel · 1 thermal tint · 2 ΔP budget.
+// Tint anchors are SOLVER numbers (T_in, ΔT_cal, Q·R_conv, mH from η_f);
+// when the F1 field is on its textures replace the 1-D profiles.
+uniform float uColorMode;
+uniform float uTIn, uDTcal, uDTwall, uMH, uPathLen, uTMaxN;
+uniform float uDpTotal, uDpMinorFrac;
+uniform sampler2D uTTex, uPTex, uVTex;   // F1 fields, 8-bit normalized
+uniform float uTexOn;
+uniform vec2 uTexOrigin, uTexSize;       // fin-band rect (mm, min corner + extents)
+uniform vec2 uTScale, uPScale, uVScale;  // texel -> physical (min, max)
+uniform float uVDead;                    // dead-zone velocity threshold (m/s)
+uniform mat4 uViewProj;                  // V5.5 — depth write for compositing
 
 const float PI = 3.14159265359;
 
@@ -174,6 +187,26 @@ float flowPhase(vec3 p) {
   return abs(mod(yy, 2.0 * pc) - pc);
 }
 
+// ---- V5.4/V5.6 tint helpers ----
+float texVal(sampler2D s, vec2 sc, vec2 xy) {
+  vec2 uv = clamp((xy - uTexOrigin) / uTexSize, vec2(0.001), vec2(0.999));
+  return sc.x + texture2D(s, uv).r * (sc.y - sc.x);
+}
+float fluidT(vec3 p) {
+  if (uTexOn > 0.5) return texVal(uTTex, uTScale, p.xy);
+  return uTIn + uDTcal * clamp(flowPhase(p) / max(uPathLen, 1e-3), 0.0, 1.0);
+}
+vec3 heatmap(float t) {
+  t = clamp(t, 0.0, 1.0);
+  vec3 c1 = vec3(0.13, 0.25, 0.70);
+  vec3 c2 = vec3(0.05, 0.65, 0.85);
+  vec3 c3 = vec3(0.95, 0.85, 0.25);
+  vec3 c4 = vec3(0.90, 0.20, 0.12);
+  return t < 0.34 ? mix(c1, c2, t / 0.34)
+       : t < 0.67 ? mix(c2, c3, (t - 0.34) / 0.33)
+       : mix(c3, c4, (t - 0.67) / 0.33);
+}
+
 vec3 calcNormal(vec3 p) {
   vec2 e = vec2(0.012, 0.0);
   return normalize(vec3(
@@ -214,9 +247,28 @@ void main() {
     float amb = 0.28 + 0.12 * clamp(nor.z, 0.0, 1.0);
     float h = clamp((pos.z - uBase) / max(uH, 1e-3), 0.0, 1.0);
     vec3 steel = mix(vec3(0.50, 0.53, 0.57), vec3(0.80, 0.82, 0.85), h); // stainless, brighter at tips
-    col = steel * (amb + 0.75 * d1) + vec3(1.0) * (0.20 * d2);
     float fres = pow(1.0 - max(dot(nor, vdir), 0.0), 3.0);
-    col += fres * 0.14;
+    if (uColorMode < 0.5) {
+      col = steel * (amb + 0.75 * d1) + vec3(1.0) * (0.20 * d2);
+      col += fres * 0.14;
+    } else if (uColorMode < 1.5) {
+      // thermal tint: local fluid T + the fin conduction (cosh) profile in z
+      float Tf = fluidT(pos);
+      float T;
+      if (pos.z > uBase + 0.001) {
+        float hf = clamp((pos.z - uBase) / max(uH, 1e-3), 0.0, 1.0);
+        float th = (uMH < 10.0) ? cosh(uMH * (1.0 - hf)) / cosh(uMH) : exp(-uMH * hf);
+        T = Tf + uDTwall * th;                       // root hot, tip ~fluid (low η_f)
+      } else {
+        T = Tf + uDTwall * 1.03;                     // base slab, just above the roots
+      }
+      float tn = (T - uTIn) / max(uTMaxN - uTIn, 1e-3);
+      col = heatmap(tn) * (0.42 + 0.62 * d1 + 0.18 * d2);
+      col += fres * 0.10;
+    } else {
+      // ΔP mode: metal recedes; the budget story lives on the fluid sheet
+      col = steel * (amb + 0.75 * d1) * 0.40 + vec3(1.0) * (0.08 * d2);
+    }
     col = pow(col, vec3(0.4545));                   // gamma (solid only, as V1)
   }
 
@@ -232,13 +284,48 @@ void main() {
         float dashLen = max(uLambda, 1.2);
         float ph = (flowPhase(fp) - uFlowSpeed * uTime) / dashLen;
         float dash = smoothstep(0.50, 0.28, abs(fract(ph) - 0.5));
-        vec3 water = vec3(0.22, 0.72, 1.0);         // display-space accent
-        float alpha = 0.10 + 0.42 * dash;
-        col = mix(col, water, alpha);
+        vec3 laneCol;
+        float alpha;
+        if (uColorMode < 0.5) {
+          laneCol = vec3(0.22, 0.72, 1.0);          // water accent
+          alpha = 0.10 + 0.42 * dash;
+        } else if (uColorMode < 1.5) {
+          float tn = (fluidT(fp) - uTIn) / max(uTMaxN - uTIn, 1e-3);
+          laneCol = heatmap(tn);
+          alpha = 0.42 + 0.22 * dash;
+        } else {
+          // ΔP budget: red = pressure unspent (inlet) -> blue = spent (outlet)
+          float pn;
+          if (uTexOn > 0.5) {
+            pn = texVal(uPTex, uPScale, fp.xy) / max(uPScale.y, 1e-3);
+          } else {
+            float s = clamp(flowPhase(fp) / max(uPathLen, 1e-3), 0.0, 1.0);
+            float minorSpent = (uFlowLayout > 1.5 && uFlowLayout < 2.5)
+              ? s : smoothstep(0.0, 0.06, s);       // serpentine spends K at bends; others at entry
+            pn = 1.0 - (uDpMinorFrac * minorSpent + (1.0 - uDpMinorFrac) * s);
+          }
+          laneCol = heatmap(pn);
+          alpha = 0.46 + 0.20 * dash;
+        }
+        // F1 dead-zone shading: near-stagnant cells surface as dark magenta
+        if (uTexOn > 0.5 && uColorMode > 0.5) {
+          float vloc = texVal(uVTex, uVScale, fp.xy);
+          if (vloc < uVDead) {
+            laneCol = mix(vec3(0.36, 0.05, 0.30), laneCol, 0.30);
+            alpha = max(alpha, 0.55);
+          }
+        }
+        col = mix(col, laneCol, alpha);
       }
     }
   }
 
+  if (hit >= 0.0) {
+    vec4 clip = uViewProj * vec4(pos, 1.0);
+    gl_FragDepth = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
+  } else {
+    gl_FragDepth = 1.0;
+  }
   gl_FragColor = vec4(col, 1.0);
 }
 `
@@ -259,9 +346,63 @@ export interface FlowLayer {
   nSeg: number
 }
 
-function RayMarcher({ g, cuts, flow }: { g: ViewerGeom; cuts: Cuts; flow: FlowLayer | null }) {
+/** V5.4/V5.6 — solver-anchored tint values for the thermal / ΔP modes. */
+export interface TintUniforms {
+  colorMode: number   // 0 steel · 1 thermal · 2 ΔP
+  TIn: number
+  dTcal: number
+  dTwall: number
+  mH: number
+  pathLen: number     // mm — normalizes flowPhase for the 1-D profiles
+  tMaxN: number       // colormap top (°C)
+  dpTotal: number
+  dpMinorFrac: number
+}
+
+function makeFieldTex(arr: Float32Array, nx: number, ny: number) {
+  let mn = Infinity, mx = -Infinity
+  for (let k = 0; k < arr.length; k++) { const v = arr[k]; if (v < mn) mn = v; if (v > mx) mx = v }
+  if (!(mx > mn)) mx = mn + 1
+  const data = new Uint8Array(arr.length)
+  for (let k = 0; k < arr.length; k++) data[k] = Math.round(((arr[k] - mn) / (mx - mn)) * 255)
+  const tex = new THREE.DataTexture(data, nx, ny, THREE.RedFormat, THREE.UnsignedByteType)
+  tex.magFilter = THREE.LinearFilter
+  tex.minFilter = THREE.LinearFilter
+  tex.needsUpdate = true
+  return { tex, min: mn, max: mx }
+}
+const DUMMY_TEX = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat, THREE.UnsignedByteType)
+DUMMY_TEX.needsUpdate = true
+
+function RayMarcher({ g, cuts, flow, tint, field }: {
+  g: ViewerGeom
+  cuts: Cuts
+  flow: FlowLayer | null
+  tint: TintUniforms | null
+  field: FlowFieldResult | null
+}) {
   const { camera } = useThree()
   const matRef = useRef<THREE.ShaderMaterial>(null)
+
+  // F1 field textures (8-bit normalized + physical scales)
+  const fieldTex = useMemo(() => {
+    if (!field) return null
+    const p = makeFieldTex(field.pGrid, field.nx, field.ny)
+    const v = makeFieldTex(field.vGrid, field.nx, field.ny)
+    const t = field.tGrid ? makeFieldTex(field.tGrid, field.nx, field.ny) : null
+    let vSum = 0
+    for (let k = 0; k < field.vGrid.length; k++) vSum += field.vGrid[k]
+    return {
+      p, v, t,
+      vDead: 0.05 * (vSum / field.vGrid.length),
+      origin: [-(field.nx * field.dx) / 2, -(field.ny * field.dy) / 2] as const,
+      size: [field.nx * field.dx, field.ny * field.dy] as const,
+    }
+  }, [field])
+  useEffect(() => () => {
+    if (!fieldTex) return
+    fieldTex.p.tex.dispose(); fieldTex.v.tex.dispose(); fieldTex.t?.tex.dispose()
+  }, [fieldTex])
 
   const uniforms = useMemo(
     () => ({
@@ -296,9 +437,64 @@ function RayMarcher({ g, cuts, flow }: { g: ViewerGeom; cuts: Cuts; flow: FlowLa
       uFlowLayout: { value: 1 },
       uFlowSpeed: { value: 0 },
       uNSeg: { value: 2 },
+      uColorMode: { value: 0 },
+      uTIn: { value: 25 }, uDTcal: { value: 2.4 }, uDTwall: { value: 4 },
+      uMH: { value: 3 }, uPathLen: { value: 14 }, uTMaxN: { value: 32 },
+      uDpTotal: { value: 1 }, uDpMinorFrac: { value: 0.2 },
+      uTTex: { value: DUMMY_TEX }, uPTex: { value: DUMMY_TEX }, uVTex: { value: DUMMY_TEX },
+      uTexOn: { value: 0 },
+      uTexOrigin: { value: new THREE.Vector2(0, 0) },
+      uTexSize: { value: new THREE.Vector2(1, 1) },
+      uTScale: { value: new THREE.Vector2(0, 1) },
+      uPScale: { value: new THREE.Vector2(0, 1) },
+      uVScale: { value: new THREE.Vector2(0, 1) },
+      uVDead: { value: 0 },
+      uViewProj: { value: new THREE.Matrix4() },
     }),
     [], // created once; kept in sync by the effects below
   )
+
+  useEffect(() => {
+    const u = matRef.current?.uniforms
+    if (!u) return
+    u.uColorMode.value = tint?.colorMode ?? 0
+    if (tint) {
+      u.uTIn.value = tint.TIn
+      u.uDTcal.value = tint.dTcal
+      u.uDTwall.value = tint.dTwall
+      u.uMH.value = tint.mH
+      u.uPathLen.value = tint.pathLen
+      u.uTMaxN.value = tint.tMaxN
+      u.uDpTotal.value = tint.dpTotal
+      u.uDpMinorFrac.value = tint.dpMinorFrac
+    }
+  }, [tint])
+
+  useEffect(() => {
+    const u = matRef.current?.uniforms
+    if (!u) return
+    if (fieldTex) {
+      u.uTexOn.value = 1
+      u.uPTex.value = fieldTex.p.tex
+      u.uPScale.value.set(fieldTex.p.min, fieldTex.p.max)
+      u.uVTex.value = fieldTex.v.tex
+      u.uVScale.value.set(fieldTex.v.min, fieldTex.v.max)
+      if (fieldTex.t) {
+        u.uTTex.value = fieldTex.t.tex
+        u.uTScale.value.set(fieldTex.t.min, fieldTex.t.max)
+      } else {
+        u.uTTex.value = DUMMY_TEX
+      }
+      u.uVDead.value = fieldTex.vDead
+      u.uTexOrigin.value.set(fieldTex.origin[0], fieldTex.origin[1])
+      u.uTexSize.value.set(fieldTex.size[0], fieldTex.size[1])
+    } else {
+      u.uTexOn.value = 0
+      u.uTTex.value = DUMMY_TEX
+      u.uPTex.value = DUMMY_TEX
+      u.uVTex.value = DUMMY_TEX
+    }
+  }, [fieldTex])
 
   useEffect(() => {
     const u = matRef.current?.uniforms
@@ -347,10 +543,10 @@ function RayMarcher({ g, cuts, flow }: { g: ViewerGeom; cuts: Cuts; flow: FlowLa
   useFrame((state) => {
     const u = matRef.current?.uniforms
     if (!u) return
-    u.uInvViewProj.value
+    u.uViewProj.value
       .copy(camera.projectionMatrix)
       .multiply(camera.matrixWorldInverse)
-      .invert()
+    u.uInvViewProj.value.copy(u.uViewProj.value).invert()
     u.uTime.value = state.clock.elapsedTime
   })
 
@@ -366,8 +562,9 @@ function RayMarcher({ g, cuts, flow }: { g: ViewerGeom; cuts: Cuts; flow: FlowLa
         vertexShader={VERT}
         fragmentShader={FRAG}
         uniforms={uniforms}
+        glslVersion={THREE.GLSL3}
         depthTest={false}
-        depthWrite={false}
+        depthWrite
       />
     </mesh>
   )
@@ -496,6 +693,44 @@ function layoutArrows(g: ViewerGeom, code: number, nSeg: number): Arrow[] {
   return a
 }
 
+// V5.5 — follow-a-parcel: the camera rides the longest solved streamline at
+// slow-motion speed; Esc or the button exits. The 30-second design-review demo.
+function RideRig({ field, x0, y0, z }: {
+  field: FlowFieldResult; x0: number; y0: number; z: number
+}) {
+  const camera = useThree((s) => s.camera)
+  const line = useMemo(() => {
+    const offs = field.lineOffsets
+    let best = 0, bestT = -1
+    for (let l = 0; l < offs.length - 1; l++) {
+      const T = field.linePoints[3 * (offs[l + 1] - 1) + 2]
+      if (T > bestT) { bestT = T; best = l }
+    }
+    return { a: offs[best], b: offs[best + 1], T: bestT }
+  }, [field])
+  useFrame((state) => {
+    const { a, b, T } = line
+    if (!(T > 0) || b - a < 2) return
+    const P = field.linePoints
+    const tt = ((state.clock.elapsedTime / SLOWMO) % T + T) % T
+    let lo = a, hi = b - 1
+    while (lo + 1 < hi) {
+      const mid = (lo + hi) >> 1
+      if (P[3 * mid + 2] <= tt) lo = mid
+      else hi = mid
+    }
+    const f = P[3 * hi + 2] > P[3 * lo + 2] ? (tt - P[3 * lo + 2]) / (P[3 * hi + 2] - P[3 * lo + 2]) : 0
+    const px = x0 + P[3 * lo] + f * (P[3 * hi] - P[3 * lo])
+    const py = y0 + P[3 * lo + 1] + f * (P[3 * hi + 1] - P[3 * lo + 1])
+    const ax = P[3 * hi] - P[3 * lo], ay = P[3 * hi + 1] - P[3 * lo + 1]
+    const al = Math.hypot(ax, ay) || 1
+    camera.up.set(0, 0, 1)
+    camera.position.set(px - (ax / al) * 6, py - (ay / al) * 6, z + 4)
+    camera.lookAt(px + (ax / al) * 3, py + (ay / al) * 3, z)
+  })
+  return null
+}
+
 const _up = new THREE.Vector3(0, 1, 0)
 
 function FlowGlyphs({ g, code, nSeg }: { g: ViewerGeom; code: number; nSeg: number }) {
@@ -591,9 +826,24 @@ export function SdfViewer({
   })
   const [cuts, setCuts] = useState<Cuts>(defaultCuts)
   const [flowOn, setFlowOn] = useState(false)
+  const [colorMode, setColorMode] = useState<'steel' | 'thermal' | 'dp'>('steel')
+  const [riding, setRiding] = useState(false)
+  const [probe, setProbe] = useState<{ x: number; y: number; text: string } | null>(null)
+  const camRef = useRef<THREE.Camera | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const [viewCmd, setViewCmd] = useState({ view: 'iso', n: 0 })
 
-  // V5.3 — F1 field solve (worker, debounced) while the flow layer is on.
+  // V5.4 — the layout's path length (mm), normalizing the 1-D tint profiles.
+  const pathLen = useMemo(() => {
+    if (!flow) return g.coreLength
+    if (flow.code === 1) return g.coreLength / 2
+    if (flow.code === 2) return flow.nSeg * g.coreLength
+    if (flow.code === 3) return g.coreLength / (2 * Math.max(1, flow.nSeg))
+    return g.coreLength
+  }, [flow, g.coreLength])
+
+  // V5.3/V5.4 — F1 field solve (worker, debounced); runs for the flow layer
+  // AND for the tint modes (their textures come from it when available).
   const fieldInput = useMemo((): FieldInput | null => {
     if (!flow || g.family === 'gyroid_tpms') return null
     return {
@@ -603,9 +853,72 @@ export function SdfViewer({
       layout: flow.layout, nSeg: flow.nSeg,
       mu: flow.mu, rho: flow.rho, flowM3s: flow.flowM3s,
       meanRe: flow.meanRe, relRoughness: 0.03,
+      heatW: flow.thermal?.heatW, cp: flow.thermal?.cp, TIn: flow.thermal?.TIn,
     }
   }, [g, flow])
-  const { result: field, solving: fieldSolving } = useFlowField(fieldInput, flowOn && !!flow)
+  const vizActive = !!flow && (flowOn || colorMode !== 'steel')
+  const { result: field, solving: fieldSolving } = useFlowField(fieldInput, vizActive)
+
+  // V5.4/V5.6 — solver-anchored tint uniforms.
+  const tint = useMemo((): TintUniforms | null => {
+    if (!flow || colorMode === 'steel') return null
+    const th = flow.thermal
+    const TIn = th?.TIn ?? 25
+    const dTcal = th?.dTcal ?? 0
+    const dTwall = th?.dTwall ?? 0
+    return {
+      colorMode: colorMode === 'thermal' ? 1 : 2,
+      TIn, dTcal, dTwall,
+      mH: th?.mH ?? 3,
+      pathLen,
+      tMaxN: Math.max(TIn + dTcal, field?.tMax ?? 0) + dTwall * 1.05,
+      dpTotal: flow.dp?.totalPa ?? 1,
+      dpMinorFrac: flow.dp?.minorFrac ?? 0.2,
+    }
+  }, [flow, colorMode, pathLen, field])
+
+  // hover probe over the fluid sheet (thermal / ΔP / flow layers)
+  const sheetZ = g.baseThickness + g.finHeight * 0.58
+  const onProbeMove = (e: React.PointerEvent) => {
+    if (!vizActive || riding || !camRef.current || !wrapRef.current) { if (probe) setProbe(null); return }
+    const r = wrapRef.current.getBoundingClientRect()
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+    const nyc = -(((e.clientY - r.top) / r.height) * 2 - 1)
+    const cam = camRef.current
+    const o = new THREE.Vector3(nx, nyc, -1).unproject(cam)
+    const f = new THREE.Vector3(nx, nyc, 1).unproject(cam)
+    const d = f.sub(o).normalize()
+    if (Math.abs(d.z) < 1e-6) { setProbe(null); return }
+    const t = (sheetZ - o.z) / d.z
+    if (t < 0) { setProbe(null); return }
+    const px = o.x + d.x * t, py = o.y + d.y * t
+    const Wf = g.coreWidth - 2 * g.sideMargin
+    if (Math.abs(px) > Wf / 2 || Math.abs(py) > g.coreLength / 2) { setProbe(null); return }
+    let text: string
+    if (field) {
+      const i = Math.min(field.nx - 1, Math.max(0, Math.floor((px + (field.nx * field.dx) / 2) / field.dx)))
+      const j = Math.min(field.ny - 1, Math.max(0, Math.floor((py + (field.ny * field.dy) / 2) / field.dy)))
+      const id = j * field.nx + i
+      const parts = [`v ${fmt(field.vGrid[id], 2)} m/s`, `p ${fmt(field.pGrid[id] / 1000, 2)} kPa`]
+      if (field.tGrid) parts.unshift(`T ${fmt(field.tGrid[id], 2)} °C`)
+      text = parts.join(' · ')
+    } else if (flow?.thermal) {
+      const th = flow.thermal
+      text = `T ~${fmt(th.TIn + th.dTcal * 0.5, 1)} °C (1-D) · v ${fmt(flow.realV, 2)} m/s`
+    } else {
+      text = `v ${fmt(flow?.realV ?? 0, 2)} m/s`
+    }
+    setProbe({ x: e.clientX - r.left, y: e.clientY - r.top, text })
+  }
+
+  // Esc exits the parcel ride
+  useEffect(() => {
+    if (!riding) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRiding(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [riding])
+  useEffect(() => { if (!field) setRiding(false) }, [field])
   // §49 anchor: F1 resolves friction only → reconcile against S6's friction
   // component, never the total (minor losses live outside the sheet).
   const s6Friction = flow?.block?.deltaP_breakdown?.friction_Pa ?? null
@@ -650,22 +963,28 @@ export function SdfViewer({
     setCuts((c) => ({ ...c, [axis]: { ...c[axis], ...p } }))
 
   return (
-    <div className="viewer-wrap">
+    <div className="viewer-wrap" ref={wrapRef}
+      onPointerMove={onProbeMove} onPointerLeave={() => setProbe(null)}>
       <Canvas
         dpr={[1, 1.75]}
         camera={{ position: [-42, -52, 40], up: [0, 0, 1], fov: 40, near: 1, far: 4000 }}
         gl={{ antialias: true }}
+        onCreated={(s) => { camRef.current = s.camera }}
       >
         <RayMarcher g={g} cuts={cuts}
-          flow={flow ? { on: flowOn, code: flow.code, speedMmS: flow.speedMmS, nSeg: flow.nSeg } : null} />
+          flow={flow ? { on: vizActive, code: flow.code, speedMmS: flow.speedMmS, nSeg: flow.nSeg } : null}
+          tint={tint} field={vizActive ? field : null} />
         {flow && flowOn && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
         {flow && flowOn && field && (
-          <FlowFieldLayer field={field} coreWidth={g.coreWidth} coreLength={g.coreLength}
+          <FlowFieldLayer field={field} g={g} coreWidth={g.coreWidth} coreLength={g.coreLength}
             z={g.baseThickness + g.finHeight * 0.62} />
+        )}
+        {riding && field && (
+          <RideRig field={field} x0={-(field.nx * field.dx) / 2} y0={-(field.ny * field.dy) / 2} z={sheetZ} />
         )}
         <OrbitControls
           makeDefault
-          enabled={introT >= 1}
+          enabled={introT >= 1 && !riding}
           target={[0, 0, cz]}
           enablePan
           screenSpacePanning
@@ -695,7 +1014,7 @@ export function SdfViewer({
             </button>
           ))}
         </div>
-        {flow && flowOn && (
+        {flow && (flowOn || colorMode !== 'steel') && (
           <div className="vo-flowchips">
             <span className="vo-chip vo-chip-intent" title="Everything animated is the layout's routing at the S6 network-solved speed — a statement of design intent for CFD to confirm, not a simulation.">
               design intent — confirm by CFD
@@ -712,6 +1031,28 @@ export function SdfViewer({
             {flow.block?.uniformity_computed != null && (
               <span className="vo-chip" title="S6 network-computed flow uniformity (1.0 = perfectly even split across paths).">
                 U {fmt(flow.block.uniformity_computed, 3)}
+              </span>
+            )}
+            {colorMode === 'thermal' && flow.thermal && (
+              <span className="vo-chip vo-legend"
+                title={`Thermal intent: fluid = ${field?.tGrid ? 'F1 solved T field' : '1-D caloric ramp'}; fins = cosh conduction profile (mH ${fmt(flow.thermal.mH, 2)} from η_f); base ≈ fin roots. Endpoints are solver numbers — screening, not CHT.`}>
+                <i className="vo-lgrad" />
+                {fmt(flow.thermal.TIn, 1)}→{fmt(flow.thermal.TIn + flow.thermal.dTcal, 1)} °C fluid
+                {' · root +'}{fmt(flow.thermal.dTwall, 1)} K
+                {flow.thermal.tjC != null && ` · Tj ${fmt(flow.thermal.tjC, 1)}${flow.thermal.tjMaxC != null ? `/${fmt(flow.thermal.tjMaxC, 0)}` : ''} °C`}
+              </span>
+            )}
+            {colorMode === 'dp' && flow.dp && (
+              <span className="vo-chip vo-legend"
+                title={`ΔP budget: red = pressure unspent (inlet) → blue = spent (outlet). ${field ? 'F1 solved friction field.' : '1-D profile.'} Minor losses (${pct01(flow.dp.minorFrac)}) spend at entries/turns; total is the solver's ΔP.`}>
+                <i className="vo-lgrad" />
+                ΔP {fmt(flow.dp.totalPa / 1000, 1)} kPa · {pct01(flow.dp.minorFrac)} minor
+              </span>
+            )}
+            {field && field.deadFraction > 0.002 && colorMode !== 'steel' && (
+              <span className="vo-chip vo-chip-warn"
+                title="Cells with ~no through-flow in the F1 field (shaded dark magenta on the sheet). Low-flow CANDIDATES — reduced-order, confirm recirculation in CFD (FC-5).">
+                ◉ {fmt(field.deadFraction * 100, 1)}% low-flow
               </span>
             )}
             {fieldSolving && <span className="vo-chip">F1 solving…</span>}
@@ -742,9 +1083,31 @@ export function SdfViewer({
         }}>
         {flow && (
           <>
+            <button className={`vo-flowbtn ${colorMode === 'steel' ? 'on' : ''}`}
+              onClick={() => setColorMode('steel')} title="Geometry shading (stainless)">
+              Geo
+            </button>
+            <button className={`vo-flowbtn ${colorMode === 'thermal' ? 'on' : ''}`}
+              disabled={!flow.thermal}
+              onClick={() => setColorMode(colorMode === 'thermal' ? 'steel' : 'thermal')}
+              title="Thermal-intent tint: fluid caloric rise (F1 field when solved) + fin cosh conduction profile — solver-anchored, screening not CHT (spec §50-3)">
+              Thermal
+            </button>
+            <button className={`vo-flowbtn ${colorMode === 'dp' ? 'on' : ''}`}
+              disabled={!flow.dp}
+              onClick={() => setColorMode(colorMode === 'dp' ? 'steel' : 'dp')}
+              title="ΔP-budget mode: where the pressure budget is spent along the route (F1 solved field when available) — the hydraulic twin of the resistance stackup (spec §50-4)">
+              ΔP
+            </button>
+            <span className="vo-sep" />
             <button className={`vo-flowbtn ${flowOn ? 'on' : ''}`} onClick={() => setFlowOn(!flowOn)}
               title="Flow-intent layer: the layout's routing animated at the S6 network-solved speed (design intent — confirm by CFD)">
               ≈ Flow
+            </button>
+            <button className={`vo-flowbtn ${riding ? 'on' : ''}`} disabled={!field || !flowOn}
+              onClick={() => setRiding(!riding)}
+              title="Follow a parcel: ride the longest solved streamline inlet → outlet at slow-motion speed (Esc exits)">
+              ▶ ride
             </button>
             <span className="vo-sep" />
           </>
@@ -770,6 +1133,13 @@ export function SdfViewer({
         </button>
         {stl.note && <span className="vo-stl-note">{stl.note}</span>}
       </div>
+
+      {probe && !riding && (
+        <div className="vo-probe" style={{ left: probe.x + 14, top: probe.y + 12 }}>{probe.text}</div>
+      )}
+      {riding && (
+        <div className="vo-ride-note">riding a parcel — Esc to exit</div>
+      )}
     </div>
   )
 }

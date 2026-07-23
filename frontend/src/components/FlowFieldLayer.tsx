@@ -7,13 +7,15 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { SLOWMO } from '../flowviz'
 import type { FlowFieldResult } from '../flowfield/useFlowField'
+import type { ViewerGeom } from '../viewerGeom'
 
 const COMETS_PER_LINE = 3
 
 export function FlowFieldLayer({
-  field, coreWidth, coreLength, z,
+  field, g, coreWidth, coreLength, z,
 }: {
   field: FlowFieldResult
+  g: ViewerGeom
   coreWidth: number
   coreLength: number
   z: number
@@ -23,21 +25,50 @@ export function FlowFieldLayer({
   const y0 = -coreLength / 2
   void coreWidth
 
+  // V5.5 — snap streamline points onto the nearest wavy channel centerline.
+  // The F1 field is homogenized (per-cell, not fin-resolved); snapping makes
+  // lines + comets weave INSIDE channels where the motion is channel-aligned,
+  // while header/turn zones (x-motion) keep their solved course.
+  const snapped = useMemo(() => {
+    const P = field.linePoints
+    const out = new Float32Array(P.length)
+    out.set(P)
+    if (g.family === 'gyroid_tpms') return out
+    const pitch = g.finThickness + g.gap
+    if (!(pitch > 0)) return out
+    const offs = field.lineOffsets
+    const wave = (yObj: number) => g.waveAmp * Math.sin((2 * Math.PI * yObj) / g.waveLen)
+    for (let l = 0; l < offs.length - 1; l++) {
+      for (let k = offs[l]; k < offs[l + 1]; k++) {
+        const k2 = Math.min(k + 1, offs[l + 1] - 1)
+        const dxs = Math.abs(P[3 * k2] - P[3 * k])
+        const dys = Math.abs(P[3 * k2 + 1] - P[3 * k + 1])
+        const w = dys / (dxs + dys + 1e-9)          // 1 = channel-aligned motion
+        const xObj = x0 + P[3 * k]
+        const yObj = y0 + P[3 * k + 1]
+        const xw = xObj - wave(yObj)
+        const xc = (Math.floor(xw / pitch) + 0.5) * pitch + wave(yObj)
+        out[3 * k] = (xObj + (xc - xObj) * w) - x0
+      }
+    }
+    return out
+  }, [field, g, x0, y0])
+
   const lines = useMemo(() => {
     const segs: number[] = []
     const offs = field.lineOffsets
     for (let l = 0; l < offs.length - 1; l++) {
       for (let k = offs[l]; k < offs[l + 1] - 1; k++) {
         segs.push(
-          x0 + field.linePoints[3 * k], y0 + field.linePoints[3 * k + 1], z,
-          x0 + field.linePoints[3 * (k + 1)], y0 + field.linePoints[3 * (k + 1) + 1], z,
+          x0 + snapped[3 * k], y0 + snapped[3 * k + 1], z,
+          x0 + snapped[3 * (k + 1)], y0 + snapped[3 * (k + 1) + 1], z,
         )
       }
     }
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3))
-    return g
-  }, [field, x0, y0, z])
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3))
+    return geo
+  }, [field, snapped, x0, y0, z])
 
   const nLines = field.lineOffsets.length - 1
   const cometRef = useRef<THREE.InstancedMesh>(null)
@@ -49,7 +80,7 @@ export function FlowFieldLayer({
     const tReal = state.clock.elapsedTime / SLOWMO
     let inst = 0
     const offs = field.lineOffsets
-    const P = field.linePoints
+    const P = snapped
     for (let l = 0; l < nLines; l++) {
       const a = offs[l], b = offs[l + 1]
       const T = P[3 * (b - 1) + 2]                 // line's total transit (s real)
@@ -88,10 +119,12 @@ export function FlowFieldLayer({
       <lineSegments geometry={lines} frustumCulled={false}>
         <lineBasicMaterial color="#57c8ff" transparent opacity={0.28} depthTest={false} />
       </lineSegments>
+      {/* V5.5 — comets depth-test against the raymarcher's written depth:
+          fins occlude them; section cuts reveal them */}
       <instancedMesh ref={cometRef} args={[undefined, undefined, Math.max(1, nLines * COMETS_PER_LINE)]}
         frustumCulled={false}>
         <sphereGeometry args={[0.26, 8, 8]} />
-        <meshBasicMaterial color="#aef0ff" transparent opacity={0.95} depthTest={false} />
+        <meshBasicMaterial color="#aef0ff" transparent opacity={0.95} depthTest />
       </instancedMesh>
     </group>
   )

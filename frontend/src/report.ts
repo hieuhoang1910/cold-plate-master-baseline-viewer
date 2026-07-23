@@ -90,6 +90,39 @@ export function generateReport(
   }
 
   // 4. Candidate comparison
+  // 3b. V5.6 — Flow & thermal intent: the CFD confirmation checklist (spec §52).
+  // Claims are machine-checkable by id; S6/F1-backed rows are PREDICTIONS.
+  const fn = r?.flow_network
+  if (fn?.supported && O) {
+    const rho = c?.rho_kg_m3 ?? 997
+    const cp = c?.cp_J_kgK ?? 4181
+    const TIn = c?.T_eval_C ?? O.T_inlet_C ?? 25
+    const mcp = (O.flow_lpm / 60000) * rho * cp
+    const dTcal = mcp > 0 ? O.heat_load_W / mcp : NaN
+    const fr = (fn.per_path ?? []).map((p) => p.flow_fraction)
+    const bd = fn.deltaP_breakdown ?? {}
+    const jet = String(A?.name ?? '').includes('jet')
+    const centreFeed = String(A?.name ?? '').includes('centre_rib') || String(A?.name ?? '') === 'center_feed_bidirectional'
+    L.push('## 3b. Flow & thermal intent — CFD confirmation checklist')
+    L.push('_The design states these checkably (spec §52). S6 = network-solved prediction; T0 = geometric intent. Ansys confirms; KPIs never read from the viz solvers._')
+    L.push('')
+    L.push('| id | Claim | Value (live) | Tier | CFD confirms by |', '|---|---|---|---|---|')
+    if (fr.length) {
+      L.push(`| FC-1 | per-path flow split | ${fn.n_paths} paths · min ${pct(Math.min(...fr), 1)} / max ${pct(Math.max(...fr), 1)} | S6 | mass flow per path/compartment |`)
+    }
+    L.push(`| FC-2 | flow uniformity | computed **${fmt(fn.uniformity_computed ?? 1, 3)}** vs assumed ${fmt(fn.uniformity_assumed ?? 1, 2)} | S6 | velocity histogram across channels |`)
+    L.push(`| FC-3 | pressure budget | ΔP ${kPa(fn.deltaP_Pa ?? 0)} kPa = ${kPa(bd.friction_Pa ?? 0)} friction + ${kPa(bd.minor_Pa ?? 0)} minor | S6 | pressure taps (plane-averaged) |`)
+    L.push(`| FC-4 | outlet temperature | ${fmt(TIn + dTcal, 2)} °C (T_in ${fmt(TIn, 1)} + ΔT_cal ${fmt(dTcal, 2)} K) | 1-D | outlet probe |`)
+    L.push(`| FC-5 | low-flow zones | F1 field layer in the viewer (≈ Flow) — qualitative candidates | F1 | recirculation / stagnation check |`)
+    if (jet) L.push('| FC-6 | jet aimed at the rib crown / feed slots | geometric | T0 | stagnation-line location |')
+    if (centreFeed || jet) L.push('| FC-7 | wedge rib crown softens the central turn → better fin wetting (mesh-verified: 0.50 → 0.08 mm taper, ≈5° — hypothesis, no sim) | T0 | wall-shear / wetting coverage vs a sharp rib |')
+    if (fn.reconciliation) {
+      L.push('')
+      L.push(`Reconciliation (§49): S6 network ΔP ${kPa(fn.reconciliation.network_deltaP_Pa)} kPa vs solver ${kPa(fn.reconciliation.solver_deltaP_Pa)} kPa — ratio ${fmt(fn.reconciliation.ratio, 3)} (${fn.reconciliation.within_tolerance ? 'within' : 'OUTSIDE'} ±${pct(fn.reconciliation.tolerance, 0)}).`)
+    }
+    L.push('')
+  }
+
   L.push('## 4. Candidate comparison')
   L.push('| Design | Family | Route | R_jc (mK/W) | ΔP (kPa) | pump (W) | Status |', '|---|---|---|---|---|---|---|')
   catalog.candidates.forEach((k) => {

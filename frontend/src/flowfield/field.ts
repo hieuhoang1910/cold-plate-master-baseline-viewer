@@ -33,6 +33,10 @@ export interface FieldInput {
   // u-flow extras
   headerWidthMm?: number
   portConfig?: 'u' | 'z'
+  // V5.4 — thermal transport (omit to skip the T solve)
+  heatW?: number          // total heat load (W), uniform base flux over live cells
+  cp?: number             // J/(kg·K)
+  TIn?: number            // inlet temperature (°C)
 }
 
 export interface FieldResult {
@@ -50,6 +54,13 @@ export interface FieldResult {
   // lineOffsets[i]..lineOffsets[i+1] delimit line i (index into triplets)
   linePoints: Float32Array
   lineOffsets: Int32Array
+  // V5.4 — cell-centred fields for the tint / ΔP mode / probe (nx·ny each)
+  pGrid: Float32Array     // pressure (Pa, sinks = 0)
+  vGrid: Float32Array     // velocity magnitude (m/s, open-channel referenced)
+  tGrid: Float32Array | null   // depth-mixed fluid temperature (°C); null if no heat inputs
+  outletT: number         // flux-weighted sink temperature (°C) — closure anchor
+  deadFraction: number    // share of cells with ~no through-flow
+  tMax: number            // hottest live-cell fluid T (°C)
 }
 
 const shahLondonFre = (alpha: number) => {
@@ -359,6 +370,103 @@ export function solveField(inp: FieldInput, streamlineCount = 48): FieldResult {
     return [((qE + qW) / 2) / Ax, ((qN + qS) / 2) / A]
   }
 
+  // ---- cell-centred fields (tint / ΔP mode / probe) ----------------------
+  const pGrid = new Float32Array(nx * ny)
+  const vGrid = new Float32Array(nx * ny)
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const id = idx(i, j, nx)
+    pGrid[id] = p[id]
+    const [vx, vy] = vAt((i + 0.5) * dx, (j + 0.5) * dy)
+    vGrid[id] = Math.hypot(vx, vy)
+  }
+
+  // ---- V5.4 thermal transport (upwind advection, uniform live-cell flux) --
+  let tGrid: Float32Array | null = null
+  let outletT = inp.TIn ?? 0
+  let deadFraction = 0
+  let tMax = inp.TIn ?? 0
+  if (inp.heatW && inp.cp && inp.TIn != null) {
+    const TIn = inp.TIn, cp = inp.cp, rho = inp.rho
+    const dTcal = inp.heatW / (rho * inp.flowM3s * cp)
+    // signed face mass flows (kg/s): mN[id] = flow from cell -> north neighbour
+    const mN = new Float64Array(nx * ny)
+    const mE = new Float64Array(nx * ny)
+    for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx; i++) {
+      const id = idx(i, j, nx)
+      mN[id] = rho * pb.gN[id] * (p[id] - p[idx(i, j + 1, nx)])
+    }
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx - 1; i++) {
+      const id = idx(i, j, nx)
+      mE[id] = rho * pb.gE[id] * (p[id] - p[idx(i + 1, j, nx)])
+    }
+    const mSrc = new Float64Array(nx * ny)
+    for (let k = 0; k < nx * ny; k++) mSrc[k] = rho * pb.src[k]
+    // live cells: meaningful through-flow (dead zones get no share of the
+    // heat so the energy balance closes exactly; they display capped-hot)
+    const inflowOf = (i: number, j: number): number => {
+      const id = idx(i, j, nx)
+      let m = mSrc[id]
+      if (j > 0 && mN[idx(i, j - 1, nx)] > 0) m += mN[idx(i, j - 1, nx)]
+      if (j < ny - 1 && mN[id] < 0) m += -mN[id]
+      if (i > 0 && mE[idx(i - 1, j, nx)] > 0) m += mE[idx(i - 1, j, nx)]
+      if (i < nx - 1 && mE[id] < 0) m += -mE[id]
+      return m
+    }
+    // sink (Dirichlet) cells get no heat share — anything added there would
+    // sit past the outlet measurement plane and break the energy closure
+    const liveEps = 1e-6 * rho * inp.flowM3s
+    const live = new Uint8Array(nx * ny)
+    let nLive = 0, nSink = 0
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const id = idx(i, j, nx)
+      if (pb.dirichlet[id]) { nSink++; continue }
+      if (inflowOf(i, j) > liveEps) { live[id] = 1; nLive++ }
+    }
+    deadFraction = 1 - nLive / Math.max(1, nx * ny - nSink)
+    const S = nLive > 0 ? inp.heatW / nLive : 0
+    const T = new Float64Array(nx * ny).fill(TIn)
+    for (let sweep = 0; sweep < 400; sweep++) {
+      let maxCh = 0
+      const fwd = sweep % 2 === 0
+      for (let jj = 0; jj < ny; jj++) {
+        const j = fwd ? jj : ny - 1 - jj
+        for (let ii = 0; ii < nx; ii++) {
+          const i = fwd ? ii : nx - 1 - ii
+          const id = idx(i, j, nx)
+          if (!live[id]) continue
+          let num = mSrc[id] * TIn + (S / cp)
+          let den = mSrc[id]
+          if (j > 0 && mN[idx(i, j - 1, nx)] > 0) { num += mN[idx(i, j - 1, nx)] * T[idx(i, j - 1, nx)]; den += mN[idx(i, j - 1, nx)] }
+          if (j < ny - 1 && mN[id] < 0) { num += -mN[id] * T[idx(i, j + 1, nx)]; den += -mN[id] }
+          if (i > 0 && mE[idx(i - 1, j, nx)] > 0) { num += mE[idx(i - 1, j, nx)] * T[idx(i - 1, j, nx)]; den += mE[idx(i - 1, j, nx)] }
+          if (i < nx - 1 && mE[id] < 0) { num += -mE[id] * T[idx(i + 1, j, nx)]; den += -mE[id] }
+          const v = den > 0 ? num / den : T[id]
+          maxCh = Math.max(maxCh, Math.abs(v - T[id]))
+          T[id] = v
+        }
+      }
+      if (maxCh < 1e-10 * Math.max(dTcal, 1e-9)) break
+    }
+    // outlet closure: flux-weighted upwind T over the sink faces
+    let oN = 0, oD = 0
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const id = idx(i, j, nx)
+      if (!pb.dirichlet[id]) continue
+      if (j > 0 && !pb.dirichlet[idx(i, j - 1, nx)] && mN[idx(i, j - 1, nx)] > 0) { oN += mN[idx(i, j - 1, nx)] * T[idx(i, j - 1, nx)]; oD += mN[idx(i, j - 1, nx)] }
+      if (j < ny - 1 && !pb.dirichlet[idx(i, j + 1, nx)] && mN[id] < 0) { oN += -mN[id] * T[idx(i, j + 1, nx)]; oD += -mN[id] }
+      if (i > 0 && !pb.dirichlet[idx(i - 1, j, nx)] && mE[idx(i - 1, j, nx)] > 0) { oN += mE[idx(i - 1, j, nx)] * T[idx(i - 1, j, nx)]; oD += mE[idx(i - 1, j, nx)] }
+      if (i < nx - 1 && !pb.dirichlet[idx(i + 1, j, nx)] && mE[id] < 0) { oN += -mE[id] * T[idx(i + 1, j, nx)]; oD += -mE[id] }
+    }
+    outletT = oD > 0 ? oN / oD : TIn
+    const capT = TIn + 3 * dTcal
+    tGrid = new Float32Array(nx * ny)
+    for (let k = 0; k < nx * ny; k++) {
+      if (live[k]) { tGrid[k] = T[k]; if (T[k] > tMax) tMax = T[k] }
+      else if (pb.dirichlet[k]) tGrid[k] = outletT   // sinks display as outlet
+      else tGrid[k] = capT                           // dead zones display capped-hot
+    }
+  }
+
   const pts: number[] = []
   const offs: number[] = [0]
   // seeds: spread across the source cells
@@ -407,5 +515,6 @@ export function solveField(inp: FieldInput, streamlineCount = 48): FieldResult {
     columnFlux, uniformity,
     linePoints: new Float32Array(pts),
     lineOffsets: new Int32Array(offs),
+    pGrid, vGrid, tGrid, outletT, deadFraction, tMax,
   }
 }

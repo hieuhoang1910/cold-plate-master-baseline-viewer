@@ -5,6 +5,11 @@ self.onmessage = (ev: MessageEvent<{ id: number; input: FieldInput }>) => {
   const { id, input } = ev.data
   try {
     const r = solveField(input)
+    const transfer: Transferable[] = [
+      r.linePoints.buffer, r.lineOffsets.buffer, r.columnFlux.buffer,
+      r.pGrid.buffer, r.vGrid.buffer,
+    ]
+    if (r.tGrid) transfer.push(r.tGrid.buffer)
     ;(self as unknown as Worker).postMessage(
       { id, ok: true, result: {
         deltaP: r.deltaP, massErr: r.massErr, iters: r.iters,
@@ -12,8 +17,10 @@ self.onmessage = (ev: MessageEvent<{ id: number; input: FieldInput }>) => {
         nx: r.nx, ny: r.ny, dx: r.dx, dy: r.dy,
         columnFlux: r.columnFlux,
         linePoints: r.linePoints, lineOffsets: r.lineOffsets,
+        pGrid: r.pGrid, vGrid: r.vGrid, tGrid: r.tGrid,
+        outletT: r.outletT, deadFraction: r.deadFraction, tMax: r.tMax,
       } },
-      [r.linePoints.buffer, r.lineOffsets.buffer, r.columnFlux.buffer],
+      transfer,
     )
   } catch (e) {
     ;(self as unknown as Worker).postMessage({ id, ok: false, error: String(e) })

@@ -1947,3 +1947,67 @@ The id scheme exists now so the claims are machine-checkable later.
 - **Still open for V5.3 scope**: TPMS isotropic permeability (F1 is
   fin-families-only, same as S6); mesh-registered ICE duct positions
   (period-nominal). Deferred to the V5.4+ passes.
+
+**V5.4 BUILT 2026-07-23 (same day) — thermal-intent tint (§15 Q3 CLOSED).**
+
+- **F1 thermal transport** (`field.ts`): steady upwind advection of the
+  depth-mixed fluid temperature on the solved flow, uniform base flux
+  over *live* cells only (sink cells get no share — it would sit past the
+  measurement plane; dead cells get none so the balance closes). Ordered
+  Gauss–Seidel; **outlet closure is exact energy conservation** — every
+  fixture reproduces T_in + Q/(ṁ·cp) to 1e-6 (27.4442 °C at the GB202
+  point), including under U-flow maldistribution, where starved channels
+  correctly run ~0.5 K hotter than the mixed outlet. Dead zones display
+  capped-hot and are counted (`deadFraction`).
+- **Thermal color mode** (HUD chip group `Geo · Thermal · ΔP` per V5-D7):
+  fluid = F1 solved T texture when available, else the 1-D caloric ramp
+  along `s`; fins = the cosh conduction profile in z with **mH inverted
+  from the solver's η_f** (`mhFromEta`); base slab ≈ fin roots; colormap
+  top anchored to solver numbers (T_in, ΔT_cal, Q·R_conv). Legend chip
+  shows the fluid range, root offset and live T_j vs the target. F1's
+  fields upload as 8-bit textures with physical scales; low-flow cells
+  shade dark magenta (FC-5 candidates) with a % chip.
+- **Hover probe** (§50-7): ray→sheet intersection; reads T / v / p from
+  the F1 arrays at the cursor (1-D estimates when F1 is off).
+- Fixtures: +9 checks in `flowfield.test.cjs` (26 total) — outlet closure
+  on four layouts, hot-streak inequality, cap bounds, tGrid-null contract.
+
+**V5.5 BUILT 2026-07-23 (same day) — compositing, channel snap, parcel ride.**
+
+- **`gl_FragDepth`**: the raymarcher now writes true hit depth
+  (`glslVersion: GLSL3`, forward view-projection uniform) — scene objects
+  composite correctly. Comets depth-test against it: **fins occlude
+  them, section cuts reveal them**. Glyph arrows stay depth-free
+  (annotations).
+- **Channel snapping**: streamline vertices snap to the nearest wavy
+  channel centerline, weighted by how channel-aligned the local motion is
+  — comets weave *inside* the sinusoidal channels while turn/header zones
+  keep their solved course. (The F1 field is homogenized; the snap is
+  presentation, stated as such.)
+- **Follow-a-parcel** (`▶ ride`): the camera rides the longest solved
+  streamline inlet → outlet at ×50 slow-motion, looking ahead along the
+  path; Esc exits, OrbitControls suspended while riding.
+
+**V5.6 BUILT 2026-07-23 (same day) — ΔP-budget mode + the FC checklist.**
+
+- **ΔP color mode**: the fluid sheet colored by remaining pressure —
+  red (unspent, inlet) → blue (spent, outlet). Uses the **F1 solved
+  p-field** when available (friction-only, stated); otherwise the 1-D
+  budget profile with the S6 minor-loss share spent at entries (spread
+  across bends for serpentine). Metal recedes to dim steel; legend chip
+  states total ΔP + minor share. The hydraulic twin of the resistance
+  stackup, per §50-4.
+- **Report §3b — "Flow & thermal intent: CFD confirmation checklist"**
+  (spec §52): generated whenever the design carries an S6 block. Rows
+  FC-1 (per-path split, min/max), FC-2 (uniformity computed vs assumed),
+  FC-3 (ΔP friction + minor), FC-4 (outlet T), FC-5 (low-flow zones →
+  F1 layer), FC-6 (jet aim, jet layouts), FC-7 (wedge rib crown
+  hypothesis with the mesh-verified 0.50 → 0.08 mm taper) — each with
+  tier and the CFD probe that confirms it, plus the §49 reconciliation
+  line. This is the TD-10/11 work order, generated from the live design.
+- **Gates (all three phases)**: `tsc` + production build clean;
+  `npm run test:verify` green (engine + 26 F1 checks); parity 5/5 +
+  V5 API suite green. **V5 roadmap §53 rows V5.1–V5.6: ALL BUILT.**
+  Remaining V5-adjacent items: TPMS F1 permeability, mesh-registered ICE
+  duct positions, S6 literature maldistribution anchor (§54 Q6), and the
+  V6 watch item (Ansys-import overlay against the FC ids).

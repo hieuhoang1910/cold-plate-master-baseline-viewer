@@ -12,6 +12,13 @@ export interface FlowFieldResult {
   columnFlux: Float64Array
   linePoints: Float32Array
   lineOffsets: Int32Array
+  // V5.4 — cell fields + thermal stats
+  pGrid: Float32Array
+  vGrid: Float32Array
+  tGrid: Float32Array | null
+  outletT: number
+  deadFraction: number
+  tMax: number
 }
 
 export function useFlowField(input: FieldInput | null, enabled: boolean) {
