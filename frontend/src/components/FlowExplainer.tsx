@@ -79,6 +79,11 @@ export function FlowExplainer({ onClose }: { onClose: () => void }) {
             colored by the local F1-solved temperature and visibly warms blue → red
             along its journey (outlet closes the energy balance to T_in + Q/(ṁ·c_p)
             exactly). In ΔP mode the parcels carry remaining pressure instead.</p>
+            <p><b>The rib strip:</b> the unfinned mid strip is drawn hotter on purpose —
+            flow passes over and around it, so it is area-starved directly over the
+            die&apos;s hottest zone. Copper spreading and the jet&apos;s stagnation cooling
+            temper it (warm strip, not a crisis), and the drawn magnitude is a
+            screening estimate — the CFD run quantifies it (FC-6/FC-7).</p>
             <p><b>Honesty:</b> this is the 1-D model drawn in place — screening, not
             conjugate CFD. Near-stagnant cells shade <span className="fx-magenta">dark
             magenta</span>: low-flow <i>candidates</i>, counted in the chip, confirmed only

@@ -284,7 +284,9 @@ export function FlowFieldLayer({
       // the local fluid temperature (they visibly warm along their journey);
       // ΔP mode by remaining pressure; geo stays water-cyan. Trail fades.
       const fade = Math.pow(0.66, ghost)
-      if (mode === 'thermal' && field.tGrid && thermal) {
+      // thermal coloring is ALWAYS on (user 2026-07-23) — the warming story
+      // is the flow's identity; ΔP mode swaps to remaining pressure
+      if (mode !== 'dp' && field.tGrid && thermal) {
         const gi = Math.min(field.nx - 1, Math.max(0, Math.floor((_pos.x + (field.nx * field.dx) / 2) / field.dx)))
         const gj = Math.min(field.ny - 1, Math.max(0, Math.floor((_pos.y + (field.ny * field.dy) / 2) / field.dy)))
         heat((field.tGrid[gj * field.nx + gi] - thermal.TIn) / Math.max(thermal.dTcal, 1e-3), _col)

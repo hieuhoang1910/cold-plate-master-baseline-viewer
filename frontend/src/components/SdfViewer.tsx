@@ -253,15 +253,24 @@ void main() {
       col = steel * (amb + 0.75 * d1) + vec3(1.0) * (0.20 * d2);
       col += fres * 0.14;
     } else if (uColorMode < 1.5) {
-      // thermal tint: local fluid T + the fin conduction (cosh) profile in z
+      // thermal tint: local fluid T + the fin conduction (cosh) profile in z.
+      // The unfinned RIB STRIP is drawn hotter (user-validated 2026-07-23):
+      // flow passes over/around it, so it is area-starved over the die's
+      // hottest zone — strongest at its base, jet-cooled toward the crown.
+      // Magnitude is a screening estimate; CFD quantifies (FC-6/FC-7).
       float Tf = fluidT(pos);
       float T;
       if (pos.z > uBase + 0.001) {
         float hf = clamp((pos.z - uBase) / max(uH, 1e-3), 0.0, 1.0);
         float th = (uMH < 10.0) ? cosh(uMH * (1.0 - hf)) / cosh(uMH) : exp(-uMH * hf);
-        T = Tf + uDTwall * th;                       // root hot, tip ~fluid (low η_f)
+        float rz = (uHasRib > 0.5)
+          ? 1.0 - smoothstep(uRib * 0.5, uRib * 0.5 + 0.8, abs(pos.y)) : 0.0;
+        float ribTheta = (1.0 - 0.8 * hf) * 3.0;     // hot base, jet-cooled crown
+        T = Tf + uDTwall * mix(th, ribTheta, rz);
       } else {
-        T = Tf + uDTwall * 1.03;                     // base slab, just above the roots
+        float rzB = (uHasRib > 0.5)
+          ? 1.0 - smoothstep(uRib * 0.5, uRib * 0.5 + 1.2, abs(pos.y)) : 0.0;
+        T = Tf + uDTwall * (1.03 + 2.0 * rzB);       // base warmest under the rib
       }
       float tn = (T - uTIn) / max(uTMaxN - uTIn, 1e-3);
       col = heatmap(tn) * (0.42 + 0.62 * d1 + 0.18 * d2);
