@@ -8,6 +8,7 @@ import { SLOWMO, timeScaleLabel, type FlowViz } from '../flowviz'
 import { useFlowField, type FlowFieldResult } from '../flowfield/useFlowField'
 import type { FieldInput } from '../flowfield/field'
 import { FlowFieldLayer } from './FlowFieldLayer'
+import { FlowExplainer } from './FlowExplainer'
 import type { ViewerGeom } from '../viewerGeom'
 
 function fmtBytes(n: number): string {
@@ -831,6 +832,7 @@ export function SdfViewer({
   const [flowOn, setFlowOn] = useState(false)
   const [colorMode, setColorMode] = useState<'steel' | 'thermal' | 'dp'>('steel')
   const [riding, setRiding] = useState(false)
+  const [showExplain, setShowExplain] = useState(false)
   const [probe, setProbe] = useState<{ x: number; y: number; text: string } | null>(null)
   const camRef = useRef<THREE.Camera | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -979,7 +981,8 @@ export function SdfViewer({
           tint={tint} field={vizActive ? field : null} />
         {flow && flowOn && <FlowGlyphs g={g} code={flow.code} nSeg={flow.nSeg} />}
         {flow && flowOn && field && (
-          <FlowFieldLayer field={field} g={g} coreWidth={g.coreWidth} coreLength={g.coreLength}
+          <FlowFieldLayer field={field} g={g} code={flow.code}
+            coreWidth={g.coreWidth} coreLength={g.coreLength}
             z={g.baseThickness + g.finHeight * 0.62} />
         )}
         {riding && field && (
@@ -1112,6 +1115,10 @@ export function SdfViewer({
               title="Follow a parcel: ride the longest solved streamline inlet → outlet at slow-motion speed (Esc exits)">
               ▶ ride
             </button>
+            <button className="vo-flowbtn" onClick={() => setShowExplain(true)}
+              title="How the flow & thermal layers work — tiers, physics, chips, and what CFD confirms">
+              ⓘ
+            </button>
             <span className="vo-sep" />
           </>
         )}
@@ -1143,6 +1150,7 @@ export function SdfViewer({
       {riding && (
         <div className="vo-ride-note">riding a parcel — Esc to exit</div>
       )}
+      {showExplain && <FlowExplainer onClose={() => setShowExplain(false)} />}
     </div>
   )
 }
