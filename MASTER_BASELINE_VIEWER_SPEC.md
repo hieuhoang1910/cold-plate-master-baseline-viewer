@@ -1810,6 +1810,16 @@ The id scheme exists now so the claims are machine-checkable later.
    softens the abrupt downward turn so the flow spreads and wets the fin
    surface better. Stated as a design hypothesis, no simulation yet —
    captured as checklist claim FC-7 (§52) for CFD to confirm.
+   **Rib shape mesh-verified (2026-07-23, `Wavy 28x28 Scaled`):** the rib
+   is a **wedge splitter**, not a slab — measured width tapers
+   continuously from ≈0.60 mm green (≈0.50 mm final) at the base to a
+   ≈0.10 mm green (≈0.08 mm final) crest just below the fin tips:
+   included angle ≈5°, knife-edge pointing into the jet. Model
+   implications: (a) the v6 1.0 mm flat-slab rib overstates this part's
+   wetted-area penalty (measured mean width ≈0.25 mm final); (b) the
+   §19E crown options need a "wedge/tapered" entry; (c) the viewer/SDF
+   draws a rectangular rib — a V5.2+ geometry item. FC-7 stands as the
+   CFD check of what the wedge actually buys.
 2. **Computed uniformity → KPI default** — proposal: always *shown*, feeds
    the KPI solve opt-in only, flipped to default after the first Ansys
    cross-check confirms S6 within ~10 %.
