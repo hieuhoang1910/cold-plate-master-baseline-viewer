@@ -31,6 +31,12 @@ zero coupling to the thermal/hydraulic solvers (golden parity untouched).
 LMM process-chain constants (Incus EVO35): pixel 35 um XY, layer 25 um Z,
 sinter shrink x1.197 XY / x1.23 Z, overpolymerization ~1 px per side
 (pre-compensate in CAD: fin -2 px, channel +2 px — pitch is preserved).
+
+2026-07-30 revision — LMM bounds re-anchored to the OFFICIAL guidelines doc
+(Incus_Design_Guidelines.pdf, July 2026: all dims GREEN px) + Paul Peritsch's
+2026-07-29 px review of our rev5/ICE parts: fins 3 px abs / 4-5 px rec;
+channels deeper than 1 mm 6 px abs / 8 px rec (<= 1 mm: 5 px); NEW gap_ratio
+rule (gaps wider than fins); tall-fin advisory (tested at ~1 mm height only).
 """
 
 from __future__ import annotations
@@ -45,9 +51,29 @@ LMM_PIXEL_MM = 0.035          # XY pixel
 LMM_LAYER_MM = 0.025          # Z layer
 LMM_SHRINK_XY = 1.197         # green = final * shrink
 LMM_SHRINK_Z = 1.23
-LMM_OVERPOLY_PX = 1           # per side; CAD edit = -+2 px on a width
+LMM_OVERPOLY_PX = 1           # per side (~25-35 um); CAD edit = -+2 px on a width
 # Incus proven-cleanable coupon: 7.7 x 7.7 mm gyroid, ~200 um (6 px) channels.
 LMM_COUPON_AREA_MM2 = 7.7 * 7.7
+
+# Official Incus design guidelines (Incus_Design_Guidelines.pdf, July 2026).
+# ALL guideline dimensions are GREEN-state px (1 px = 35 um) — this closes the
+# old green-vs-final open question (the rulebook previously stored the
+# conservative final-basis reading). Bounds below convert green px -> FINAL mm.
+LMM_FIN_ABS_PX = 3            # fins printed successfully at 3 px (105 um green)
+LMM_FIN_REC_PX = 4            # recommended 4-5 px for process reliability
+LMM_GAP_ABS_PX_DEEP = 6       # open channels > 1 mm deep: min 6-8 px band
+LMM_GAP_REC_PX_DEEP = 8
+LMM_GAP_ABS_PX_SHALLOW = 5    # <= 1 mm deep: cleaned down to 5 px (reliability drops)
+LMM_GAP_REC_PX_SHALLOW = 6
+LMM_DEEP_CHANNEL_MM_GREEN = 1.0   # depth threshold separating the two bands
+LMM_FIN_TESTED_H_MM_GREEN = 1.0   # fin rules tested at ~1 mm height only
+
+
+def _px_final(px: float) -> float:
+    """Green px -> final (sintered) mm through the XY shrink. Unrounded so a
+    px-exact design (e.g. a 4 px fin = 0.116959... mm) sits ON its bound, not
+    a rounding hair below it."""
+    return px * LMM_PIXEL_MM / LMM_SHRINK_XY
 
 PASS, MARGINAL, FAIL, INFO = "PASS", "MARGINAL", "FAIL", "INFO"
 
@@ -59,15 +85,19 @@ ROUTES: Dict[str, Dict[str, Any]] = {
     "LMM": {
         "label": "LMM — Incus EVO35 (printed Cu)",
         "grade": "supplier-verified",
-        "source": "Paul Peritsch (Incus GmbH), email 2026-07-07; review doc 2026-07-08",
-        "wall_abs": 0.105,   # 3 px green, printed successfully
-        "wall_rec": 0.14,    # 4-5 px green band
-        "gap_abs": 0.15,     # Incus stated cleanability limit (0.16 already marginal)
-        "gap_rec": 0.20,     # M2: green ~7 px, inside the 6-8 px deep-channel band
+        "source": "Incus_Design_Guidelines.pdf (July 2026); Paul Peritsch emails "
+                  "2026-07-07 (STL review) + 2026-07-29 (rev5/ICE px feedback)",
+        "wall_abs": _px_final(LMM_FIN_ABS_PX),        # 3 px green = 0.0877 final
+        "wall_rec": _px_final(LMM_FIN_REC_PX),        # 4 px green = 0.1170 final (rec band 4-5 px)
+        "gap_abs": _px_final(LMM_GAP_ABS_PX_DEEP),    # 6 px green = 0.1754 final (channels > 1 mm deep)
+        "gap_rec": _px_final(LMM_GAP_REC_PX_DEEP),    # 8 px green = 0.2339 final
         "aspect_max": 30.0,  # H/b — "taller fins need thicker fins"
-        "notes": "Bounds are FINAL (sintered) dims — conservative reading of the "
-                 "Incus floor. Green chain: x1.197/x1.23 shrink, 35/25 um grid, "
-                 "overpoly -+2 px in CAD.",
+        "notes": "Guideline dims are GREEN px (1 px = 35 um; basis question closed "
+                 "by the July 2026 doc) — converted to final via /1.197. Deep "
+                 "channels (> 1 mm) need 6-8 px; <= 1 mm cleaned down to 5 px. "
+                 "Gaps must be wider than fins (2026-07-29). Green chain: "
+                 "x1.197/x1.23 shrink, 35/25 um grid, overpoly ~1 px per side, "
+                 "-+2 px pre-compensation in CAD.",
     },
     "SLM_IR": {
         "label": "SLM (IR) — Nikon SLM Solutions, CuCrZr class",
@@ -192,6 +222,19 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
     core_h = stack.get("core_height_mm", 5.5)
     H = case.get("fin_height_mm") or core_h
 
+    # LMM channel bounds are depth-dependent (guidelines §4): > 1 mm (green)
+    # deep needs the 6-8 px band; <= 1 mm has been cleaned down to 5 px.
+    gap_abs, gap_rec = rb["gap_abs"], rb["gap_rec"]
+    gap_basis = f"floor {gap_abs:.3f} / rec {gap_rec:.3f} mm"
+    if route == "LMM":
+        deep = (H * LMM_SHRINK_Z) > LMM_DEEP_CHANNEL_MM_GREEN
+        if not deep:
+            gap_abs = _px_final(LMM_GAP_ABS_PX_SHALLOW)
+            gap_rec = _px_final(LMM_GAP_REC_PX_SHALLOW)
+        band = (f"{LMM_GAP_ABS_PX_DEEP}-{LMM_GAP_REC_PX_DEEP} px deep-channel band"
+                if deep else f"{LMM_GAP_ABS_PX_SHALLOW} px shallow (<= 1 mm) floor")
+        gap_basis = f"floor {gap_abs:.3f} / rec {gap_rec:.3f} mm ({band}, green)"
+
     if family in ("straight_fin", "wavy_fin"):
         t = case.get("fin_thickness_mm")
         b = case.get("channel_gap_mm")
@@ -202,9 +245,17 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
                 f"t = {t:.3f} mm vs floor {rb['wall_abs']:.3f} / rec {rb['wall_rec']:.3f} mm"))
         if b is not None:
             checks.append(_check(
-                "gap_min", "channel gap b", b, rb["gap_abs"], rb["gap_rec"],
-                _status(b, rb["gap_abs"], rb["gap_rec"]),
-                f"b = {b:.3f} mm vs floor {rb['gap_abs']:.3f} / rec {rb['gap_rec']:.3f} mm"))
+                "gap_min", "channel gap b", b, gap_abs, gap_rec,
+                _status(b, gap_abs, gap_rec),
+                f"b = {b:.3f} mm vs {gap_basis}"))
+        if route == "LMM" and t and b:
+            # Incus 2026-07-29 (rev5/ICE review): "Gaps should be wider than
+            # fins" — cleaning needs the open channel to dominate the pitch.
+            checks.append(_check(
+                "gap_ratio", "gap wider than fin (b ≥ t)", b / t, None, 1.0,
+                PASS if b >= t - 1e-9 else MARGINAL,
+                f"b/t = {b / t:.2f} — Incus: gaps should be wider than fins "
+                "(email 2026-07-29); overpoly shrinks the printed channel further"))
         if b:
             ar = H / b
             checks.append(_check(
@@ -238,9 +289,9 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
         if d is not None and S is not None:
             gap = S - d
             checks.append(_check(
-                "gap_min", "pin-to-pin gap S−d", gap, rb["gap_abs"], rb["gap_rec"],
-                _status(gap, rb["gap_abs"], rb["gap_rec"]),
-                f"S−d = {gap:.3f} mm vs floor {rb['gap_abs']:.3f} / rec {rb['gap_rec']:.3f} mm"))
+                "gap_min", "pin-to-pin gap S−d", gap, gap_abs, gap_rec,
+                _status(gap, gap_abs, gap_rec),
+                f"S−d = {gap:.3f} mm vs {gap_basis}"))
         if d:
             ar = H / d
             checks.append(_check(
@@ -258,10 +309,9 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
         dh = case.get("hydraulic_diameter_mm")
         if dh:
             checks.append(_check(
-                "gap_min", "channel size (D_h proxy)", dh, rb["gap_abs"], rb["gap_rec"],
-                _status(dh, rb["gap_abs"], rb["gap_rec"]),
-                f"D_h = {dh:.3f} mm as the channel-size proxy vs floor "
-                f"{rb['gap_abs']:.3f} / rec {rb['gap_rec']:.3f} mm"))
+                "gap_min", "channel size (D_h proxy)", dh, gap_abs, gap_rec,
+                _status(dh, gap_abs, gap_rec),
+                f"D_h = {dh:.3f} mm as the channel-size proxy vs {gap_basis}"))
 
     # Part-size cleanability warning (Incus "big part, small channel").
     if route == "LMM":
@@ -274,6 +324,13 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
                 f"core {core_area:.0f} mm² is ~{core_area / LMM_COUPON_AREA_MM2:.0f}× the "
                 f"proven 7.7×7.7 mm coupon with channels < 0.25 mm — cleanability at "
                 "this size is unproven (Incus Option-2 coupon matrix required)"))
+        H_green = H * LMM_SHRINK_Z
+        if H_green > LMM_FIN_TESTED_H_MM_GREEN + 1e-9:
+            checks.append(_check(
+                "fin_height", "fin height vs tested envelope", H_green, None, None, INFO,
+                f"green fin height {H_green:.2f} mm is beyond the ~1 mm Incus has "
+                "tested — taller fins may deform during cleaning/processing "
+                "(guidelines §4)"))
         checks.append(_check(
             "drainage", "drainage + gravity drain path", None, None, None, INFO,
             "add drainage holes at pocket low points + channel ends; orient for "
@@ -302,6 +359,15 @@ def schema() -> Dict[str, Any]:
             "shrink_z": LMM_SHRINK_Z,
             "overpoly_px_per_side": LMM_OVERPOLY_PX,
             "coupon_area_mm2": LMM_COUPON_AREA_MM2,
+            # Incus_Design_Guidelines.pdf (July 2026) px rules — GREEN px basis
+            "fin_abs_px": LMM_FIN_ABS_PX,
+            "fin_rec_px": LMM_FIN_REC_PX,
+            "gap_abs_px_deep": LMM_GAP_ABS_PX_DEEP,
+            "gap_rec_px_deep": LMM_GAP_REC_PX_DEEP,
+            "gap_abs_px_shallow": LMM_GAP_ABS_PX_SHALLOW,
+            "gap_rec_px_shallow": LMM_GAP_REC_PX_SHALLOW,
+            "deep_channel_mm_green": LMM_DEEP_CHANNEL_MM_GREEN,
+            "gap_wider_than_fin": True,
         },
         "enforcement_modes": [
             {"key": "enforce", "label": "Design-to-manufacture",

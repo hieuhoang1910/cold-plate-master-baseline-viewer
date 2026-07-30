@@ -16,6 +16,7 @@ import { Report } from './components/Report'
 import { Hero } from './components/Hero'
 import { Cursor } from './components/Cursor'
 import { VerifyTab } from './components/VerifyTab'
+import { CompensationTab } from './components/CompensationTab'
 import { useVerify } from './verify/useVerify'
 import { geomFromCase } from './viewerGeom'
 import { flowVizFrom } from './flowviz'
@@ -23,9 +24,10 @@ import { FlowSchematic } from './components/FlowSchematic'
 import { milliKW } from './format'
 import { normalizeRoute, type Enforcement } from './manufacturing'
 
-// V3.3: M1 is the primary manufacturing target (team decision 2026-07-09);
-// the 0.10 hero stays in the list as a reference row.
-const DEFAULT_ID = 'v6_lmm_M1_primary'
+// M4 = the guideline-optimal preset (2026-07-30) and default selection.
+// M1 (primary target 2026-07-09 → superseded) FAILs the July-2026 Incus rules
+// (gap ≈ 5 px < 6 px deep-channel floor); it and the 0.10 hero stay as history.
+const DEFAULT_ID = 'v6_lmm_M4_guideline'
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
 const DEFAULT_PROJECT_ID = 'gb202-gpu'
 
@@ -34,7 +36,7 @@ const DEFAULT_PROJECT_ID = 'gb202-gpu'
 // scrolling dollies its camera from the far cinematic pose into the workspace.
 const RUNWAY_VH = 2.2 // scroll distance (in viewport heights) of the intro
 
-type ViewMode = '3d' | 'pixel' | 'verify'
+type ViewMode = '3d' | 'pixel' | 'verify' | 'cad'
 
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
@@ -341,6 +343,12 @@ export default function App() {
                   <span className={`ws-vdot ${verifyApi.session.result.deviation.verdict.toLowerCase()}`} />
                 )}
               </button>
+              <button className={viewMode === 'cad' ? 'sel' : ''} onClick={() => setMode('cad')}
+                disabled={!design || !isLmm}
+                title={isLmm ? 'CAD compensation — the full final → green → overpoly chain: every number the nTop model needs'
+                  : 'CAD compensation applies to the LMM (DLP) route only'}>
+                ⇄ CAD
+              </button>
             </div>
             <span className="ws-spacer" />
             {error
@@ -441,6 +449,9 @@ export default function App() {
                   {viewMode === 'verify' && (
                     <VerifyTab verify={verifyApi} design={design} basis={catalog.basis}
                       live={design ? live : selected} opts={liveOpts} onOpenPixel={openPixelAt} />
+                  )}
+                  {viewMode === 'cad' && isLmm && (
+                    <CompensationTab design={design} sourceLabel={design.design_id ?? selectedId} />
                   )}
                 </div>
               )}

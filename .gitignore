@@ -31,3 +31,6 @@ snapshots/
 # Server-local user projects (V2.2 — LAN-shared via the API, not git-tracked;
 # the GB202 built-in preset lives in code and is always available)
 projects/
+
+# Standalone exe build output (rebuild with build_exe.bat)
+standalone/

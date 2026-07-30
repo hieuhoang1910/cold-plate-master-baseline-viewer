@@ -905,18 +905,25 @@ shrinkage, aspect ratio, drainage). SLM likewise has published rules well
 beyond a single floor. V3 replaces the single floor with a **per-route DfAM
 rulebook**, checked live.
 
-### 35A. LMM rulebook (Incus Hammer EVO35 — authoritative, from Paul Peritsch email 2026-07-07)
+### 35A. LMM rulebook (Incus Hammer EVO35 — authoritative; revised 2026-07-30 to the official guidelines)
 
-Source: Incus DfAM review, distilled in
-`03_Reports/.../cold_plate_v6_incus_manufacturability_review_20260708.md`.
-All Incus dimensions are **green (as-printed)** unless noted; final part is
-smaller by the sinter shrink. Basis ambiguity (green vs final) is Incus open
-question #1 — the rulebook stores both and checks the conservative one.
+Source (since 2026-07-30): **`05_References/Incus_Design_Guidelines.pdf`**
+(*Component Design for Lithography-based Metal Manufacturing of Cu-OF*,
+July 2026 — the official rules; ALL dimensions are **green**-state px,
+1 px = 35 µm, which **closes** the old green-vs-final open question #1) +
+Paul Peritsch's emails 2026-07-07 (first STL review, distilled in
+`03_Reports/.../cold_plate_v6_incus_manufacturability_review_20260708.md`)
+and **2026-07-29** (px review of the rev5 wavy + ICE arrays: 2 px gap
+cross-sections "will not be cleaned", 1–2 px fins too thin, "gaps should be
+wider than fins"). Rulebook bounds convert green px → final mm via ÷1.197.
 
 | Rule id | Constraint | Absolute | Recommended | Tier |
 |---|---|---|---|---|
-| `lmm.gap_min` | channel gap `b` (final) | ≥ 0.15 mm (Incus stated cleanability limit) | **≥ 0.20 mm** (M2; green 7 px inside their 6–8 px deep-channel band) | hard / soft |
-| `lmm.fin_min` | fin thickness `t` (final) | ≥ 0.105 mm (3 px green, printed successfully) | **≥ 0.14 mm** (4–5 px green band) | hard / soft |
+| `lmm.gap_min` | channel gap `b` (final), depth > 1 mm | ≥ 0.175 mm (6 px green — below it deep channels won't clean) | **≥ 0.234 mm** (8 px; guidelines band 6–8 px) | hard / soft |
+| `lmm.gap_min` | channel gap `b` (final), depth ≤ 1 mm | ≥ 0.146 mm (5 px — cleaned, reliability drops) | **≥ 0.175 mm** (6 px) | hard / soft |
+| `lmm.fin_min` | fin thickness `t` (final) | ≥ 0.088 mm (3 px green, printed successfully) | **≥ 0.117 mm** (4–5 px reliability band; tested at ~1 mm height) | hard / soft |
+| `lmm.gap_ratio` | gap vs fin: `b ≥ t` ("gaps should be wider than fins", email 2026-07-29) | — | b ≥ t | soft |
+| `lmm.fin_height` | fin height vs the ~1 mm tested envelope (taller may deform in cleaning) | — | advisory | ℹ |
 | `lmm.aspect` | fin aspect ratio H/b | ≤ 40 (legacy) | **≤ ~30** ("taller fins need thicker fins") | soft |
 | `lmm.pixel_snap` | XY dims = n × 35 µm; Z = n × 25 µm (green) | — | snap all of t, b, p, A, λ, H | advisory + helper |
 | `lmm.overpoly` | CAD pre-compensation: fin −2 px, channel +2 px (in CAD, not slicer) | — | applied in export recipe | advisory (export) |
@@ -932,18 +939,31 @@ preset is kept for provenance but gets a permanent
 are added as candidates (from the manufacturability review, §4–§6).
 **Team decision 2026-07-09: M1 is the primary manufacturing target; M2 is the
 backup** (accept ~1 K more junction rise only if M1's 0.15 mm gap fails the
-cleanability coupon). Note the honest verdict display: M1's gap sits exactly
-on Incus's stated cleanability floor and its green gap ≈ 5 px is below their
-6–8 px deep-channel band, so the manufacturability card will show M1 as
-**MARGINAL** (inside absolute, outside recommended) — that is the rulebook
-working as intended, not a bug. The Incus Option-2 coupon matrix is what
-confirms or kills M1.
+cleanability coupon). **Revision 2026-07-30 — the 2026-07-29 email supersedes
+this in practice:** Incus reviewed the rev5 wavy + ICE parts (M1-class
+geometry, gap ≈ 5 px green) and stated such gaps "will not be cleaned", and
+the official guidelines put channels deeper than 1 mm at 6–8 px green. The
+manufacturability card therefore now shows M1 as **FAIL** (below the 6 px
+deep-channel floor), M2 as **MARGINAL** (7 px, inside the band, under the
+8 px recommendation) and M3 as **PASS** — the rulebook working as intended,
+not a bug.
 
-| Preset | t / b / H (mm) | N_fin | R_jc (mK/W) | ΔT @575 W | Verdict chip |
+| Preset | t / b / H (mm) | N_fin | R_jc (mK/W) | ΔT @575 W | Verdict chip (rev 2026-07-30) |
 |---|---|---:|---:|---:|---|
-| **`v6 LMM M1 (primary)`** ✅ | 0.12 / 0.15 / 5.5 | 122 | 14.6 | 8.4 K | MARGINAL — at Incus floor, coupon to confirm |
-| `v6 LMM M2 (backup)` | 0.15 / 0.20 / 5.5 | 94 | 16.2 | 9.3 K | PASS — printable + cleanable |
-| `v6 LMM M3 (easy-clean)` | 0.15 / 0.25 / 5.0 | 83 | 17.9 | 10.3 K | PASS — safest |
+| `v6 LMM M1` (was primary) | 0.12 / 0.15 / 5.5 | 122 | 14.6 | 8.4 K | FAIL — gap ≈ 5 px, below the 6 px deep-channel floor (won't clean) |
+| `v6 LMM M2 (backup)` | 0.15 / 0.20 / 5.5 | 94 | 16.2 | 9.3 K | MARGINAL — 7 px, inside the 6–8 px band, under the 8 px rec |
+| `v6 LMM M3 (easy-clean)` | 0.15 / 0.25 / 5.0 | 83 | 17.9 | 10.3 K | PASS — ≈ 8.5 px, meets the recommendation |
+| **`v6 LMM M4 (guideline)`** ✅ | 0.175 / 0.234 / 5.5 (px-exact 6/8) | — | 18.0 | 10.4 K | PASS — constrained optimum under the 07/2026 rules; default selection |
+
+**M4 (added 2026-07-30)** is the solver's constrained optimum inside the
+guideline-legal region: 6 px fins beat 4 px on fin efficiency at H 5.5 (η_f
+0.28 vs 0.23 — fewer, better fins win), the gap sits exactly on the 8 px
+deep-channel recommendation, and gap > fin holds with margin. Cost vs the
+dead M1: ≈ +1.7 K at 575 W (R_jc is TIM+base dominated, so the sacrifice is
+small); gates keep ≥ 4× margin. Its CAD export chain (green, overpoly
+pre-compensated): fin 0.140 (4 px drawn), gap 0.350 (10 px drawn), pitch
+0.490 (14 px), H 6.775, A 0.665, λ 3.010. **Default selected candidate
+switches M1 → M4.**
 
 **Default selected candidate switches from the 0.10 hero to M1** (hero stays
 as a reference row).
@@ -1092,8 +1112,9 @@ marginal.
    and a ghost ☆ unconstrained optimum — the gap between them is the price
    of manufacturability, visible on every sweep.
 3. **Wizard preview card** states the active constraint set in words:
-   "LMM (Incus EVO35): gap ≥ 0.15 / rec 0.20 · fin ≥ 0.105 / rec 0.14 ·
-   AR ≤ 30 · pixel 35/25 µm · supplier-verified 2026-07-07".
+   "LMM (Incus EVO35): gap ≥ 0.175 / rec 0.234 · fin ≥ 0.088 / rec 0.117 ·
+   AR ≤ 30 · pixel 35/25 µm · official guidelines 07/2026" (values render
+   from the rulebook, so they track revisions).
 4. **Route × family guard:** the wizard warns when a family/route pairing has
    no verified rule set (e.g. TPMS on LMM inherits the same gap rules with a
    "coupon was gyroid 7.7 mm — size unproven" caveat).
@@ -2071,3 +2092,98 @@ recorded engineering judgement, not styling.
   physics, the chips, the rib strip, and what only CFD confirms.
 - Docs synced 2026-07-24: About tab gains the V5 section, README the V5
   status, this changelog written.
+
+---
+
+## 2026-07-30 — Incus guideline revision, M4, ⇄ CAD tab, ⌖ neck scan, standalone exe (ALL BUILT)
+
+One-day batch triggered by two INCUS inputs: the **official design
+guidelines** (`05_References/Incus_Design_Guidelines.pdf`, July 2026 —
+all rules in GREEN px, closing the green-vs-final open question) and
+**Paul Peritsch's 2026-07-29 px review** of the rev5 wavy + ICE arrays
+(2 px gap cross-sections "will not be cleaned", 1–2 px fins, "gaps
+should be wider than fins"). Plus the team-distribution ask (standalone
+exe). Everything below shipped and gated the same day.
+
+**1. LMM rulebook re-anchored (§35A revised in place).**
+`engine/manufacturing.py` + the `manufacturing.ts` mirror now derive the
+LMM bounds from green px (UNROUNDED `px·0.035/1.197`, so a px-exact
+design sits ON its bound instead of a rounding hair below): fin abs 3 px
+/ rec 4 px; deep-channel (> 1 mm green) gap abs 6 px / rec 8 px, shallow
+(≤ 1 mm) 5/6 px — the gap bound is depth-aware in `check_case`. Two new
+checks: **`gap_ratio`** (b ≥ t, MARGINAL when violated — the 2026-07-29
+email rule) and **`fin_height`** advisory (fin rules tested at ~1 mm
+green height; ours are ~6.8 mm). `/api/schema` `lmm_process` gains the
+px-rule block so the UI reads, never re-states. Consequence (intended,
+honest): **M1 FAIL / M2 MARGINAL / M3 PASS**; the 0.10 hero's fin is
+now printable-marginal (3.4 px) but its gap still FAILs.
+
+**2. M4 — the new manufacturing target (default selection).** The
+constrained optimum computed through the validated solver on px-snapped
+candidates inside the legal region: **6 px fin / 8 px gap green
+(t 0.1754 / b 0.2339 final, H 5.5, A 0.55, λ 2.5)**. 6 px fins beat 4 px
+(η_f 0.28 vs 0.23 at this slenderness — fewer, better fins win) and M4
+beats M3 thermally (catalog 17.14 vs 17.76 mK/W) while fully PASSing.
+Cost vs the dead M1 ≈ +1.7 K @ 575 W (TIM+base dominated). Ships as
+candidate `v6_lmm_M4_guideline` (px-exact values computed from the
+process constants); frontend `DEFAULT_ID` switches M1 → M4. Key
+principle recorded: **overpoly compensation is dimension-preserving,
+not dimension-improving** — pitch is conserved, so no ∓2 px edit can
+rescue a 9 px-pitch design (M1, or 0.10/0.17): the only 9 px split not
+outright FAIL needs a 1 px CAD fin, which does not slice.
+
+**3. ⇄ CAD tab (fourth stage view) + GreenCad px columns.** New
+`CompensationTab.tsx` next to 3-D / ▦ Pixel / ✓ Verify: the full chain
+per dimension — final → ×1.197/×1.23 green → 35/25 µm snap → **CAD
+draw** (∓2 px, in mm AND px) → **prints back as** px — for the selected
+candidate or live sliders, with guideline guardrails (≤ 1 px CAD fin =
+"will not slice" FAIL, 2 px = slicing-edge warning, printed px vs the
+3/6/8 floors, gap > fin) and a **⧉ copy-for-nTop** plain-text handoff
+block. Chain math extracted to `manufacturing.lmmCompensation()`; the
+GreenCad fold-out under the sliders is now a compact view of the same
+function (mm + px + the same warnings). LMM fin families only; the tab
+is greyed out otherwise.
+
+**4. ▦ Pixel — guideline tints + ⌖ neck scan + ⌖ scan all layers.**
+Violation painting gains the recommended tier (channel < abs red, abs–rec
+dim red; fin < abs orange, abs–rec dulled) with depth-aware channel
+thresholds; footer gains rec values and a `✗ fins wider than gaps` flag.
+**⌖ neck scan**: Incus reviews the slicer BITMAP, so nominal (analytic)
+widths cannot see their "cross section only 2 px" findings — local
+passages necked by off-grid rounding + stair-step phasing. The scan runs
+a morphological opening on the void (two 3-4 chamfer distance
+transforms ≈ Euclidean; disc = the 6 px floor): every channel pixel a
+6 px disc cannot reach paints bright pink, < 3 px blobs dropped as
+stair-corner clips; footer reports flagged px + worst passage width with
+a zoom-to-worst button; runs on the design's own raster AND the imported
+STL slice, composing with the overpoly what-if. **⌖ scan all layers**
+(imported STL only): sequential worker-mask sweep over the whole stack
+(state-machine on arriving masks — worker API untouched; render paused
+while scanning; cancelable with live progress), then auto-snaps to the
+worst layer + narrowest passage at 1000 % zoom. Footer keeps the stack
+verdict ("worst layer N · neck ≈ X px" or all-clean). This is the
+automated version of the review INCUS does by hand: Verify → Pixel →
+scan → green = safe to send.
+
+**5. Standalone exe for the team.** `build_exe.bat` →
+`standalone\ColdPlateViewer.exe` (~9 MB PyInstaller onefile; zip beside
+it): the whole app (server + engine snapshot + built UI) runs on any
+Windows PC with no Python/Node/LAN dependency. `server.py` is
+frozen-aware (`FROZEN`): assets from `sys._MEIPASS`, saved projects in
+`projects\` beside the exe; auto-opens the browser; a second launch
+detects the running instance via `/api/health` and reopens the tab.
+Build gotchas recorded in the bat: PyInstaller venv must live at a SHORT
+path (Windows 260-char limit), engine modules load at runtime via
+`sys.path` so their stdlib deps need `--hidden-import`. **Rebuild + re-send
+the zip after every `sync_engine.py` or UI change** — the exe carries
+frozen copies. `standalone/` is git-ignored.
+
+**Docs + acceptance.** §35A tables/consequences revised in place (dated),
+About tab rulebook + references updated (guidelines PDF + 2026-07-29
+email are primary sources), README rewritten accordingly.
+`test_v3_manufacturing.py` re-baselined: M1 FAIL / M2 MARGINAL / M4 PASS
+plus new checks (gap_ratio fires, deep-channel message, tall-fin advisory,
+px-derived bounds, M2 < M4 < M3 ordering). Gates all green: parity 5/5
+golden-exact, every V2/V3/V5 suite, `npm run test:verify` (engine + 26
+F1), tsc + production build clean; exe smoke-tested (byte-identical
+`/api/catalog` vs source engine, project save/delete beside the exe).

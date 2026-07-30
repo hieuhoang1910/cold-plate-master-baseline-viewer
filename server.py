@@ -49,8 +49,17 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Path wiring: the validated solvers are vendored under engine/ so this repo is
 # self-contained (see engine/README + sync_engine.py). Put engine/ on sys.path.
+# Frozen into a standalone exe (PyInstaller), the read-only assets (engine/,
+# frontend/dist) are unpacked under sys._MEIPASS, while anything the server
+# WRITES (saved projects) must live next to the exe so it survives restarts.
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parent              # 07_WebApp
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    ROOT = Path(sys._MEIPASS)                        # bundled read-only assets
+    APP_DIR = Path(sys.executable).resolve().parent  # writable, beside the exe
+else:
+    ROOT = Path(__file__).resolve().parent           # 07_WebApp
+    APP_DIR = ROOT
 ENGINE = ROOT / "engine"
 DATA = ENGINE / "data"
 DIST = ROOT / "frontend" / "dist"                   # built frontend (production single-origin)
@@ -126,7 +135,7 @@ GB202_PROJECT = {
     "physical_footprint": PHYSICAL_FOOTPRINT,
 }
 
-PROJECTS_DIR = ROOT / "projects"
+PROJECTS_DIR = APP_DIR / "projects"
 STORE = projects.ProjectStore(PROJECTS_DIR, builtins=[GB202_PROJECT])
 
 
@@ -235,23 +244,38 @@ def _augment(out: dict, case_d: dict, stack_d: dict | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# V3.3 — the Incus-compliant LMM presets (review §4–§6). M1 is the project's
-# primary manufacturing target (team decision 2026-07-09), M2 the backup,
-# M3 the easy-clean fallback. Appended to every catalog, rescored per project.
+# V3.3 — the LMM presets (review §4–§6). M1 was the primary manufacturing
+# target (team decision 2026-07-09) but the official guidelines
+# (Incus_Design_Guidelines.pdf July 2026 + Peritsch email 2026-07-29) put
+# deep channels at 6-8 px green, so M1's ~5 px gap now honestly FAILs; M2/M3
+# are the buildable presets. Appended to every catalog, rescored per project.
 # ---------------------------------------------------------------------------
 M_PRESET_CASES = [
     {"design_id": "v6_lmm_M1_primary", "family": "wavy_fin", "process_route": "LMM",
      "fin_thickness_mm": 0.12, "channel_gap_mm": 0.15, "fin_height_mm": 5.5,
      "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
-     "notes": "M1 — primary target: at the Incus cleanability floor; coupon to confirm."},
+     "notes": "M1 — was the primary target; gap ≈ 5 px green is below the 6 px "
+              "deep-channel floor (guidelines 07/2026): Incus says it won't clean."},
     {"design_id": "v6_lmm_M2_backup", "family": "wavy_fin", "process_route": "LMM",
      "fin_thickness_mm": 0.15, "channel_gap_mm": 0.20, "fin_height_mm": 5.5,
      "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
-     "notes": "M2 — backup: green 7 px inside the Incus 6–8 px band."},
+     "notes": "M2 — backup: green 7 px inside the Incus 6–8 px band "
+              "(marginal vs the 8 px recommendation)."},
     {"design_id": "v6_lmm_M3_easyclean", "family": "wavy_fin", "process_route": "LMM",
      "fin_thickness_mm": 0.15, "channel_gap_mm": 0.25, "fin_height_mm": 5.0,
      "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
      "notes": "M3 — easy-clean: matches the proven 0.25 mm build."},
+    # M4 (2026-07-30): the constrained optimum under the official guidelines —
+    # px-exact 6 px fin / 8 px gap green (t 0.175 / b 0.234 final). Best R_jc
+    # among fully-PASS designs: 6 px fins beat 4 px on fin efficiency at
+    # H 5.5, gap sits on the 8 px deep-channel recommendation, gap > fin.
+    {"design_id": "v6_lmm_M4_guideline", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 6 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "channel_gap_mm": 8 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "fin_height_mm": 5.5,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
+     "notes": "M4 — guideline optimum (07/2026 rules): 6 px fin / 8 px gap green, "
+              "px-exact; best R_jc among designs that fully PASS the rulebook."},
 ]
 
 
@@ -984,7 +1008,29 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as exc:
+        # Port taken. In the standalone exe this usually means the viewer is
+        # already running — just bring it up in the browser instead of dying.
+        if FROZEN:
+            import urllib.request
+            import webbrowser
+            url = f"http://127.0.0.1:{PORT}"
+            try:
+                with urllib.request.urlopen(url + "/api/health", timeout=3) as r:
+                    already_running = r.status == 200
+            except Exception:
+                already_running = False
+            if already_running:
+                print(f"Viewer is already running - opening {url}")
+                webbrowser.open(url)
+                return 0
+            print(f"Could not start on port {PORT}: {exc}")
+            print("Another program is using this port. Close it and try again.")
+            input("Press Enter to close.")
+            return 1
+        raise
     print("=" * 64)
     print("Cold Plate Master Baseline Viewer - API (Phase 1)")
     print("=" * 64)
@@ -993,6 +1039,13 @@ def main() -> int:
     print("  GET  /api/health /api/catalog /api/schema /api/projects[/<id>]")
     print("  POST /api/evaluate /api/solve /api/sweep /api/catalog /api/projects")
     print("  Ctrl+C to stop.")
+    if FROZEN:
+        # Standalone exe: open the app in the default browser once the server
+        # is up (closing the console window stops it, like the .bat launcher).
+        import threading
+        import webbrowser
+        print("  Close this window to stop the app.")
+        threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -32,15 +32,46 @@ def main() -> int:
     cat = server.catalog_payload()
     by_id = {c["design_id"]: c for c in cat["candidates"]}
 
-    # --- V3.3a verdicts (spec §36 acceptance) --------------------------------
+    # --- V3.3a verdicts (spec §36 acceptance; rev 2026-07-30 = official
+    # Incus_Design_Guidelines.pdf px bounds + the 2026-07-29 px review) -------
     check("hero 0.10 -> FAIL", by_id["v6_reference_wavy_fin_0p10"]["manufacturability"]["verdict"] == "FAIL")
-    check("M1 -> MARGINAL", by_id["v6_lmm_M1_primary"]["manufacturability"]["verdict"] == "MARGINAL")
-    check("M2 -> PASS", by_id["v6_lmm_M2_backup"]["manufacturability"]["verdict"] == "PASS")
+    check("M1 -> FAIL (gap ~5 px < 6 px deep-channel floor)",
+          by_id["v6_lmm_M1_primary"]["manufacturability"]["verdict"] == "FAIL")
+    check("M2 -> MARGINAL (7 px, under the 8 px rec)",
+          by_id["v6_lmm_M2_backup"]["manufacturability"]["verdict"] == "MARGINAL")
     check("M3 -> PASS", by_id["v6_lmm_M3_easyclean"]["manufacturability"]["verdict"] == "PASS")
+    check("M4 -> PASS (guideline optimum, px-exact 6/8)",
+          by_id["v6_lmm_M4_guideline"]["manufacturability"]["verdict"] == "PASS")
+    check("M4 beats M3 thermally, costs vs M2",
+          by_id["v6_lmm_M2_backup"]["R_jc_K_W"] < by_id["v6_lmm_M4_guideline"]["R_jc_K_W"]
+          < by_id["v6_lmm_M3_easyclean"]["R_jc_K_W"])
     hero_rules = {c["rule"]: c["status"] for c in
                   by_id["v6_reference_wavy_fin_0p10"]["manufacturability"]["checks"]}
     check("hero fails gap_min", hero_rules.get("gap_min") == "FAIL", str(hero_rules))
-    check("hero fails wall_min", hero_rules.get("wall_min") == "FAIL", str(hero_rules))
+    # rev 2026-07-30: fin bounds are green-px based — hero t 0.10 final is
+    # 3.4 px green, above the 3 px printable floor but under the 4 px rec.
+    check("hero wall_min MARGINAL (3.4 px green)",
+          hero_rules.get("wall_min") == "MARGINAL", str(hero_rules))
+
+    # --- 2026-07-30 guideline revision: gap_ratio + depth band + advisories --
+    m1_rules = {c["rule"]: c for c in by_id["v6_lmm_M1_primary"]["manufacturability"]["checks"]}
+    check("M1 gap_min FAIL cites the deep-channel band",
+          m1_rules["gap_min"]["status"] == "FAIL" and "deep-channel" in m1_rules["gap_min"]["message"],
+          str(m1_rules.get("gap_min")))
+    check("M1 passes gap_ratio (b 0.15 > t 0.12)", m1_rules["gap_ratio"]["status"] == "PASS")
+    check("tall-fin advisory present (H 5.5 mm >> 1 mm tested)",
+          m1_rules.get("fin_height", {}).get("status") == "INFO")
+    ratio_case = server.evaluate_payload({"case": {
+        "family": "wavy_fin", "process_route": "LMM", "fin_thickness_mm": 0.30,
+        "channel_gap_mm": 0.25, "fin_height_mm": 5.5,
+        "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5}})
+    rr = {c["rule"]: c["status"] for c in ratio_case["manufacturability"]["checks"]}
+    check("fins wider than gaps -> gap_ratio MARGINAL", rr.get("gap_ratio") == "MARGINAL", str(rr))
+    lmm = manufacturing.ROUTES["LMM"]
+    check("LMM bounds derive from green px (/1.197)",
+          abs(lmm["wall_abs"] - 0.0877) < 1e-4 and abs(lmm["wall_rec"] - 0.1170) < 1e-4
+          and abs(lmm["gap_abs"] - 0.1754) < 1e-4 and abs(lmm["gap_rec"] - 0.2339) < 1e-4,
+          str(lmm))
 
     # --- M-preset thermal numbers reproduce the review §5 table --------------
     m1, m2, m3 = (by_id["v6_lmm_M1_primary"], by_id["v6_lmm_M2_backup"], by_id["v6_lmm_M3_easyclean"])

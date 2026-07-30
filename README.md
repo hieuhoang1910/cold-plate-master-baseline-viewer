@@ -10,6 +10,15 @@ Project lead: **Hieu Hoang** — Vinnotek.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Status (2026-07-30):** all of the below **plus the Incus-guidelines
+  revision**: LMM rulebook re-anchored to the official
+  `Incus_Design_Guidelines.pdf` (green-px basis; M1 now honestly FAILS, new
+  **M4 guideline-optimal preset is the default**), a **⇄ CAD tab** (full
+  final → green → overpoly-compensated CAD chain + copy-for-nTop), the ▦
+  Pixel **⌖ neck scan** + **scan-all-layers** (finds the "2 px areas" INCUS
+  flags and snaps to the worst one), and the **standalone exe** for the team
+  (`build_exe.bat` → `standalone\ColdPlateViewer.zip`). Details in the spec's
+  2026-07-30 changelog.
 - **Status:** V4 complete (V4.0–V4.4) — everything from V2 (projects & Design
   Studio: coolant, T_j target → derived R_jc gate, ΔP/pump budgets, layouts;
   fin + TPMS + pin-fin solvers (Shah–London / Renon & Jeanningros /
@@ -116,11 +125,21 @@ project's **enforcement mode** decides how strict the app is:
 *design-to-manufacture* (sliders and sweep clamped to the recommended band),
 *allow marginal* (clamped at absolute — the current stance while the Incus M1
 coupon is pending), or *explore/audit* (no clamps, verdicts annotate only).
-The Incus review moved the LMM floor from 0.10 to 0.15 mm absolute / 0.20 mm
-recommended, so three compliant presets ship as candidates — **M1
-(0.12/0.15, primary target, default selection)**, M2 (0.15/0.20, backup) and
-M3 (0.15/0.25, easy-clean) — with the historical 0.10 hero kept as a
-reference row that honestly fails the rulebook. A **⚒ make-manufacturable**
+The LMM rulebook is anchored to the **official Incus design guidelines**
+(`05_References/Incus_Design_Guidelines.pdf`, July 2026 — all rules in
+GREEN px, 1 px = 35 µm, closing the old green-vs-final question) plus Paul
+Peritsch's px reviews (2026-07-07 and 2026-07-29): fins 3 px absolute /
+4–5 px recommended; channels deeper than 1 mm 6 px absolute / 8 px
+recommended (≤ 1 mm relaxes to 5 px); a **gap ≥ fin** rule ("gaps should be
+wider than fins", 2026-07-29); and a tall-fin advisory (fin rules tested at
+~1 mm height). Under these bounds the presets read honestly: **M1
+(0.12/0.15, ≈ 5 px gap) FAILS** — Incus confirmed on our rev5/ICE parts that
+such gaps won't clean — M2 (0.15/0.20, ≈ 7 px) is MARGINAL and M3
+(0.15/0.25, ≈ 8.5 px) PASSES; the historical 0.10 hero stays as a reference
+row that also fails. A fourth preset **M4 (guideline optimum, default
+selection)** is the solver's constrained optimum inside the new rules:
+px-exact 6 px fin / 8 px gap green (t 0.175 / b 0.234 final, H 5.5) — best
+R_jc among fully-PASS designs, ≈ +1.7 K at 575 W vs the dead M1. A **⚒ make-manufacturable**
 button projects any design onto the nearest compliant point and shows the KPI
 delta before you accept. For LMM export, a **green→CAD converter** prints the
 full recipe chain (final → ×shrink → pixel-snapped green → ∓2 px overpoly →
@@ -143,6 +162,19 @@ so slicers/CAD union them cleanly; the picker is greyed out for fin/pin
 (exact meshes need no resolution).
 
 ## Quick start
+
+**Sharing with the team — the standalone exe (no installs, no host PC).**
+`build_exe.bat` packs the whole app (server + validated engine snapshot +
+built UI) into a single `standalone\ColdPlateViewer.exe` (~9 MB) with
+PyInstaller. Send `standalone\ColdPlateViewer.zip` to anyone: they
+double-click the exe and the viewer opens in their browser — no Python, no
+Node, no LAN dependency on this machine. Saved projects land in a
+`projects\` folder next to their exe (per-user, not shared). Frozen-mode
+path wiring lives at the top of `server.py` (`FROZEN`); assets load from
+the bundle, writes go beside the exe. **Rebuild after every
+`sync_engine.py` refresh or UI change** (the exe carries its own frozen
+copy of both) and re-send the zip; `test_api_parity.py` +
+byte-identical-`/api/catalog` is the acceptance gate.
 
 **Easiest — double-click the launcher (Windows).** In the `07_WebApp` folder,
 double-click **`Start Cold Plate Viewer.bat`**. It frees the port if a previous

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmt } from '../format'
-import { LMM_PROC } from '../manufacturing'
+import { LMM_PROC, LMM_PX_RULES } from '../manufacturing'
 import { geomFromCase } from '../viewerGeom'
 import { PXF, LYF, gridDims, makeSolidAt } from '../verify/raster'
 import { stageRefGeom } from '../verify/stages'
@@ -15,19 +15,89 @@ import type { Basis, DesignState } from '../types'
 //   overpoly view: fins grow +1 px per side, channels lose 2 px — what an
 //   UNcompensated print delivers. The CAD pre-compensation (fin −2 px,
 //   channel +2 px) exists precisely to cancel this.
-//   violations:    channel runs < 6 px red (Incus deep-channel band),
-//                  fin runs < 3 px orange (min printed fin).
+//   violations (Incus_Design_Guidelines.pdf, July 2026 — green px):
+//     channel < 6 px red, 6–8 px dim red (deep-channel band, > 1 mm; the
+//     shallow ≤ 1 mm band relaxes to 5 px), fin < 3 px orange, 3–4 px dim
+//     orange (4–5 px recommended). Plus the 2026-07-29 email rule: gaps
+//     must be WIDER than fins — flagged in the footer readout.
 //
 // V4.3 — compare-imported mode: when a file has been verified in the Verify
 // tab, its slice at this layer is rasterized on the SAME grid (in the worker)
 // and every pixel where the file disagrees with the design is painted magenta.
 // The shared raster lives in verify/raster.ts so both sides use one geometry.
+//
+// ⌖ neck scan (2026-07-30): Incus reviews the slicer BITMAP, not nominal
+// widths — their "cross section only 2 px" findings are local passages where
+// off-grid rounding + stair-step phasing neck the drawn channel down. The
+// scan runs a morphological opening on the void (3-4 chamfer distance
+// transform ≈ Euclidean): any channel pixel a CH_MIN_PX-diameter disc cannot
+// reach is a neck that will not be cleaned. Works on the design's own raster
+// AND the imported STL's; stair-corner clips (< 3 px blobs) are dropped.
 
-const CH_MIN_PX = 6   // Incus deep-channel recommendation (green px)
-const FIN_MIN_PX = 3  // Incus minimum printed fin (green px)
+function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx: number):
+  { flags: Uint8Array; count: number; worstIdx: number; worstPx: number } {
+  const n = nx * ny
+  const INF = 1 << 29
+  const pass = (dist: Int32Array, fwd: boolean) => {
+    const j0 = fwd ? 0 : ny - 1, j1 = fwd ? ny : -1, dj = fwd ? 1 : -1
+    for (let j = j0; j !== j1; j += dj) {
+      const i0 = fwd ? 0 : nx - 1, i1 = fwd ? nx : -1, di = fwd ? 1 : -1
+      for (let i = i0; i !== i1; i += di) {
+        const idx = j * nx + i
+        let d = dist[idx]
+        const ip = i - di, jp = j - dj
+        if (ip >= 0 && ip < nx) d = Math.min(d, dist[j * nx + ip] + 3)
+        if (jp >= 0 && jp < ny) {
+          d = Math.min(d, dist[jp * nx + i] + 3)
+          if (ip >= 0 && ip < nx) d = Math.min(d, dist[jp * nx + ip] + 4)
+          const iq = i + di
+          if (iq >= 0 && iq < nx) d = Math.min(d, dist[jp * nx + iq] + 4)
+        }
+        dist[idx] = d
+      }
+    }
+  }
+  const D = new Int32Array(n)                    // chamfer distance to solid, ×3
+  for (let i = 0; i < n; i++) D[i] = mask[i] ? 0 : INF
+  pass(D, true); pass(D, false)
+  const r3 = Math.round((minPx / 2) * 3)
+  const D2 = new Int32Array(n)                   // distance to "disc fits here" seeds
+  for (let i = 0; i < n; i++) D2[i] = D[i] >= r3 && D[i] < INF ? 0 : INF
+  pass(D2, true); pass(D2, false)
+  const flags = new Uint8Array(n)
+  for (let i = 0; i < n; i++) if (!mask[i] && D[i] < INF && D2[i] > r3) flags[i] = 1
+  // blob filter + worst passage (narrowest neck = blob with the smallest max clearance)
+  const seen = new Uint8Array(n)
+  const stack: number[] = []
+  let count = 0, worstIdx = -1, worstW = INF
+  for (let s = 0; s < n; s++) {
+    if (!flags[s] || seen[s]) continue
+    stack.length = 0; stack.push(s); seen[s] = 1
+    const blob: number[] = []
+    while (stack.length) {
+      const p = stack.pop() as number
+      blob.push(p)
+      const pi = p % nx, pj = (p - pi) / nx
+      if (pi + 1 < nx && flags[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack.push(p + 1) }
+      if (pi - 1 >= 0 && flags[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack.push(p - 1) }
+      if (pj + 1 < ny && flags[p + nx] && !seen[p + nx]) { seen[p + nx] = 1; stack.push(p + nx) }
+      if (pj - 1 >= 0 && flags[p - nx] && !seen[p - nx]) { seen[p - nx] = 1; stack.push(p - nx) }
+    }
+    if (blob.length < 3) { for (const p of blob) flags[p] = 0; continue }
+    count += blob.length
+    let bMax = -1, bIdx = blob[0]
+    for (const p of blob) if (D[p] > bMax) { bMax = D[p]; bIdx = p }
+    const w = (2 * bMax) / 3
+    if (w < worstW) { worstW = w; worstIdx = bIdx }
+  }
+  return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10 }
+}
 const GRID_MIN_ZOOM = 6  // css px per printer pixel before grid lines appear
 
-interface Stats { minChannelPx: number | null; minFinPx: number | null; solidPct: number; mismatch: number | null }
+interface Stats {
+  minChannelPx: number | null; minFinPx: number | null; solidPct: number; mismatch: number | null
+  neckPx: number | null; neckWorst: number | null; neckWorstIdx: number | null
+}
 interface Hover { kind: 'fin' | 'channel' | 'base' | 'margin' | 'diff'; runPx: number; perpPx: number | null }
 
 export function PixelPreview({
@@ -53,13 +123,33 @@ export function PixelPreview({
   zoomRef.current = zoom
   const anchorRef = useRef<{ fx: number; fy: number; mx: number; my: number } | null>(null)
   const [layer, setLayer] = useState<number | null>(initialLayer ?? null)
-  const [stats, setStats] = useState<Stats>({ minChannelPx: null, minFinPx: null, solidPct: 0, mismatch: null })
+  const [stats, setStats] = useState<Stats>({ minChannelPx: null, minFinPx: null, solidPct: 0, mismatch: null, neckPx: null, neckWorst: null, neckWorstIdx: null })
+  // ⌖ jump-to-worst-neck: zoom in and center the narrowest passage
+  const [focus, setFocus] = useState<{ i: number; j: number; n: number } | null>(null)
+  // ⌖ stack scan (2026-07-30): slice the imported STL on EVERY layer, neck-scan
+  // each, then snap the view to the worst layer + its narrowest passage —
+  // the automated version of the review Incus does by hand. fi = file-layer
+  // index (0-based, excludes the base slab for fins-only files).
+  interface StackScan {
+    running: boolean; fi: number; total: number; done: boolean
+    best: { fi: number; worstPx: number; count: number; idx: number } | null
+  }
+  const [scan, setScan] = useState<StackScan | null>(null)
   // hover pixel-counter: the run under the cursor, so nobody has to count squares
   const [hover, setHover] = useState<Hover | null>(null)
   const maskRef = useRef<{ mask: Uint8Array; diff: Uint8Array | null; nx: number; ny: number; inBase: boolean; finPx: number | null; chPx: number | null } | null>(null)
 
   const g = useMemo(() => geomFromCase(design, basis), [design, basis])
   const dims = useMemo(() => (g ? gridDims(g) : null), [g])
+
+  // Incus channel bounds are depth-dependent (guidelines §4): the fin zone's
+  // green height (layers above the base × 25 µm) picks the band.
+  const chDeep = dims == null
+    || (dims.nLayers - dims.baseLayers) * LMM_PROC.layerMm > LMM_PX_RULES.deepChannelMmGreen
+  const CH_MIN_PX = chDeep ? LMM_PX_RULES.chAbsPxDeep : LMM_PX_RULES.chAbsPxShallow
+  const CH_REC_PX = chDeep ? LMM_PX_RULES.chRecPxDeep : LMM_PX_RULES.chRecPxShallow
+  const FIN_MIN_PX = LMM_PX_RULES.finAbsPx
+  const FIN_REC_PX = LMM_PX_RULES.finRecPx
 
   const hasImport = verify?.session.status === 'done' && verify.session.result != null
   const compareOn = compare && hasImport && verify != null
@@ -75,8 +165,45 @@ export function PixelPreview({
   useEffect(() => {
     if (prevDesignRef.current === design.design_id) return
     prevDesignRef.current = design.design_id
-    setLayer(null); setZoom(null)
+    setLayer(null); setZoom(null); setScan(null)
   }, [design.design_id])
+
+  // stack-scan progression: each arriving worker mask is neck-scanned, then
+  // the next layer is requested; at the end, snap to the worst layer + neck.
+  useEffect(() => {
+    if (!scan || !scan.running || !verify?.mask || !dims) return
+    const m = verify.mask
+    if (m.layer !== scan.fi) return
+    const neck = scanChannelNecks(m.imported, m.nx, m.ny, CH_MIN_PX)
+    let best = scan.best
+    if (neck.count > 0 && (best == null || neck.worstPx < best.worstPx
+        || (neck.worstPx === best.worstPx && neck.count > best.count))) {
+      best = { fi: scan.fi, worstPx: neck.worstPx, count: neck.count, idx: neck.worstIdx }
+    }
+    const next = scan.fi + 1
+    if (next < scan.total) {
+      setScan({ ...scan, fi: next, best })
+      verify.requestMask(next)
+    } else {
+      setScan({ ...scan, running: false, done: true, best })
+      if (best) {
+        setLayer(best.fi + (noBase ? dims.baseLayers : 0))
+        setZoom(10)
+        const bi = best.idx
+        setFocus((prev) => ({ i: bi % m.nx, j: Math.floor(bi / m.nx), n: (prev?.n ?? 0) + 1 }))
+        verify.requestMask(best.fi)   // re-request so the displayed layer has its mask
+      }
+    }
+  }, [scan, verify, verify?.mask, dims, noBase, CH_MIN_PX])
+
+  const startScan = () => {
+    if (!verify || !hasImport || !dims) return
+    const total = noBase ? dims.nLayers - dims.baseLayers : dims.nLayers
+    if (total <= 0) return
+    setSource('imported')
+    setScan({ running: true, fi: 0, total, best: null, done: false })
+    verify.requestMask(0)
+  }
 
   // --- wheel = zoom toward the cursor (native listener: React's onWheel is
   // passive, so preventDefault would be ignored and the page would scroll) ---
@@ -110,6 +237,14 @@ export function PixelPreview({
     wrap.scrollTop = a.fy * dims.ny * zoom - a.my
     anchorRef.current = null
   }, [zoom, dims])
+
+  // center the jump-to-neck target once the zoom has been applied
+  useEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap || !dims || !focus || zoom == null) return
+    wrap.scrollLeft = (focus.i + 0.5) * zoom - wrap.clientWidth / 2
+    wrap.scrollTop = (focus.j + 0.5) * zoom - wrap.clientHeight / 2
+  }, [focus, zoom, dims])
 
   // --- drag = pan ---
   useEffect(() => {
@@ -154,6 +289,7 @@ export function PixelPreview({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !g || !dims) return
+    if (scan?.running) return   // stack scan in flight — keep the last frame
     const { nx, ny } = dims
     const zF = (li + 0.5) * LYF
     const inBase = zF < g.baseThickness
@@ -245,7 +381,9 @@ export function PixelPreview({
     const finPx = analyticW ? (g.finThickness + comp) / PXF : null
     const chPx = analyticW ? (g.gap - comp) / PXF : null
     const finBadA = finPx != null && finPx < FIN_MIN_PX
+    const finWarnA = finPx != null && finPx < FIN_REC_PX
     const chBadA = chPx != null && chPx < CH_MIN_PX
+    const chWarnA = chPx != null && chPx < CH_REC_PX
     let minCh: number | null = analyticW && !inBase ? Math.round((chPx as number) * 10) / 10 : null
     let minFin: number | null = analyticW && !inBase ? Math.round((finPx as number) * 10) / 10 : null
     const paint = (idx: number, r: number, gr: number, b: number) => {
@@ -266,16 +404,32 @@ export function PixelPreview({
         }
         const chBad = violations && !inBase && interior && v === 0
           && (analyticW ? chBadA : run < CH_MIN_PX)
+        const chWarn = violations && !inBase && interior && v === 0
+          && (analyticW ? chWarnA : run < CH_REC_PX)
         const finBad = violations && !inBase && interior && v === 1
           && (analyticW ? finBadA : run < FIN_MIN_PX)
+        const finWarn = violations && !inBase && interior && v === 1
+          && (analyticW ? finWarnA : run < FIN_REC_PX)
         for (let p = i; p < end; p++) {
           const idx = j * nx + p
-          if (chBad) paint(idx, 248, 81, 73)          // channel too narrow — red
-          else if (finBad) paint(idx, 217, 164, 65)   // fin too thin — orange
+          if (chBad) paint(idx, 248, 81, 73)          // channel below the abs floor — red
+          else if (finBad) paint(idx, 217, 164, 65)   // fin below the abs floor — orange
+          else if (chWarn) paint(idx, 96, 42, 38)     // channel inside the band but < rec — dim red
+          else if (finWarn) paint(idx, 178, 168, 150) // fin printable but < rec — dulled solid
           else if (v === 1) paint(idx, 235, 235, 238) // exposed / solid
           else paint(idx, 12, 14, 18)                 // void
         }
         i = end
+      }
+    }
+    // ⌖ neck scan — the local passages Incus's bitmap review flags ("only
+    // 2 px in some areas"): channel pixels a CH_MIN_PX disc cannot reach.
+    // Runs on whichever mask is displayed (design raster or imported STL).
+    let neck: ReturnType<typeof scanChannelNecks> | null = null
+    if (violations && !inBase) {
+      neck = scanChannelNecks(mask, nx, ny, CH_MIN_PX)
+      for (let idx = 0; idx < neck.flags.length; idx++) {
+        if (neck.flags[idx]) paint(idx, 255, 64, 96)   // neck — bright red-pink
       }
     }
     // diff overlay on top — magenta where the imported file disagrees
@@ -286,8 +440,13 @@ export function PixelPreview({
     }
     ctx.putImageData(img, 0, 0)
     maskRef.current = { mask, diff, nx, ny, inBase, finPx, chPx }
-    setStats({ minChannelPx: minCh, minFinPx: minFin, solidPct: (solidCount / (nx * ny)) * 100, mismatch })
-  }, [g, dims, li, overpoly, violations, importedMask, compareOn, showImported, noBase, verify])
+    setStats({
+      minChannelPx: minCh, minFinPx: minFin, solidPct: (solidCount / (nx * ny)) * 100, mismatch,
+      neckPx: neck ? neck.count : null,
+      neckWorst: neck && neck.count > 0 ? neck.worstPx : null,
+      neckWorstIdx: neck && neck.count > 0 ? neck.worstIdx : null,
+    })
+  }, [g, dims, li, overpoly, violations, importedMask, compareOn, showImported, noBase, verify, CH_MIN_PX, scan])
 
   // hover = count the pixels for the user: which feature is under the cursor
   // and how many printer pixels wide its run is in this row.
@@ -318,7 +477,12 @@ export function PixelPreview({
   const { nLayers, baseLayers } = dims
   const zF = (li + 0.5) * LYF
   const chOk = stats.minChannelPx == null || stats.minChannelPx >= CH_MIN_PX
+  const chRec = stats.minChannelPx == null || stats.minChannelPx >= CH_REC_PX
   const finOk = stats.minFinPx == null || stats.minFinPx >= FIN_MIN_PX
+  const finRec = stats.minFinPx == null || stats.minFinPx >= FIN_REC_PX
+  // Incus 2026-07-29: gaps must be wider than fins (judged on the nominal px)
+  const ratioBad = stats.minFinPx != null && stats.minChannelPx != null
+    && stats.minFinPx > stats.minChannelPx
   const mismatchPct = stats.mismatch != null ? (stats.mismatch / (dims.nx * dims.ny)) * 100 : null
 
   return (
@@ -338,6 +502,20 @@ export function PixelPreview({
           overpoly (uncompensated print)</label>
         <label className="pxv-t"><input type="checkbox" checked={violations} onChange={(e) => setViolations(e.target.checked)} />
           violations</label>
+        {hasImport && (
+          <span className="pxv-t">
+            {scan?.running
+              ? <>
+                  ⌖ scanning {scan.fi + 1}/{scan.total}
+                  {scan.best && <> · worst ≈ {scan.best.worstPx} px</>}
+                  <button className="pxv-fit" onClick={() => setScan(null)}>cancel</button>
+                </>
+              : <button className="pxv-fit" onClick={startScan}
+                  title="slice the imported STL on EVERY layer, neck-scan each, then jump to the worst layer and its narrowest passage — the automated Incus review">
+                  ⌖ scan all layers
+                </button>}
+          </span>
+        )}
         {hasImport && (
           <label className="pxv-t" title="paint every pixel where the verified STL disagrees with the design's expected exposure">
             <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
@@ -364,12 +542,41 @@ export function PixelPreview({
         <input type="range" min={0} max={nLayers - 1} step={1} value={li}
           onChange={(e) => setLayer(Number(e.target.value))} title="build layer (25 µm green)" />
         <span className="pxv-stat">layer <b>{li + 1}</b>/{nLayers} · z {fmt(zF, 2)} mm{li < baseLayers ? ' · base slab' : ''}</span>
-        <span className="pxv-stat" style={{ color: chOk ? undefined : 'var(--fail)' }}>
-          channel <b>{stats.minChannelPx ?? '—'} px</b>{stats.minChannelPx != null ? ` (${fmt(stats.minChannelPx * LMM_PROC.pixelMm, 3)} mm green, need ≥ ${CH_MIN_PX})` : ''}
+        <span className="pxv-stat" style={{ color: chOk ? (chRec ? undefined : 'var(--warn, #d9a441)') : 'var(--fail)' }}>
+          channel <b>{stats.minChannelPx ?? '—'} px</b>{stats.minChannelPx != null ? ` (${fmt(stats.minChannelPx * LMM_PROC.pixelMm, 3)} mm green, need ≥ ${CH_MIN_PX}, rec ${CH_REC_PX})` : ''}
         </span>
-        <span className="pxv-stat" style={{ color: finOk ? undefined : 'var(--warn, #d9a441)' }}>
-          fin <b>{stats.minFinPx ?? '—'} px</b>{stats.minFinPx != null ? ` (need ≥ ${FIN_MIN_PX})` : ''}
+        <span className="pxv-stat" style={{ color: finOk ? (finRec ? undefined : 'var(--warn, #d9a441)') : 'var(--fail)' }}>
+          fin <b>{stats.minFinPx ?? '—'} px</b>{stats.minFinPx != null ? ` (need ≥ ${FIN_MIN_PX}, rec ${FIN_REC_PX}–5)` : ''}
         </span>
+        {ratioBad && (
+          <span className="pxv-stat" style={{ color: 'var(--fail)' }} title="Incus (2026-07-29): gaps should be wider than fins — overpolymerisation narrows the printed channel further">
+            ✗ fins wider than gaps
+          </span>
+        )}
+        {scan?.done && (scan.best
+          ? <span className="pxv-stat" style={{ color: 'rgb(255,64,96)' }}
+              title="the layer with the narrowest channel passage across the whole imported stack — view jumped to it">
+              ⌖ stack: worst layer <b>{scan.best.fi + (noBase ? baseLayers : 0) + 1}</b> · neck ≈ <b>{scan.best.worstPx} px</b> ({scan.best.count.toLocaleString()} px flagged)
+            </span>
+          : <span className="pxv-stat" style={{ color: 'var(--pass)' }}>
+              ✓ stack scan: no necks &lt; {CH_MIN_PX} px in any of {scan.total} layers
+            </span>)}
+        {stats.neckPx != null && (stats.neckPx > 0
+          ? <span className="pxv-stat" style={{ color: 'rgb(255,64,96)' }}
+              title="local passages a 6-px disc cannot get through — the 'cross section only 2 px' areas Incus flags; off-grid rounding + stair-step phasing neck the drawn channel below its nominal width">
+              ⌖ necks: <b>{stats.neckPx.toLocaleString()} px</b> below {CH_MIN_PX} px (worst ≈ {stats.neckWorst} px)
+              <button className="pxv-fit" style={{ marginLeft: 6 }}
+                onClick={() => {
+                  if (stats.neckWorstIdx == null || !dims) return
+                  setZoom(10)
+                  setFocus({ i: stats.neckWorstIdx % dims.nx,
+                    j: Math.floor(stats.neckWorstIdx / dims.nx), n: (focus?.n ?? 0) + 1 })
+                }}>show</button>
+            </span>
+          : <span className="pxv-stat" style={{ color: 'var(--pass)' }}
+              title="every channel passage on this layer admits a 6-px disc — no local necks">
+              ✓ no necks &lt; {CH_MIN_PX} px
+            </span>)}
         <span className="pxv-stat muted">{fmt(stats.solidPct, 0)}% exposed</span>
         {showImported && (
           <span className="pxv-stat" style={{ color: 'var(--accent)' }}>
@@ -396,9 +603,19 @@ export function PixelPreview({
       </div>
       <div className="pxv-note muted">
         Final-space raster at one printer pixel (35 µm ÷ 1.197 shrink). Overpoly ON shows an
-        <b> uncompensated</b> print: fins +2 px, channels −2 px — the CAD pre-compensation
-        (fin −2 px, channel +2 px) exists to cancel exactly this. Red = channel &lt; 6 px (below the
-        cleanability band), orange = fin &lt; 3 px (below the printable minimum). Zoom past {GRID_MIN_ZOOM * 100}%
+        <b> uncompensated</b> print: fins +2 px, channels −2 px (≈ 25–35 µm per side) — the CAD
+        pre-compensation (fin −2 px, channel +2 px) exists to cancel exactly this.
+        Bounds per <b>Incus Design Guidelines (July 2026, green px)</b>: red = channel &lt; {CH_MIN_PX} px
+        ({chDeep ? 'won’t be cleaned at this depth — channels > 1 mm deep need 6–8 px' : 'below the ≤ 1 mm shallow floor'}),
+        dim red = inside the band but under the {CH_REC_PX} px recommendation; orange = fin &lt; {FIN_MIN_PX} px
+        (below the printable minimum), dulled fin = under the {FIN_REC_PX}–5 px reliability band. Incus also
+        asks that <b>gaps be wider than fins</b> (2026-07-29) — the footer flags it.
+        <b style={{ color: 'rgb(255,64,96)' }}> Bright pink</b> = the ⌖ <b>neck scan</b>: local channel
+        passages a {CH_MIN_PX} px disc cannot get through — Incus reviews this same bitmap and these
+        are exactly their "cross section only 2 px" findings (off-grid rounding + stair-step phasing
+        neck a channel below its nominal width; overpoly then closes it). "show" jumps to the worst
+        one on this layer; with an imported STL, <b>⌖ scan all layers</b> sweeps the whole stack and
+        snaps straight to the worst layer + passage. Zoom past {GRID_MIN_ZOOM * 100}%
         for the pixel grid; hover any feature to read its width without counting.
         {compareOn && <> <b style={{ color: 'rgb(232,62,200)' }}>Magenta</b> = the verified STL and the
           design disagree on this pixel — single-pixel flicker along slanted edges is quantization;

@@ -72,7 +72,7 @@ export function About({ onClose }: { onClose: () => void }) {
               <li><b>Coolant:</b> water, 2.65 L/min, 25 °C inlet.</li>
               <li><b>Cooler:</b> printed copper (k ≈ 340 W/m·K), die-coverage active core physically <b>28 mm wide × 35 mm long</b>, 5.5 mm tall, on a 0.7 mm base. Center-feed bidirectional flow (2 paths), fins parallel to the 28 mm side.</li>
               <li><b>Gates:</b> R_jc ≤ 0.078 K/W · ΔP ≤ 50 kPa · pump ≤ 5 W · coverage ≥ 1.</li>
-              <li><b>Manufacturing target (2026-07-09):</b> LMM route, design <b>M1</b> (t 0.12 / b 0.15 / H 5.5 mm) — sits exactly on Incus's cleanability floor, so it reads MARGINAL until the coupon test confirms it; <b>M2</b> (t 0.15 / b 0.20) is the backup. The old 0.10 mm hero stays listed as a reference but is <b>not printable/cleanable per Incus (2026-07-07)</b>.</li>
+              <li><b>Manufacturing target (updated 2026-07-30):</b> LMM route. The official Incus guidelines (July 2026) put channels deeper than 1 mm at <b>6–8 px green</b> — so <b>M1</b> (t 0.12 / b 0.15, ≈ 5 px) now reads <b>FAIL</b>: Incus confirmed on our rev5/ICE parts that such gaps "will not be cleaned" (2026-07-29). <b>M2</b> (t 0.15 / b 0.20, ≈ 7 px) is MARGINAL inside the band; <b>M3</b> (b 0.25, ≈ 8.5 px) meets the recommendation. The old 0.10 mm hero stays listed as a reference but is <b>not printable/cleanable</b>.</li>
             </ul>
             <p className="note">
               Axis note: physically 28 mm is the flow direction and 35 mm is transverse (it sets the fin count).
@@ -344,15 +344,20 @@ export function About({ onClose }: { onClose: () => void }) {
               (between them is buildable but risky → △ MARGINAL).
             </Plain>
 
-            <h4 className="kpi-h">LMM — Incus Hammer EVO35 (supplier-verified, our own geometry)</h4>
+            <h4 className="kpi-h">LMM — Incus Hammer EVO35 (supplier-verified, official guidelines July 2026)</h4>
             <table className="about-tbl kpi-tbl">
               <thead><tr><th>Rule</th><th>Absolute</th><th>Recommended</th><th>Why</th></tr></thead>
               <tbody>
-                <tr><td>Channel gap b (final)</td><td>≥ 0.15 mm</td><td>≥ 0.20 mm</td>
-                  <td>Incus's stated cleanability limit — they call 0.16 mm already marginal. 0.20 mm
-                    prints at ~7 px green, inside their proven 6–8 px deep-channel band.</td></tr>
-                <tr><td>Fin thickness t (final)</td><td>≥ 0.105 mm</td><td>≥ 0.14 mm</td>
-                  <td>3 px green has printed successfully; 4–5 px is their recommended fin band.</td></tr>
+                <tr><td>Channel gap b (final)</td><td>≥ 0.175 mm (6 px)</td><td>≥ 0.234 mm (8 px)</td>
+                  <td>Open channels deeper than 1 mm need 6–8 px green — below 6 px they will not be
+                    cleaned (Incus flagged our 2 px areas exactly so, 2026-07-29). Channels ≤ 1 mm
+                    deep have been cleaned down to 5 px, with falling reliability.</td></tr>
+                <tr><td>Fin thickness t (final)</td><td>≥ 0.088 mm (3 px)</td><td>≥ 0.117 mm (4–5 px)</td>
+                  <td>3 px green has printed successfully; 4–5 px is their reliability band — tested
+                    at ~1 mm fin height, taller fins may deform during cleaning.</td></tr>
+                <tr><td>Gap vs fin</td><td>—</td><td>b ≥ t</td>
+                  <td>"Gaps should be wider than fins" (2026-07-29) — overpolymerisation narrows the
+                    printed channel ~1 px per side, so the drawn gap must dominate the pitch.</td></tr>
                 <tr><td>Aspect ratio H/b</td><td>—</td><td>≤ ~30</td>
                   <td>"Taller fins need thicker fins" — deformation during processing.</td></tr>
                 <tr><td>Pixel grid</td><td colSpan={2}>35 µm XY / 25 µm Z (green)</td>
@@ -368,10 +373,11 @@ export function About({ onClose }: { onClose: () => void }) {
               </tbody>
             </table>
             <p className="note">
-              Source: Paul Peritsch (Incus GmbH), email 2026-07-07, reviewing our actual v6 STLs;
-              distilled in <code>cold_plate_v6_incus_manufacturability_review_20260708.md</code>.
-              Bounds are final (sintered) dims — the conservative reading while Incus's green-vs-final
-              basis stays an open question.
+              Source: <code>Incus_Design_Guidelines.pdf</code> (July 2026, official) — all guideline
+              dimensions are <b>green</b>-state px (1 px = 35 µm), converted here to final dims via
+              ÷1.197 (this closes the old green-vs-final open question); plus Paul Peritsch's emails
+              2026-07-07 (STL review) and 2026-07-29 (px feedback on the rev5 wavy + ICE parts: 2 px
+              gaps "will not be cleaned", 1–2 px fins too thin).
             </p>
 
             <h4 className="kpi-h">SLM — laser powder bed fusion (literature grade)</h4>
@@ -398,12 +404,14 @@ export function About({ onClose }: { onClose: () => void }) {
             <h4 className="kpi-h">How hard the rules bind — enforcement modes (Design Studio)</h4>
             <ul>
               <li><b>Design-to-manufacture:</b> sliders and optimizer clamped at the recommended bounds — you cannot draw an unprintable part.</li>
-              <li><b>Allow marginal (project default):</b> clamped at the absolute floor; the amber zone is reachable but always shows △. This is where M1 lives while the Incus coupon is pending.</li>
-              <li><b>Explore / audit:</b> no clamps — verdicts annotate only (for reproducing old studies like the 0.10 hero).</li>
+              <li><b>Allow marginal (project default):</b> clamped at the absolute floor; the amber zone is reachable but always shows △. M2 (0.20 mm gap ≈ 7 px) lives here — inside the 6–8 px band but under the 8 px recommendation.</li>
+              <li><b>Explore / audit:</b> no clamps — verdicts annotate only (for reproducing old studies like the 0.10 hero, or M1 now that its 0.15 mm gap sits below the 6 px deep-channel floor).</li>
             </ul>
-            <DoIt>design in <b>Allow marginal</b> targeting M1; if the coupon kills the 0.15 mm gap,
-              flip the project to <b>Design-to-manufacture</b> and the app won't let anyone go below
-              M2 again. The optimizer's ☆ vs ★ gap always shows what manufacturability is costing.</DoIt>
+            <DoIt>the July-2026 guidelines + the 2026-07-29 px review moved the goalposts: M1's
+              0.15 mm gap (≈ 5 px green) is now <b>below</b> the deep-channel floor — Incus says it
+              will not be cleaned. Design in <b>Allow marginal</b> from M2 upward, or flip to
+              <b>Design-to-manufacture</b> to stay at the 8 px recommendation (M3 territory). The
+              optimizer's ☆ vs ★ gap always shows what manufacturability is costing.</DoIt>
           </section>
 
           <section>
@@ -652,13 +660,13 @@ export function About({ onClose }: { onClose: () => void }) {
                     printable/cleanable), MARGINAL = between absolute and recommended, PASS = inside the
                     recommended band.</td>
                   <td>A thermally beautiful FAIL design is a paper design — the 0.10 mm hero's 5.5 K "advantage"
-                    over M3 never existed because the part could not be made. M1 deliberately reads MARGINAL until
-                    the Incus coupon confirms the 0.15 mm gap.</td>
+                    over M3 never existed because the part could not be made. Since the July-2026 guidelines,
+                    M1's 0.15 mm gap (≈ 5 px green) reads FAIL too — below the 6 px deep-channel floor.</td>
                 </tr>
                 <tr>
                   <td>Rule list</td>
-                  <td>Every non-passing rule with its measured value, bound and source (e.g. "b = 0.100 &lt; 0.15 mm —
-                    Incus cleanability floor, email 2026-07-07").</td>
+                  <td>Every non-passing rule with its measured value, bound and source (e.g. "b = 0.150 &lt; 0.175 mm —
+                    6 px deep-channel floor, Incus guidelines July 2026").</td>
                   <td>No verdict is a magic judgement — each line cites where the number comes from and what to
                     change. ℹ lines are advisory (pixel snap, drainage checklist, big-part cleanability).</td>
                 </tr>
@@ -830,7 +838,9 @@ export function About({ onClose }: { onClose: () => void }) {
 
             <div className="ref-h">Manufacturing constraints (V3)</div>
             <ol className="refs" start={16}>
-              <li>Peritsch, P. (Incus GmbH). Email "AW: [EXTERN] Re: [Incus – Vinnotek] 3d printing quotation", 2026-07-07 — DfAM review of our three v6 STLs. <span className="muted">Distilled in <code>cold_plate_v6_incus_manufacturability_review_20260708.md</code>; supplier-verified LMM rulebook.</span></li>
+              <li>Incus GmbH. <i>Component Design for Lithography-based Metal Manufacturing of Cu-OF</i> (Incus_Design_Guidelines.pdf), July 2026 — official DLP design rules, all dims green-state px. <span className="muted">Primary source of the LMM rulebook since 2026-07-30: shrink ×1.197/×1.23, 35/25 µm grids, overpoly ≈1 px/side (∓2 px CAD comp), fins 3 px abs / 4–5 px rec, deep channels 6–8 px, sinter bonding for enclosed cavities.</span></li>
+              <li>Peritsch, P. (Incus GmbH). Email "AW: [EXTERN] Re: [Incus – Vinnotek] 3d printing quotation", 2026-07-07 — DfAM review of our three v6 STLs. <span className="muted">Distilled in <code>cold_plate_v6_incus_manufacturability_review_20260708.md</code>; first supplier-verified LMM rulebook.</span></li>
+              <li>Peritsch, P. (Incus GmbH). Email, 2026-07-29 — px review of the rev5 wavy + ICE fin arrays: 2 px gap cross-sections "will not be cleaned", 1–2 px fins too thin; "increase the ratio fins to gaps — gaps should be wider than fins". <span className="muted">Source of the gap_ratio rule.</span></li>
               <li>LPBF thin-wall &amp; channel design limits: vendor design guides (EOS CuCrZr, MakerVerse L-PBF guide) + thin-wall fabrication-limit studies (e.g. Int. J. Adv. Manuf. Technol. 2020, <Doi id="10.1007/s00170-020-05827-4" />). <span className="muted">Basis of the SLM_IR rulebook (literature grade; Nikon SLM Solutions DfM review pending).</span></li>
               <li>Green-laser pure-Cu LPBF capability: Physical and geometrical properties of pure-Cu green-laser samples, <i>Materials</i> 14(13), 3642 (2021), <Doi id="10.3390/ma14133642" />; high-precision LPBF processing of pure copper, <i>Additive Manufacturing</i> (2021), <a className="doi" href="https://www.sciencedirect.com/science/article/abs/pii/S2214860421005704" target="_blank" rel="noopener noreferrer">sciencedirect: S2214860421005704</a>. <span className="muted">Basis of the SLM_GREEN rulebook.</span></li>
             </ol>

@@ -21,11 +21,27 @@ export interface RouteRule {
   aspectMax: number
 }
 
+// Incus_Design_Guidelines.pdf (July 2026): all guideline dims are GREEN px
+// (1 px = 35 µm) — converted to FINAL mm via ÷1.197. Deep channels (> 1 mm)
+// need 6–8 px; fins 3 px abs / 4–5 px rec; gaps must be wider than fins
+// (Peritsch email 2026-07-29).
+export const LMM_PX_RULES = {
+  finAbsPx: 3, finRecPx: 4, chAbsPxDeep: 6, chRecPxDeep: 8,
+  chAbsPxShallow: 5, chRecPxShallow: 6, deepChannelMmGreen: 1.0,
+}
+// unrounded so a px-exact design (4 px fin = 0.116959… mm) sits ON its bound
+const pxFinal = (px: number) => px * 0.035 / 1.197
+
 export const MFG_ROUTES: RouteRule[] = [
   {
     key: 'LMM', label: 'LMM — Incus EVO35 (printed Cu)', short: 'LMM · Incus',
-    grade: 'supplier-verified', source: 'Incus email 2026-07-07 (Paul Peritsch)',
-    wallAbs: 0.105, wallRec: 0.14, gapAbs: 0.15, gapRec: 0.20, aspectMax: 30,
+    grade: 'supplier-verified',
+    source: 'Incus_Design_Guidelines.pdf (Jul 2026) + Peritsch emails 2026-07-07/-29',
+    wallAbs: pxFinal(LMM_PX_RULES.finAbsPx),      // 3 px green = 0.0877 final
+    wallRec: pxFinal(LMM_PX_RULES.finRecPx),      // 4 px green = 0.1170 final
+    gapAbs: pxFinal(LMM_PX_RULES.chAbsPxDeep),    // 6 px green = 0.1754 final (deep channels)
+    gapRec: pxFinal(LMM_PX_RULES.chRecPxDeep),    // 8 px green = 0.2339 final
+    aspectMax: 30,
   },
   {
     key: 'SLM_IR', label: 'SLM (IR) — Nikon SLM Solutions, CuCrZr', short: 'SLM IR · Nikon',
@@ -109,6 +125,64 @@ export function lmmRecipe(d: DesignState): GreenRow[] {
   return rows
 }
 
+// ---------------------------------------------------------------------------
+// 2026-07-30 — the full compensation story for a design (shared by the
+// green→CAD fold-out and the ⇄ CAD tab): per dimension, the chain
+// final → green → snapped → CAD draw (∓2 px overpoly) → printed-back px,
+// with guideline verdicts. Compensation PRESERVES the nominal — the printed
+// px equal the snapped green px; only the design values move them.
+// ---------------------------------------------------------------------------
+export interface CompRow extends GreenRow {
+  cadPx: number       // what you DRAW, in px (XY) or layers (Z)
+  printedPx: number   // what the exposure delivers back (= snapped green px)
+  status?: 'fail' | 'warn'
+}
+export interface CompWarning { level: 'fail' | 'warn'; text: string }
+
+export function lmmCompensation(d: DesignState): {
+  rows: CompRow[]; warnings: CompWarning[]; deep: boolean; chAbs: number; chRec: number
+} {
+  const deep = d.fin_height_mm * LMM_PROC.shrinkZ > LMM_PX_RULES.deepChannelMmGreen
+  const chAbs = deep ? LMM_PX_RULES.chAbsPxDeep : LMM_PX_RULES.chAbsPxShallow
+  const chRec = deep ? LMM_PX_RULES.chRecPxDeep : LMM_PX_RULES.chRecPxShallow
+  const warnings: CompWarning[] = []
+  const rows: CompRow[] = lmmRecipe(d).map((r) => {
+    const grid = r.axis === 'xy' ? LMM_PROC.pixelMm : LMM_PROC.layerMm
+    const cadPx = Math.round(r.cad / grid)
+    const printedPx = r.units
+    let status: CompRow['status']
+    if (r.name === 'fin t') {
+      if (cadPx <= 1) {
+        status = 'fail'
+        warnings.push({ level: 'fail', text: `CAD fin ${cadPx} px (${r.cad.toFixed(3)} mm) will not slice — a ≤ 1 px ribbon drops out of the raster; thicken the fin` })
+      } else if (cadPx === 2) {
+        status = 'warn'
+        warnings.push({ level: 'warn', text: 'CAD fin 2 px (0.070 mm) is at the slicing edge — expect irregular exposure on slanted wavy sections' })
+      }
+      if (printedPx < LMM_PX_RULES.finAbsPx) {
+        status = 'fail'
+        warnings.push({ level: 'fail', text: `printed fin ${printedPx} px < ${LMM_PX_RULES.finAbsPx} px minimum` })
+      } else if (printedPx < LMM_PX_RULES.finRecPx && !status) status = 'warn'
+    }
+    if (r.name === 'gap b') {
+      if (printedPx < chAbs) {
+        status = 'fail'
+        warnings.push({ level: 'fail', text: `printed gap ${printedPx} px < ${chAbs} px ${deep ? 'deep-channel' : 'shallow'} floor — Incus: will not be cleaned` })
+      } else if (printedPx < chRec) {
+        status = 'warn'
+        warnings.push({ level: 'warn', text: `printed gap ${printedPx} px is inside the band but under the ${chRec} px recommendation` })
+      }
+    }
+    return { ...r, cadPx, printedPx, status }
+  })
+  const fin = rows.find((r) => r.name === 'fin t')
+  const gap = rows.find((r) => r.name === 'gap b')
+  if (fin && gap && gap.printedPx <= fin.printedPx) {
+    warnings.push({ level: 'fail', text: `printed gap ${gap.printedPx} px ≤ fin ${fin.printedPx} px — Incus (2026-07-29): gaps must be wider than fins` })
+  }
+  return { rows, warnings, deep, chAbs, chRec }
+}
+
 /** Snap a FINAL dim so its green lands exactly on the pixel/layer grid. */
 function snapFinal(finalMm: number, axis: 'xy' | 'z'): number {
   const shrink = axis === 'xy' ? LMM_PROC.shrinkXY : LMM_PROC.shrinkZ
@@ -128,6 +202,7 @@ export function makeManufacturable(d: DesignState): Partial<DesignState> {
   if (isFin) {
     let t = Math.max(d.fin_thickness_mm, r.wallRec)
     let b = Math.max(d.channel_gap_mm, r.gapRec)
+    if (normalizeRoute(d.process_route) === 'LMM') b = Math.max(b, t) // gaps wider than fins (Incus 2026-07-29)
     let H = d.fin_height_mm
     if (H / b > r.aspectMax) H = Math.round(b * r.aspectMax * 20) / 20 // trim to AR, 0.05 step
     if (normalizeRoute(d.process_route) === 'LMM') {
@@ -170,6 +245,9 @@ export function quickVerdict(d: DesignState): MfgVerdict {
   grades.push(grade(wall, r.wallAbs, r.wallRec))
   if (gap != null) grades.push(grade(gap, r.gapAbs, r.gapRec))
   if (ar != null && ar > r.aspectMax) grades.push('MARGINAL')
+  // Incus 2026-07-29: gaps should be wider than fins (LMM fin families)
+  if (isFin && normalizeRoute(d.process_route) === 'LMM' && gap != null && gap < wall - 1e-9)
+    grades.push('MARGINAL')
   if (grades.includes('FAIL')) return 'FAIL'
   if (grades.includes('MARGINAL')) return 'MARGINAL'
   return 'PASS'
