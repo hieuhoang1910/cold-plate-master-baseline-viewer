@@ -15,6 +15,31 @@ export interface NeckScan {
   worstPx: number
 }
 
+/** Overpoly what-if on a rasterized mask: grow every solid feature by ~1 px
+ *  per side (8-neighbour dilation) — what an UNcompensated print delivers.
+ *  Returns a new array; the input is untouched. */
+export function dilate1px(mask: Uint8Array, nx: number, ny: number): Uint8Array {
+  const out = new Uint8Array(mask)
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const idx = j * nx + i
+      if (mask[idx]) continue
+      let s = 0
+      for (let dj = -1; dj <= 1 && !s; dj++) {
+        const jj = j + dj
+        if (jj < 0 || jj >= ny) continue
+        for (let di = -1; di <= 1; di++) {
+          const ii = i + di
+          if (ii < 0 || ii >= nx) continue
+          if (mask[jj * nx + ii]) { s = 1; break }
+        }
+      }
+      if (s) out[idx] = 1
+    }
+  }
+  return out
+}
+
 export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx: number): NeckScan {
   const n = nx * ny
   const INF = 1 << 29

@@ -12,7 +12,7 @@ import { buildSliceIndex, interiorPerimeter, interiorRuns, percentile, rasterize
 import { stageRefGeom, stageScale, detectHints } from './stages'
 import { TriBvh } from './bvh'
 import { PXF, LYF, gridDims, expectedMask } from './raster'
-import { scanChannelNecks } from './necks'
+import { dilate1px, scanChannelNecks } from './necks'
 import {
   PX_FINAL, deviationVerdict,
   type DeviationInfo, type MeasureInfo, type RunMsg, type SliceMetric,
@@ -37,7 +37,7 @@ self.onmessage = (e: MessageEvent<WorkerInMsg>) => {
   try {
     if (e.data.type === 'run') run(e.data)
     else if (e.data.type === 'mask') maskFor(e.data.layer)
-    else if (e.data.type === 'scanstack') void scanStack(e.data.chMinPx)
+    else if (e.data.type === 'scanstack') void scanStack(e.data.chMinPx, e.data.dilatePx)
     else if (e.data.type === 'scancancel') scanCancelled = true
   } catch (err) {
     post({ type: 'error', message: err instanceof Error ? err.message : String(err) })
@@ -396,7 +396,7 @@ function maskFor(layer: number): void {
 // ---------------------------------------------------------------------------
 let scanCancelled = false
 
-async function scanStack(chMinPx: number): Promise<void> {
+async function scanStack(chMinPx: number, dilatePx = 0): Promise<void> {
   if (!state) return
   scanCancelled = false
   const { positions, sliceIdx, geom, nx, ny } = state
@@ -411,7 +411,10 @@ async function scanStack(chMinPx: number): Promise<void> {
     mask.fill(0)
     const segs = sliceSegments(positions, sliceIdx, fi)
     rasterizeSegments(segs, mask, nx, ny, PXF, geom.coreWidth / 2, geom.coreLength / 2)
-    const neck = scanChannelNecks(mask, nx, ny, chMinPx)
+    // overpoly what-if: judge the PRINTED part, not the drawn file
+    let judged: Uint8Array = mask
+    for (let d = 0; d < dilatePx; d++) judged = dilate1px(judged, nx, ny)
+    const neck = scanChannelNecks(judged, nx, ny, chMinPx)
     if (neck.count > 0 && (best == null || neck.worstPx < best.worstPx
         || (neck.worstPx === best.worstPx && neck.count > best.count))) {
       best = { fi, worstPx: neck.worstPx, count: neck.count, idx: neck.worstIdx }

@@ -45,8 +45,9 @@ export interface VerifyApi {
   requestMask: (layer: number) => void
   /** latest on-demand mask (layer keyed) */
   mask: { layer: number; imported: Uint8Array; nx: number; ny: number } | null
-  /** ⌖ sweep every file layer in the worker; progress + winner land in `stack` */
-  scanStack: (chMinPx: number) => void
+  /** ⌖ sweep every file layer in the worker; progress + winner land in `stack`.
+   *  dilatePx > 0 = overpoly what-if (judge the printed part, not the file) */
+  scanStack: (chMinPx: number, dilatePx?: number) => void
   cancelStackScan: () => void
   stack: StackScanState | null
   reset: () => void
@@ -113,11 +114,11 @@ export function useVerify(): VerifyApi {
     workerRef.current?.postMessage({ type: 'mask', layer })
   }, [])
 
-  const scanStack = useCallback((chMinPx: number) => {
+  const scanStack = useCallback((chMinPx: number, dilatePx = 0) => {
     if (!workerRef.current) return
     setStack((s) => ({ running: true, fi: 0, total: 0, best: null,
       done: false, cancelled: false, token: s?.token ?? 0 }))
-    workerRef.current.postMessage({ type: 'scanstack', chMinPx })
+    workerRef.current.postMessage({ type: 'scanstack', chMinPx, dilatePx })
   }, [])
 
   const cancelStackScan = useCallback(() => {

@@ -3,7 +3,7 @@ import { fmt } from '../format'
 import { LMM_PROC, LMM_PX_RULES } from '../manufacturing'
 import { geomFromCase } from '../viewerGeom'
 import { PXF, LYF, gridDims, makeSolidAt } from '../verify/raster'
-import { scanChannelNecks } from '../verify/necks'
+import { dilate1px, scanChannelNecks } from '../verify/necks'
 import { stageRefGeom } from '../verify/stages'
 import type { VerifyApi } from '../verify/useVerify'
 import type { Basis, DesignState } from '../types'
@@ -132,7 +132,8 @@ export function PixelPreview({
   const startScan = () => {
     if (!verify || !hasImport) return
     setSource('imported')
-    verify.scanStack(CH_MIN_PX)
+    // overpoly ticked → the sweep judges the PRINTED part (1 px/side grown)
+    verify.scanStack(CH_MIN_PX, overpoly && !compareOn ? LMM_PROC.overpolyPx : 0)
   }
 
   // --- wheel = zoom toward the cursor (native listener: React's onWheel is
@@ -231,9 +232,10 @@ export function PixelPreview({
     const img = ctx.createImageData(nx, ny)
     const data = img.data
 
-    // overpoly widens each solid feature by 1 green px per side (in final mm);
-    // disabled while comparing or showing the STL — those must show geometry
-    // as it is, not a what-if
+    // overpoly widens each solid feature by 1 green px per side. On the
+    // design it's the analytic comp shift; on the imported STL it's a 1-px
+    // dilation of the file's own raster (below). Locked only while the diff
+    // is on — a comparison must show both sides exactly as they are.
     const comp = overpoly && !compareOn && !showImported ? 2 * LMM_PROC.overpolyPx * PXF : 0
     const halfW = g.coreWidth / 2
     const halfL = g.coreLength / 2
@@ -248,6 +250,9 @@ export function PixelPreview({
     let solidCount = 0
     if (displayImported) {
       mask = importedMask!.imported
+      // overpoly what-if on the real file: grow its features 1 px per side —
+      // "the real channels will be even smaller" (Peritsch 2026-07-29)
+      if (overpoly && !compareOn) mask = dilate1px(mask, nx, ny)
       for (let i = 0; i < mask.length; i++) solidCount += mask[i]
     } else {
       mask = new Uint8Array(nx * ny)
@@ -432,8 +437,12 @@ export function PixelPreview({
             <button className={source === 'imported' ? 'sel' : ''} onClick={() => setSource('imported')}>imported STL</button>
           </span>
         )}
-        <label className="pxv-t" title={compareOn || showImported ? 'overpoly is disabled while comparing / showing the STL — those views must show geometry as it is' : undefined}>
-          <input type="checkbox" checked={overpoly && !compareOn && !showImported} disabled={compareOn || showImported}
+        <label className="pxv-t" title={compareOn
+          ? 'overpoly is locked while the diff is on — a comparison must show both sides exactly as they are'
+          : showImported
+            ? 'what-if on the imported file: every feature grows ~1 px per side (uncompensated print) — the neck scan then judges the PRINTED part'
+            : 'what-if on the design: fins +2 px, channels −2 px — what an uncompensated print delivers'}>
+          <input type="checkbox" checked={overpoly && !compareOn} disabled={compareOn}
             onChange={(e) => setOverpoly(e.target.checked)} />
           overpoly (uncompensated print)</label>
         <label className="pxv-t"><input type="checkbox" checked={violations} onChange={(e) => setViolations(e.target.checked)} />
@@ -573,7 +582,9 @@ export function PixelPreview({
           full rows or shapes are real geometry differences.</>}
         {showImported && <> Layer image = the <b>imported STL</b> sliced and rasterized on the same
           grid — what the printer would expose if it printed the file as-is. Min-width readouts and
-          violation tints run on the STL's pixels (run-scan; no analytic widths for a mesh).</>}
+          violation tints run on the STL's pixels (run-scan; no analytic widths for a mesh). With
+          overpoly ON, the file's features are grown 1 px per side first — readouts, necks and the
+          stack scan then judge the <b>printed</b> part, not the drawn one.</>}
       </div>
     </div>
   )

@@ -193,6 +193,9 @@ export interface ScanStackMsg {
   type: 'scanstack'
   /** channel floor in green px (disc diameter for the opening test) */
   chMinPx: number
+  /** overpoly what-if: dilate each layer's solid by this many px per side
+   *  before neck-scanning (0 = judge the file as drawn) */
+  dilatePx: number
 }
 export interface ScanCancelMsg {
   type: 'scancancel'
