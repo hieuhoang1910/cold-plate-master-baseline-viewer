@@ -274,8 +274,31 @@ M_PRESET_CASES = [
      "channel_gap_mm": 8 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
      "fin_height_mm": 5.5,
      "side_margin_mm": 0.9, "wave_amplitude_mm": 0.55, "wavelength_mm": 2.5,
-     "notes": "M4 — guideline optimum (07/2026 rules): 6 px fin / 8 px gap green, "
-              "px-exact; best R_jc among designs that fully PASS the rulebook."},
+     "notes": "M4 — was the guideline optimum on nominal widths; the hero wave "
+              "(A 0.55/λ 2.5, 54° slope) pinches the perpendicular passage to "
+              "≈2 px at the steep sections — fails gap_perp (2026-07-31)."},
+    # 2026-07-31 — wave-slope revision: between in-phase wavy fins the true
+    # passage at max slope is (t+b)·cosθ − t, which is what Incus's slicer
+    # measures (their "only 2 px" findings on rev5). M4b/M2b carry the largest
+    # px-snapped wave the 6 px floor allows at their dims (joint sweep).
+    {"design_id": "v6_lmm_M4b_wavesafe", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 6 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "channel_gap_mm": 8 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "fin_height_mm": 5.5, "side_margin_mm": 0.9,
+     "wave_amplitude_mm": 8 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "wavelength_mm": 2.5,
+     "notes": "M4b — wave-safe target (2026-07-31): M4 dims with the wave tamed "
+              "to 30° (A 8 px) so the perpendicular passage holds the 6 px "
+              "floor at max slope. PASS-tier joint optimum."},
+    {"design_id": "v6_lmm_M2b_wavesafe", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 5 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "channel_gap_mm": 7 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "fin_height_mm": 5.5, "side_margin_mm": 0.9,
+     "wave_amplitude_mm": 5 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "wavelength_mm": 2.5,
+     "notes": "M2b — aggressive wave-safe corner (2026-07-31): px-exact 5/7 px "
+              "with A 5 px (20°); best R_jc in the allow-marginal tier (gap "
+              "7 px is inside the 6–8 band, under the 8 px rec)."},
 ]
 
 

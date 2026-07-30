@@ -24,10 +24,11 @@ import { FlowSchematic } from './components/FlowSchematic'
 import { milliKW } from './format'
 import { normalizeRoute, type Enforcement } from './manufacturing'
 
-// M4 = the guideline-optimal preset (2026-07-30) and default selection.
-// M1 (primary target 2026-07-09 → superseded) FAILs the July-2026 Incus rules
-// (gap ≈ 5 px < 6 px deep-channel floor); it and the 0.10 hero stay as history.
-const DEFAULT_ID = 'v6_lmm_M4_guideline'
+// M4b = the wave-safe guideline optimum (2026-07-31) and default selection:
+// M4's dims with the wave tamed to hold the 6 px perpendicular floor at max
+// slope. M1 (gap below floor) and M4 (hero wave pinches to ~2 px at 54°)
+// stay as honest history rows, like the 0.10 hero.
+const DEFAULT_ID = 'v6_lmm_M4b_wavesafe'
 const HERO_ID = 'v6_reference_wavy_fin_0p10'
 const DEFAULT_PROJECT_ID = 'gb202-gpu'
 

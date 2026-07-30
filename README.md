@@ -12,8 +12,9 @@ Project lead: **Hieu Hoang** — Vinnotek.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
 - **Status (2026-07-30):** all of the below **plus the Incus-guidelines
   revision**: LMM rulebook re-anchored to the official
-  `Incus_Design_Guidelines.pdf` (green-px basis; M1 now honestly FAILS, new
-  **M4 guideline-optimal preset is the default**), a **⇄ CAD tab** (full
+  `Incus_Design_Guidelines.pdf` (green-px basis; the hero-wave presets now
+  honestly FAIL — the wave-slope pinch was the real root cause — and the new
+  **wave-safe M4b preset is the default**), a **⇄ CAD tab** (full
   final → green → overpoly-compensated CAD chain + copy-for-nTop), the ▦
   Pixel **⌖ neck scan** + **scan-all-layers** (finds the "2 px areas" INCUS
   flags and snaps to the worst one), and the **standalone exe** for the team
@@ -134,12 +135,18 @@ recommended (≤ 1 mm relaxes to 5 px); a **gap ≥ fin** rule ("gaps should be
 wider than fins", 2026-07-29); and a tall-fin advisory (fin rules tested at
 ~1 mm height). Under these bounds the presets read honestly: **M1
 (0.12/0.15, ≈ 5 px gap) FAILS** — Incus confirmed on our rev5/ICE parts that
-such gaps won't clean — M2 (0.15/0.20, ≈ 7 px) is MARGINAL and M3
-(0.15/0.25, ≈ 8.5 px) PASSES; the historical 0.10 hero stays as a reference
-row that also fails. A fourth preset **M4 (guideline optimum, default
-selection)** is the solver's constrained optimum inside the new rules:
-px-exact 6 px fin / 8 px gap green (t 0.175 / b 0.234 final, H 5.5) — best
-R_jc among fully-PASS designs, ≈ +1.7 K at 575 W vs the dead M1. A **⚒ make-manufacturable**
+such gaps won't clean; the historical 0.10 hero stays as a reference row.
+**2026-07-31 — the wave-slope pinch (`gap_perp`):** between in-phase wavy
+fins the *perpendicular* passage at the wave's steepest section is
+(t+b)·cosθ − t with tanθ = 2πA/λ — the hero wave (A 0.55/λ 2.5, 54°)
+pinches it to ~2 px, exactly reproducing Incus's 2026-07-29 "cross section
+only 2 px" findings on rev5/ICE. Nominal widths were never the whole story:
+**every hero-wave preset (M1–M4) honestly FAILs**; compensation fixes
+widths, never slope. The wave-safe presets from the joint (t, b, A) sweep:
+**M4b (px-exact 6/8 px, A 8 px ⇒ 30°, ≈ 21.5 mK/W — PASS-tier optimum,
+default selection)** and M2b (5/7 px, A 5 px ⇒ 20°, ≈ 20.7 mK/W — best
+allow-marginal corner). ⚒ make-manufacturable now clamps A to the slope
+budget as well. A **⚒ make-manufacturable**
 button projects any design onto the nearest compliant point and shows the KPI
 delta before you accept. For LMM export, a **green→CAD converter** prints the
 full recipe chain (final → ×shrink → pixel-snapped green → ∓2 px overpoly →

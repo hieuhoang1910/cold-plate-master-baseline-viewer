@@ -256,6 +256,29 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
                 PASS if b >= t - 1e-9 else MARGINAL,
                 f"b/t = {b / t:.2f} — Incus: gaps should be wider than fins "
                 "(email 2026-07-29); overpoly shrinks the printed channel further"))
+        A = case.get("wave_amplitude_mm") or 0.0
+        lam = case.get("wavelength_mm") or 0.0
+        if route == "LMM" and t and b and family == "wavy_fin" and A > 0 and lam > 0:
+            # 2026-07-31 — the wave-slope pinch: between in-phase sine fins the
+            # PERPENDICULAR passage at the steepest section is (t+b)·cosθ − t
+            # with tanθ = 2πA/λ. This is what Incus's slicer measures — it
+            # reproduces their "cross section only 2 px" findings on rev5
+            # (predicted 1.3 px vs measured ~2 px) even when the nominal gap
+            # passes. Hard rule vs the abs floor; the nominal-gap rec tier
+            # stays with gap_min (no wave can reach the rec perpendicular).
+            theta = math.atan(2.0 * math.pi * A / lam)
+            perp = (t + b) * math.cos(theta) - t
+            c_need = (gap_abs + t) / (t + b)
+            A_budget = (lam * math.tan(math.acos(c_need)) / (2.0 * math.pi)
+                        if c_need < 1.0 else 0.0)
+            checks.append(_check(
+                "gap_perp", "min perpendicular passage (wave slope)", perp,
+                gap_abs, None,
+                PASS if perp >= gap_abs - 1e-9 else FAIL,
+                f"(t+b)·cos{math.degrees(theta):.0f}° − t = {perp:.3f} mm vs "
+                f"floor {gap_abs:.3f} — the wave's steep sections pinch the "
+                f"channel (Incus 2026-07-29 'only 2 px' mechanism); "
+                f"max A ≈ {A_budget:.3f} mm at λ {lam:.2f}"))
         if b:
             ar = H / b
             checks.append(_check(

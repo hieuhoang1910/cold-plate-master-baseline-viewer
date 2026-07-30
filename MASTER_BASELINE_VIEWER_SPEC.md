@@ -2187,3 +2187,40 @@ px-derived bounds, M2 < M4 < M3 ordering). Gates all green: parity 5/5
 golden-exact, every V2/V3/V5 suite, `npm run test:verify` (engine + 26
 F1), tsc + production build clean; exe smoke-tested (byte-identical
 `/api/catalog` vs source engine, project save/delete beside the exe).
+
+### 2026-07-31 — the wave-slope pinch (`gap_perp`): the actual root cause of the Incus rejections
+
+Discovered live via the ⌖ neck scan (exact-EDT) on a compensated M4
+preview: with everything nominally clean (printed 8 px gaps, 4–6 px fins,
+compensation verified), the scan still flooded — because between in-phase
+wavy fins the **perpendicular passage at the wave's steepest section is
+(t+b)·cosθ − t with tanθ = 2πA/λ**, and the hero wave (A 0.55 / λ 2.5)
+has θ = 54°. Hand-math vs Paul's 2026-07-29 findings: rev5 predicted
+1.3 px vs his measured "~2 px"; M4 predicted 2.2 px vs the neck scan's
+2.8 px. **The nominal widths were never the whole problem — the wave
+inherited from the validated v6 hero cannot be cleaned at any t/b.**
+
+- **New hard rule `lmm.gap_perp`** (engine + TS mirror, LMM wavy only):
+  perpendicular passage vs the abs floor (6 px deep-channel) — FAIL below;
+  message carries the slope angle + the max-A budget at the current λ. The
+  8 px rec tier stays on nominal `gap_min` (no wave can reach the rec
+  perpendicular — at zero slope perp = b exactly). ⚒ make-manufacturable
+  now also clamps A to the slope budget (snapped DOWN to the px grid).
+- **Verdict cascade (honest):** every hero-wave preset now FAILs —
+  M2/M3/M4 join M1 and the 0.10 hero as history rows.
+- **Joint (t, b, A) sweep** under the slope constraint (A* at the floor
+  per (t, b), since bigger A always helps χ): PASS-tier optimum = **M4's
+  dims with the tamed wave** → **M4b (px-exact 6/8 px, A 8 px ⇒ 30°,
+  ≈ 21.5 mK/W, 12.4 K @ 575 W)** — new default selection; best
+  allow-marginal corner = **M2b (5/7 px, A 5 px ⇒ 20°, ≈ 20.7 mK/W)**,
+  thermally ahead of M4b via pitch but gap 7 px < 8 px rec and thinner
+  margins everywhere. Straight fins remain the only way to an 8 px
+  perpendicular (M4-dims straight ≈ 23.1).
+- **Slope budgets at λ 2.5:** M4 dims A ≤ 0.239 (θ ≤ 31°); M2 dims
+  A ≤ 0.157 (θ ≤ 21.6°). A and λ trade 1:1 through tanθ = 2πA/λ.
+- Note for the nTop handoff: A and λ carry NO overpoly compensation
+  (overpoly moves both fin walls equally — the centerline wave is
+  unchanged); they only px-snap. Compensation fixes widths, never slope.
+- Tests re-baselined again (M2/M3/M4 FAIL via gap_perp with slope cited,
+  M4b PASS, M2b MARGINAL, M2b < M4b thermally); parity 5/5 + all suites
+  green.

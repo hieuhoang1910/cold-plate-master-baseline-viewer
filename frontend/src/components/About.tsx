@@ -72,7 +72,7 @@ export function About({ onClose }: { onClose: () => void }) {
               <li><b>Coolant:</b> water, 2.65 L/min, 25 °C inlet.</li>
               <li><b>Cooler:</b> printed copper (k ≈ 340 W/m·K), die-coverage active core physically <b>28 mm wide × 35 mm long</b>, 5.5 mm tall, on a 0.7 mm base. Center-feed bidirectional flow (2 paths), fins parallel to the 28 mm side.</li>
               <li><b>Gates:</b> R_jc ≤ 0.078 K/W · ΔP ≤ 50 kPa · pump ≤ 5 W · coverage ≥ 1.</li>
-              <li><b>Manufacturing target (updated 2026-07-30):</b> LMM route. The official Incus guidelines (July 2026) put channels deeper than 1 mm at <b>6–8 px green</b> — so <b>M1</b> (t 0.12 / b 0.15, ≈ 5 px) now reads <b>FAIL</b>: Incus confirmed on our rev5/ICE parts that such gaps "will not be cleaned" (2026-07-29). <b>M2</b> (t 0.15 / b 0.20, ≈ 7 px) is MARGINAL inside the band; <b>M3</b> (b 0.25, ≈ 8.5 px) meets the recommendation. The old 0.10 mm hero stays listed as a reference but is <b>not printable/cleanable</b>.</li>
+              <li><b>Manufacturing target (updated 2026-07-31):</b> LMM route, design <b>M4b</b> (t 0.175 / b 0.234, px-exact 6/8 px, wave tamed to A 0.234 / λ 2.5 ⇒ 30° slope) — the constrained optimum that holds every guideline rule <i>including</i> the wave-slope pinch. The July-2026 guidelines put deep channels at 6–8 px green, and the 2026-07-29 px review revealed the deeper issue: the hero wave (A 0.55, 54° slope) pinches the <i>perpendicular</i> passage to ~2 px at the steep sections, so <b>M1–M4 with that wave all read FAIL</b> regardless of nominal widths. <b>M2b</b> (5/7 px, A 0.146) is the aggressive allow-marginal corner — thermally ~1 mK/W better, thinner margins everywhere. The 0.10 hero stays as an unprintable reference row.</li>
             </ul>
             <p className="note">
               Axis note: physically 28 mm is the flow direction and 35 mm is transverse (it sets the fin count).
@@ -358,6 +358,12 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>Gap vs fin</td><td>—</td><td>b ≥ t</td>
                   <td>"Gaps should be wider than fins" (2026-07-29) — overpolymerisation narrows the
                     printed channel ~1 px per side, so the drawn gap must dominate the pitch.</td></tr>
+                <tr><td>Wave slope (perp. passage)</td><td>≥ 6 px at max slope</td><td>—</td>
+                  <td>Between in-phase wavy fins the true passage at the steepest section is
+                    (t+b)·cosθ − t with tanθ = 2πA/λ. The hero wave (A 0.55/λ 2.5, 54°) pinches
+                    it to ~2 px — exactly Incus's "cross section only 2 px" findings — no matter
+                    how wide the nominal gap is. M4b/M2b carry the largest wave the floor allows
+                    (30°/20°); compensation cannot fix slope, only widths.</td></tr>
                 <tr><td>Aspect ratio H/b</td><td>—</td><td>≤ ~30</td>
                   <td>"Taller fins need thicker fins" — deformation during processing.</td></tr>
                 <tr><td>Pixel grid</td><td colSpan={2}>35 µm XY / 25 µm Z (green)</td>

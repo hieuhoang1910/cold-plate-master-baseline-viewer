@@ -37,11 +37,32 @@ def main() -> int:
     check("hero 0.10 -> FAIL", by_id["v6_reference_wavy_fin_0p10"]["manufacturability"]["verdict"] == "FAIL")
     check("M1 -> FAIL (gap ~5 px < 6 px deep-channel floor)",
           by_id["v6_lmm_M1_primary"]["manufacturability"]["verdict"] == "FAIL")
-    check("M2 -> MARGINAL (7 px, under the 8 px rec)",
-          by_id["v6_lmm_M2_backup"]["manufacturability"]["verdict"] == "MARGINAL")
-    check("M3 -> PASS", by_id["v6_lmm_M3_easyclean"]["manufacturability"]["verdict"] == "PASS")
-    check("M4 -> PASS (guideline optimum, px-exact 6/8)",
-          by_id["v6_lmm_M4_guideline"]["manufacturability"]["verdict"] == "PASS")
+    check("M2 -> FAIL (hero wave pinch; was MARGINAL on nominal widths)",
+          by_id["v6_lmm_M2_backup"]["manufacturability"]["verdict"] == "FAIL")
+    # rev 2026-07-31 — the wave-slope pinch (gap_perp): the hero wave
+    # (A 0.55/λ 2.5, 54°) pinches the perpendicular passage to ~2 px at the
+    # steep sections regardless of nominal widths, so every hero-wave preset
+    # honestly FAILs; the wave-safe presets M4b/M2b carry a tamed wave.
+    check("M3 -> FAIL (hero wave pinch)",
+          by_id["v6_lmm_M3_easyclean"]["manufacturability"]["verdict"] == "FAIL")
+    check("M4 -> FAIL (hero wave pinch)",
+          by_id["v6_lmm_M4_guideline"]["manufacturability"]["verdict"] == "FAIL")
+    m4_rules = {c["rule"]: c for c in by_id["v6_lmm_M4_guideline"]["manufacturability"]["checks"]}
+    check("M4 gap_perp FAIL cites the slope",
+          m4_rules["gap_perp"]["status"] == "FAIL" and "cos" in m4_rules["gap_perp"]["message"],
+          str(m4_rules.get("gap_perp")))
+    check("M4b -> PASS (wave-safe target)",
+          by_id["v6_lmm_M4b_wavesafe"]["manufacturability"]["verdict"] == "PASS")
+    m4b_rules = {c["rule"]: c["status"] for c in
+                 by_id["v6_lmm_M4b_wavesafe"]["manufacturability"]["checks"]}
+    check("M4b passes gap_perp", m4b_rules.get("gap_perp") == "PASS", str(m4b_rules))
+    check("M2b -> MARGINAL (7 px gap, wave-safe)",
+          by_id["v6_lmm_M2b_wavesafe"]["manufacturability"]["verdict"] == "MARGINAL")
+    m2b_rules = {c["rule"]: c["status"] for c in
+                 by_id["v6_lmm_M2b_wavesafe"]["manufacturability"]["checks"]}
+    check("M2b passes gap_perp", m2b_rules.get("gap_perp") == "PASS", str(m2b_rules))
+    check("M2b beats M4b thermally (tighter pitch)",
+          by_id["v6_lmm_M2b_wavesafe"]["R_jc_K_W"] < by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"])
     check("M4 beats M3 thermally, costs vs M2",
           by_id["v6_lmm_M2_backup"]["R_jc_K_W"] < by_id["v6_lmm_M4_guideline"]["R_jc_K_W"]
           < by_id["v6_lmm_M3_easyclean"]["R_jc_K_W"])

@@ -209,7 +209,16 @@ export function makeManufacturable(d: DesignState): Partial<DesignState> {
       t = snapFinal(t, 'xy')
       b = snapFinal(b, 'xy')
       H = snapFinal(H, 'z')
-      patch.wave_amplitude_mm = d.wave_amplitude_mm > 0 ? snapFinal(d.wave_amplitude_mm, 'xy') : d.wave_amplitude_mm
+      let A = d.wave_amplitude_mm
+      if (d.family === 'wavy_fin' && A > 0 && d.wavelength_mm > 0) {
+        // tame the wave to the slope budget: perp passage ≥ abs floor.
+        // Snap A DOWN to the grid so the snapped value never re-breaks it.
+        const cNeed = Math.min(1, (r.gapAbs + t) / (t + b))
+        const aMax = d.wavelength_mm * Math.tan(Math.acos(cNeed)) / (2 * Math.PI)
+        A = Math.min(A, aMax)
+        A = Math.floor((A * LMM_PROC.shrinkXY) / LMM_PROC.pixelMm) * LMM_PROC.pixelMm / LMM_PROC.shrinkXY
+      }
+      patch.wave_amplitude_mm = A > 0 ? A : d.wave_amplitude_mm
       patch.wavelength_mm = d.wave_amplitude_mm > 0 ? snapFinal(d.wavelength_mm, 'xy') : d.wavelength_mm
     }
     patch.fin_thickness_mm = t
@@ -248,6 +257,13 @@ export function quickVerdict(d: DesignState): MfgVerdict {
   // Incus 2026-07-29: gaps should be wider than fins (LMM fin families)
   if (isFin && normalizeRoute(d.process_route) === 'LMM' && gap != null && gap < wall - 1e-9)
     grades.push('MARGINAL')
+  // 2026-07-31 wave-slope pinch: perpendicular passage (t+b)·cosθ − t at
+  // tanθ = 2πA/λ must hold the abs floor — Incus's "only 2 px" mechanism
+  if (d.family === 'wavy_fin' && normalizeRoute(d.process_route) === 'LMM'
+      && gap != null && d.wave_amplitude_mm > 0 && d.wavelength_mm > 0) {
+    const th = Math.atan(2 * Math.PI * d.wave_amplitude_mm / d.wavelength_mm)
+    if ((wall + gap) * Math.cos(th) - wall < r.gapAbs - 1e-9) grades.push('FAIL')
+  }
   if (grades.includes('FAIL')) return 'FAIL'
   if (grades.includes('MARGINAL')) return 'MARGINAL'
   return 'PASS'
