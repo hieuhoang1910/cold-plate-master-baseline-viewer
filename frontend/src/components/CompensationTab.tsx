@@ -14,9 +14,13 @@ import type { DesignState } from '../types'
 // 2026-07-29 px review) and a copy-to-clipboard nTop handoff block.
 // Chain math lives in manufacturing.lmmCompensation (shared with GreenCad).
 
-export function CompensationTab({ design, sourceLabel }: {
+export function CompensationTab({ design, sourceLabel, onLoadCad }: {
   design: DesignState
   sourceLabel: string
+  /** load the CAD-drawn dims (converted to final-equivalents) into the live
+   *  sliders — ▦ Pixel then previews the drawn file; overpoly ticked there
+   *  shows it printing back to the nominal design */
+  onLoadCad?: (patch: Partial<DesignState>) => void
 }) {
   const [copied, setCopied] = useState(false)
   const isFin = design.family === 'wavy_fin' || design.family === 'straight_fin'
@@ -119,9 +123,27 @@ export function CompensationTab({ design, sourceLabel }: {
           ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
         <button className="about-btn" onClick={copy}>{copied ? '✓ copied' : '⧉ copy for nTop'}</button>
-        <span className="muted">plain-text handoff block (also selectable below)</span>
+        {onLoadCad && (
+          <button className="about-btn"
+            title="sets the sliders to the CAD-drawn dimensions (green ÷ shrink), then opens ▦ Pixel — unticked shows the file you'd send, overpoly ticked shows it printing back to this design's nominal. KPIs then describe the DRAWING, not the part; reselect the candidate to restore."
+            onClick={() => {
+              const patch: Partial<DesignState> = {}
+              for (const r of rows) {
+                const finalEq = r.cad / (r.axis === 'xy' ? LMM_PROC.shrinkXY : LMM_PROC.shrinkZ)
+                if (r.name === 'fin t') patch.fin_thickness_mm = finalEq
+                else if (r.name === 'gap b') patch.channel_gap_mm = finalEq
+                else if (r.name === 'height H') patch.fin_height_mm = finalEq
+                else if (r.name === 'wave A') patch.wave_amplitude_mm = finalEq
+                else if (r.name === 'wavelength λ') patch.wavelength_mm = finalEq
+              }
+              onLoadCad(patch)
+            }}>
+            ⇥ load CAD draw into sliders → ▦ Pixel
+          </button>
+        )}
+        <span className="muted">handoff block below is selectable</span>
       </div>
       <pre className="muted" style={{ whiteSpace: 'pre-wrap', fontSize: '0.85em', userSelect: 'text',
         background: 'rgba(128,128,128,0.08)', padding: 10, borderRadius: 6 }}>{handoff}</pre>

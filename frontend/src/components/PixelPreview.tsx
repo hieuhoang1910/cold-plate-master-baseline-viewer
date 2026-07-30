@@ -508,6 +508,12 @@ export function PixelPreview({
             ✗ fins wider than gaps
           </span>
         )}
+        {overpoly && !compareOn && !showImported && (
+          <span className="pxv-stat" style={{ color: 'var(--warn, #d9a441)' }}
+            title="this view = printing the NOMINAL geometry with no CAD compensation. Draw the ⇄ CAD values instead (fin −2 px, gap +2 px) and the print comes out as the unticked view — red here means 'don't skip the compensation', not 'the design is wrong'">
+            ⚠ uncompensated what-if — the ⇄ CAD compensation cancels this
+          </span>
+        )}
         {stack?.done && (stack.best
           ? <span className="pxv-stat" style={{ color: 'rgb(255,64,96)' }}
               title="the layer with the narrowest channel passage across the whole imported stack — view jumped to it">

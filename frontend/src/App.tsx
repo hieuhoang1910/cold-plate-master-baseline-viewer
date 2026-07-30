@@ -451,7 +451,8 @@ export default function App() {
                       live={design ? live : selected} opts={liveOpts} onOpenPixel={openPixelAt} />
                   )}
                   {viewMode === 'cad' && isLmm && (
-                    <CompensationTab design={design} sourceLabel={design.design_id ?? selectedId} />
+                    <CompensationTab design={design} sourceLabel={design.design_id ?? selectedId}
+                      onLoadCad={(patch) => { patchDesign(patch); setMode('pixel') }} />
                   )}
                 </div>
               )}

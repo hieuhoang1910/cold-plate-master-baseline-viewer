@@ -40,37 +40,75 @@ export function dilate1px(mask: Uint8Array, nx: number, ny: number): Uint8Array 
   return out
 }
 
+// Exact Euclidean distance transform (Felzenszwalb two-pass): the earlier
+// 3-4 chamfer approximation underestimated DIAGONAL clearances by ~6 %, so
+// borderline channels on slanted wavy sections (exactly at the floor, e.g.
+// an uncompensated M4 print's 6 px gaps) were flagged wholesale even though
+// a true 6 px disc fits. Exact distances flag only genuine necks.
+const EDT_INF = 1e9
+
+function edt(sites: Uint8Array, nx: number, ny: number): Float32Array {
+  // pass 1 — per-column nearest site distance (in px, monotone scan both ways)
+  const g = new Float32Array(nx * ny)
+  for (let i = 0; i < nx; i++) {
+    let d = EDT_INF
+    for (let j = 0; j < ny; j++) {
+      const idx = j * nx + i
+      d = sites[idx] ? 0 : (d >= EDT_INF ? EDT_INF : d + 1)
+      g[idx] = d
+    }
+    d = EDT_INF
+    for (let j = ny - 1; j >= 0; j--) {
+      const idx = j * nx + i
+      d = sites[idx] ? 0 : (d >= EDT_INF ? EDT_INF : d + 1)
+      if (d < g[idx]) g[idx] = d
+    }
+  }
+  // pass 2 — per-row lower envelope of parabolas over g² (exact squared EDT)
+  const D = new Float32Array(nx * ny)
+  const v = new Int32Array(nx)
+  const z = new Float32Array(nx + 1)
+  const f = new Float32Array(nx)
+  for (let j = 0; j < ny; j++) {
+    const row = j * nx
+    for (let i = 0; i < nx; i++) {
+      const gi = Math.min(g[row + i], 1e6)
+      f[i] = gi * gi
+    }
+    let k = 0
+    v[0] = 0; z[0] = -EDT_INF; z[1] = EDT_INF
+    for (let q = 1; q < nx; q++) {
+      let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k])
+      while (s <= z[k]) {
+        k--
+        s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k])
+      }
+      k++
+      v[k] = q; z[k] = s; z[k + 1] = EDT_INF
+    }
+    k = 0
+    for (let q = 0; q < nx; q++) {
+      while (z[k + 1] < q) k++
+      const dq = q - v[k]
+      D[row + q] = Math.sqrt(dq * dq + f[v[k]])
+    }
+  }
+  return D
+}
+
 export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx: number): NeckScan {
   const n = nx * ny
   const INF = 1 << 29
-  const pass = (dist: Int32Array, fwd: boolean) => {
-    const j0 = fwd ? 0 : ny - 1, j1 = fwd ? ny : -1, dj = fwd ? 1 : -1
-    for (let j = j0; j !== j1; j += dj) {
-      const i0 = fwd ? 0 : nx - 1, i1 = fwd ? nx : -1, di = fwd ? 1 : -1
-      for (let i = i0; i !== i1; i += di) {
-        const idx = j * nx + i
-        let d = dist[idx]
-        const ip = i - di, jp = j - dj
-        if (ip >= 0 && ip < nx) d = Math.min(d, dist[j * nx + ip] + 3)
-        if (jp >= 0 && jp < ny) {
-          d = Math.min(d, dist[jp * nx + i] + 3)
-          if (ip >= 0 && ip < nx) d = Math.min(d, dist[jp * nx + ip] + 4)
-          const iq = i + di
-          if (iq >= 0 && iq < nx) d = Math.min(d, dist[jp * nx + iq] + 4)
-        }
-        dist[idx] = d
-      }
-    }
-  }
-  const D = new Int32Array(n)                    // chamfer distance to solid, ×3
-  for (let i = 0; i < n; i++) D[i] = mask[i] ? 0 : INF
-  pass(D, true); pass(D, false)
-  const r3 = Math.round((minPx / 2) * 3)
-  const D2 = new Int32Array(n)                   // distance to "disc fits here" seeds
-  for (let i = 0; i < n; i++) D2[i] = D[i] >= r3 && D[i] < INF ? 0 : INF
-  pass(D2, true); pass(D2, false)
+  let anySolid = 0
+  for (let i = 0; i < n; i++) if (mask[i]) { anySolid = 1; break }
+  if (!anySolid) return { flags: new Uint8Array(n), count: 0, worstIdx: -1, worstPx: 0 }
+  const r = minPx / 2
+  const D = edt(mask, nx, ny)                    // exact clearance to solid, in px
+  const seeds = new Uint8Array(n)                // px where a minPx disc fits
+  for (let i = 0; i < n; i++) if (D[i] >= r - 1e-6) seeds[i] = 1
+  const D2 = edt(seeds, nx, ny)                  // distance to nearest disc-fits px
   const flags = new Uint8Array(n)
-  for (let i = 0; i < n; i++) if (!mask[i] && D[i] < INF && D2[i] > r3) flags[i] = 1
+  for (let i = 0; i < n; i++) if (!mask[i] && D2[i] > r + 1e-6) flags[i] = 1
   // blob filter + worst passage (narrowest neck = blob with the smallest max clearance)
   const seen = new Uint8Array(n)
   const stack: number[] = []
@@ -92,7 +130,7 @@ export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx
     count += blob.length
     let bMax = -1, bIdx = blob[0]
     for (const p of blob) if (D[p] > bMax) { bMax = D[p]; bIdx = p }
-    const w = (2 * bMax) / 3
+    const w = 2 * bMax   // exact Euclidean clearance → passage width in px
     if (w < worstW) { worstW = w; worstIdx = bIdx }
   }
   return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10 }
