@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ViewerGeom } from '../viewerGeom'
-import type { LayerProfile, Stage, VerifyProgress, VerifyResult, WorkerOutMsg } from './types'
+import type { LayerProfile, Stage, StackScanBest, VerifyProgress, VerifyResult, WorkerOutMsg } from './types'
 
 // V4 — main-thread side of the verify engine: owns the worker, exposes state.
 // One verify session at a time; re-running replaces it. The worker keeps the
@@ -25,6 +25,18 @@ const IDLE: VerifySession = {
   progress: null, result: null, layers: null, error: null,
 }
 
+/** ⌖ stack-scan state (whole-stack worst-neck sweep, runs in the worker) */
+export interface StackScanState {
+  running: boolean
+  fi: number
+  total: number
+  best: StackScanBest | null
+  done: boolean
+  cancelled: boolean
+  /** increments on each completion so consumers can react exactly once */
+  token: number
+}
+
 export interface VerifyApi {
   session: VerifySession
   /** kick off a run (stage/scale/meshTol/noBase taken from the args) */
@@ -33,6 +45,10 @@ export interface VerifyApi {
   requestMask: (layer: number) => void
   /** latest on-demand mask (layer keyed) */
   mask: { layer: number; imported: Uint8Array; nx: number; ny: number } | null
+  /** ⌖ sweep every file layer in the worker; progress + winner land in `stack` */
+  scanStack: (chMinPx: number) => void
+  cancelStackScan: () => void
+  stack: StackScanState | null
   reset: () => void
 }
 
@@ -41,6 +57,7 @@ export function useVerify(): VerifyApi {
   const bufferRef = useRef<ArrayBuffer | null>(null)
   const [session, setSession] = useState<VerifySession>(IDLE)
   const [mask, setMask] = useState<VerifyApi['mask']>(null)
+  const [stack, setStack] = useState<StackScanState | null>(null)
 
   useEffect(() => () => { workerRef.current?.terminate() }, [])
 
@@ -57,6 +74,12 @@ export function useVerify(): VerifyApi {
         setSession((s) => ({ ...s, layers: m.profile, progress: null }))
       } else if (m.type === 'maskResult') {
         setMask({ layer: m.layer, imported: m.imported, nx: m.nx, ny: m.ny })
+      } else if (m.type === 'scanProgress') {
+        setStack((s) => ({ running: true, fi: m.fi, total: m.total, best: m.best,
+          done: false, cancelled: false, token: s?.token ?? 0 }))
+      } else if (m.type === 'scanDone') {
+        setStack((s) => ({ running: false, fi: Math.max(0, m.total - 1), total: m.total,
+          best: m.best, done: !m.cancelled, cancelled: m.cancelled, token: (s?.token ?? 0) + 1 }))
       } else if (m.type === 'error') {
         setSession((s) => ({ ...s, status: 'error', error: m.message, progress: null }))
       }
@@ -75,6 +98,7 @@ export function useVerify(): VerifyApi {
     const buffer = bufferRef.current.slice(0)
     const w = spawn()
     setMask(null)
+    setStack(null)
     setSession({
       status: 'running', fileName: file.name, stage, scale, meshTol, noBase,
       progress: { phase: 'starting', pct: 0 }, result: null, layers: null, error: null,
@@ -89,13 +113,25 @@ export function useVerify(): VerifyApi {
     workerRef.current?.postMessage({ type: 'mask', layer })
   }, [])
 
+  const scanStack = useCallback((chMinPx: number) => {
+    if (!workerRef.current) return
+    setStack((s) => ({ running: true, fi: 0, total: 0, best: null,
+      done: false, cancelled: false, token: s?.token ?? 0 }))
+    workerRef.current.postMessage({ type: 'scanstack', chMinPx })
+  }, [])
+
+  const cancelStackScan = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'scancancel' })
+  }, [])
+
   const reset = useCallback(() => {
     workerRef.current?.terminate()
     workerRef.current = null
     bufferRef.current = null
     setMask(null)
+    setStack(null)
     setSession(IDLE)
   }, [])
 
-  return { session, run, requestMask, mask, reset }
+  return { session, run, requestMask, mask, scanStack, cancelStackScan, stack, reset }
 }

@@ -3,6 +3,7 @@ import { fmt } from '../format'
 import { LMM_PROC, LMM_PX_RULES } from '../manufacturing'
 import { geomFromCase } from '../viewerGeom'
 import { PXF, LYF, gridDims, makeSolidAt } from '../verify/raster'
+import { scanChannelNecks } from '../verify/necks'
 import { stageRefGeom } from '../verify/stages'
 import type { VerifyApi } from '../verify/useVerify'
 import type { Basis, DesignState } from '../types'
@@ -29,72 +30,10 @@ import type { Basis, DesignState } from '../types'
 // and every pixel where the file disagrees with the design is painted magenta.
 // The shared raster lives in verify/raster.ts so both sides use one geometry.
 //
-// ⌖ neck scan (2026-07-30): Incus reviews the slicer BITMAP, not nominal
-// widths — their "cross section only 2 px" findings are local passages where
-// off-grid rounding + stair-step phasing neck the drawn channel down. The
-// scan runs a morphological opening on the void (3-4 chamfer distance
-// transform ≈ Euclidean): any channel pixel a CH_MIN_PX-diameter disc cannot
-// reach is a neck that will not be cleaned. Works on the design's own raster
-// AND the imported STL's; stair-corner clips (< 3 px blobs) are dropped.
-
-function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx: number):
-  { flags: Uint8Array; count: number; worstIdx: number; worstPx: number } {
-  const n = nx * ny
-  const INF = 1 << 29
-  const pass = (dist: Int32Array, fwd: boolean) => {
-    const j0 = fwd ? 0 : ny - 1, j1 = fwd ? ny : -1, dj = fwd ? 1 : -1
-    for (let j = j0; j !== j1; j += dj) {
-      const i0 = fwd ? 0 : nx - 1, i1 = fwd ? nx : -1, di = fwd ? 1 : -1
-      for (let i = i0; i !== i1; i += di) {
-        const idx = j * nx + i
-        let d = dist[idx]
-        const ip = i - di, jp = j - dj
-        if (ip >= 0 && ip < nx) d = Math.min(d, dist[j * nx + ip] + 3)
-        if (jp >= 0 && jp < ny) {
-          d = Math.min(d, dist[jp * nx + i] + 3)
-          if (ip >= 0 && ip < nx) d = Math.min(d, dist[jp * nx + ip] + 4)
-          const iq = i + di
-          if (iq >= 0 && iq < nx) d = Math.min(d, dist[jp * nx + iq] + 4)
-        }
-        dist[idx] = d
-      }
-    }
-  }
-  const D = new Int32Array(n)                    // chamfer distance to solid, ×3
-  for (let i = 0; i < n; i++) D[i] = mask[i] ? 0 : INF
-  pass(D, true); pass(D, false)
-  const r3 = Math.round((minPx / 2) * 3)
-  const D2 = new Int32Array(n)                   // distance to "disc fits here" seeds
-  for (let i = 0; i < n; i++) D2[i] = D[i] >= r3 && D[i] < INF ? 0 : INF
-  pass(D2, true); pass(D2, false)
-  const flags = new Uint8Array(n)
-  for (let i = 0; i < n; i++) if (!mask[i] && D[i] < INF && D2[i] > r3) flags[i] = 1
-  // blob filter + worst passage (narrowest neck = blob with the smallest max clearance)
-  const seen = new Uint8Array(n)
-  const stack: number[] = []
-  let count = 0, worstIdx = -1, worstW = INF
-  for (let s = 0; s < n; s++) {
-    if (!flags[s] || seen[s]) continue
-    stack.length = 0; stack.push(s); seen[s] = 1
-    const blob: number[] = []
-    while (stack.length) {
-      const p = stack.pop() as number
-      blob.push(p)
-      const pi = p % nx, pj = (p - pi) / nx
-      if (pi + 1 < nx && flags[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack.push(p + 1) }
-      if (pi - 1 >= 0 && flags[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack.push(p - 1) }
-      if (pj + 1 < ny && flags[p + nx] && !seen[p + nx]) { seen[p + nx] = 1; stack.push(p + nx) }
-      if (pj - 1 >= 0 && flags[p - nx] && !seen[p - nx]) { seen[p - nx] = 1; stack.push(p - nx) }
-    }
-    if (blob.length < 3) { for (const p of blob) flags[p] = 0; continue }
-    count += blob.length
-    let bMax = -1, bIdx = blob[0]
-    for (const p of blob) if (D[p] > bMax) { bMax = D[p]; bIdx = p }
-    const w = (2 * bMax) / 3
-    if (w < worstW) { worstW = w; worstIdx = bIdx }
-  }
-  return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10 }
-}
+// ⌖ neck scan: shared implementation in verify/necks.ts (also used by the
+// worker's whole-stack sweep) — any channel pixel a CH_MIN_PX-diameter disc
+// cannot reach is a neck that will not be cleaned; works on the design's own
+// raster AND the imported STL's.
 const GRID_MIN_ZOOM = 6  // css px per printer pixel before grid lines appear
 
 interface Stats {
@@ -135,15 +74,13 @@ export function PixelPreview({
   const [stats, setStats] = useState<Stats>({ minChannelPx: null, minFinPx: null, solidPct: 0, mismatch: null, neckPx: null, neckWorst: null, neckWorstIdx: null })
   // ⌖ jump-to-worst-neck: zoom in and center the narrowest passage
   const [focus, setFocus] = useState<{ i: number; j: number; n: number } | null>(null)
-  // ⌖ stack scan (2026-07-30): slice the imported STL on EVERY layer, neck-scan
-  // each, then snap the view to the worst layer + its narrowest passage —
-  // the automated version of the review Incus does by hand. fi = file-layer
-  // index (0-based, excludes the base slab for fins-only files).
-  interface StackScan {
-    running: boolean; fi: number; total: number; done: boolean
-    best: { fi: number; worstPx: number; count: number; idx: number } | null
-  }
-  const [scan, setScan] = useState<StackScan | null>(null)
+  // ⌖ stack scan (2026-07-30): the whole-stack sweep runs INSIDE the verify
+  // worker (slice + rasterize + neck-scan per layer, only progress numbers
+  // cross the thread) — see verify/worker.ts scanStack. The first version
+  // round-tripped one mask per layer through React and took minutes; this
+  // one is bounded by raw slicing speed. `stack` mirrors the worker state.
+  const stack = verify?.stack ?? null
+  const snappedTokenRef = useRef(0)
   // hover pixel-counter: the run under the cursor, so nobody has to count squares
   const [hover, setHover] = useState<Hover | null>(null)
   const maskRef = useRef<{ mask: Uint8Array; diff: Uint8Array | null; nx: number; ny: number; inBase: boolean; finPx: number | null; chPx: number | null } | null>(null)
@@ -174,44 +111,28 @@ export function PixelPreview({
   useEffect(() => {
     if (prevDesignRef.current === design.design_id) return
     prevDesignRef.current = design.design_id
-    setLayer(null); setZoom(null); setScan(null)
-  }, [design.design_id])
+    setLayer(null); setZoom(null)
+    verify?.cancelStackScan()
+  }, [design.design_id, verify])
 
-  // stack-scan progression: each arriving worker mask is neck-scanned, then
-  // the next layer is requested; at the end, snap to the worst layer + neck.
+  // when the worker's sweep completes, snap once to the worst layer + neck
   useEffect(() => {
-    if (!scan || !scan.running || !verify?.mask || !dims) return
-    const m = verify.mask
-    if (m.layer !== scan.fi) return
-    const neck = scanChannelNecks(m.imported, m.nx, m.ny, CH_MIN_PX)
-    let best = scan.best
-    if (neck.count > 0 && (best == null || neck.worstPx < best.worstPx
-        || (neck.worstPx === best.worstPx && neck.count > best.count))) {
-      best = { fi: scan.fi, worstPx: neck.worstPx, count: neck.count, idx: neck.worstIdx }
+    if (!stack || !stack.done || !dims || !verify) return
+    if (snappedTokenRef.current === stack.token) return
+    snappedTokenRef.current = stack.token
+    if (stack.best) {
+      setLayer(stack.best.fi + (noBase ? dims.baseLayers : 0))
+      setZoom(10)
+      const bi = stack.best.idx
+      setFocus((prev) => ({ i: bi % dims.nx, j: Math.floor(bi / dims.nx), n: (prev?.n ?? 0) + 1 }))
+      verify.requestMask(stack.best.fi)   // fetch the winner's mask for display
     }
-    const next = scan.fi + 1
-    if (next < scan.total) {
-      setScan({ ...scan, fi: next, best })
-      verify.requestMask(next)
-    } else {
-      setScan({ ...scan, running: false, done: true, best })
-      if (best) {
-        setLayer(best.fi + (noBase ? dims.baseLayers : 0))
-        setZoom(10)
-        const bi = best.idx
-        setFocus((prev) => ({ i: bi % m.nx, j: Math.floor(bi / m.nx), n: (prev?.n ?? 0) + 1 }))
-        verify.requestMask(best.fi)   // re-request so the displayed layer has its mask
-      }
-    }
-  }, [scan, verify, verify?.mask, dims, noBase, CH_MIN_PX])
+  }, [stack, dims, noBase, verify])
 
   const startScan = () => {
-    if (!verify || !hasImport || !dims) return
-    const total = noBase ? dims.nLayers - dims.baseLayers : dims.nLayers
-    if (total <= 0) return
+    if (!verify || !hasImport) return
     setSource('imported')
-    setScan({ running: true, fi: 0, total, best: null, done: false })
-    verify.requestMask(0)
+    verify.scanStack(CH_MIN_PX)
   }
 
   // --- wheel = zoom toward the cursor (native listener: React's onWheel is
@@ -298,7 +219,6 @@ export function PixelPreview({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !g || !dims) return
-    if (scan?.running) return   // stack scan in flight — keep the last frame
     const { nx, ny } = dims
     const zF = (li + 0.5) * LYF
     const inBase = zF < g.baseThickness
@@ -461,7 +381,7 @@ export function PixelPreview({
       neckWorst: neck && neck.count > 0 ? neck.worstPx : null,
       neckWorstIdx: neck && neck.count > 0 ? neck.worstIdx : null,
     })
-  }, [g, dims, li, overpoly, violations, ink, importedMask, compareOn, showImported, noBase, verify, CH_MIN_PX, scan])
+  }, [g, dims, li, overpoly, violations, ink, importedMask, compareOn, showImported, noBase, verify, CH_MIN_PX])
 
   // hover = count the pixels for the user: which feature is under the cursor
   // and how many printer pixels wide its run is in this row.
@@ -523,14 +443,14 @@ export function PixelPreview({
           ⬛ ink (Incus)</label>
         {hasImport && (
           <span className="pxv-t">
-            {scan?.running
+            {stack?.running
               ? <>
-                  ⌖ scanning {scan.fi + 1}/{scan.total}
-                  {scan.best && <> · worst ≈ {scan.best.worstPx} px</>}
-                  <button className="pxv-fit" onClick={() => setScan(null)}>cancel</button>
+                  ⌖ scanning {stack.total > 0 ? `${Math.min(stack.fi + 1, stack.total)}/${stack.total}` : '…'}
+                  {stack.best && <> · worst ≈ {stack.best.worstPx} px</>}
+                  <button className="pxv-fit" onClick={() => verify?.cancelStackScan()}>cancel</button>
                 </>
               : <button className="pxv-fit" onClick={startScan}
-                  title="slice the imported STL on EVERY layer, neck-scan each, then jump to the worst layer and its narrowest passage — the automated Incus review">
+                  title="slice the imported STL on EVERY layer, neck-scan each (all inside the worker), then jump to the worst layer and its narrowest passage — the automated Incus review">
                   ⌖ scan all layers
                 </button>}
           </span>
@@ -572,13 +492,13 @@ export function PixelPreview({
             ✗ fins wider than gaps
           </span>
         )}
-        {scan?.done && (scan.best
+        {stack?.done && (stack.best
           ? <span className="pxv-stat" style={{ color: 'rgb(255,64,96)' }}
               title="the layer with the narrowest channel passage across the whole imported stack — view jumped to it">
-              ⌖ stack: worst layer <b>{scan.best.fi + (noBase ? baseLayers : 0) + 1}</b> · neck ≈ <b>{scan.best.worstPx} px</b> ({scan.best.count.toLocaleString()} px flagged)
+              ⌖ stack: worst layer <b>{stack.best.fi + (noBase ? baseLayers : 0) + 1}</b> · neck ≈ <b>{stack.best.worstPx} px</b> ({stack.best.count.toLocaleString()} px flagged)
             </span>
           : <span className="pxv-stat" style={{ color: 'var(--pass)' }}>
-              ✓ stack scan: no necks &lt; {CH_MIN_PX} px in any of {scan.total} layers
+              ✓ stack scan: no necks &lt; {CH_MIN_PX} px in any of {stack.total} layers
             </span>)}
         {stats.neckPx != null && (stats.neckPx > 0
           ? <span className="pxv-stat" style={{ color: 'rgb(255,64,96)' }}

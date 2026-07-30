@@ -186,13 +186,34 @@ export interface MaskMsg {
   layer: number
 }
 
-export type WorkerInMsg = RunMsg | MaskMsg
+/** ⌖ stack scan (2026-07-30): sweep EVERY file layer in the worker —
+ *  slice + rasterize + neck-scan per layer without posting masks — and
+ *  return only the worst layer. Cancelable between chunks. */
+export interface ScanStackMsg {
+  type: 'scanstack'
+  /** channel floor in green px (disc diameter for the opening test) */
+  chMinPx: number
+}
+export interface ScanCancelMsg {
+  type: 'scancancel'
+}
+
+export interface StackScanBest {
+  fi: number       // file-layer index of the worst layer
+  worstPx: number  // narrowest passage width there (green px)
+  count: number    // flagged neck pixels on that layer
+  idx: number      // grid index of the narrowest passage
+}
+
+export type WorkerInMsg = RunMsg | MaskMsg | ScanStackMsg | ScanCancelMsg
 
 export type WorkerOutMsg =
   | { type: 'progress'; phase: string; pct: number }
   | { type: 'result'; result: VerifyResult }
   | { type: 'layers'; profile: { nLayers: number; baseLayers: number; mismatch: Uint32Array; total: number; worstLayer: number } }
   | { type: 'maskResult'; layer: number; imported: Uint8Array; nx: number; ny: number }
+  | { type: 'scanProgress'; fi: number; total: number; best: StackScanBest | null }
+  | { type: 'scanDone'; total: number; best: StackScanBest | null; cancelled: boolean }
   | { type: 'error'; message: string }
 
 // gates (spec §40): 1 px_final = 35 µm / 1.197 ≈ 29.2 µm

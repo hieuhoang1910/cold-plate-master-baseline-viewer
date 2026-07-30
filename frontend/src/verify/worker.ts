@@ -12,6 +12,7 @@ import { buildSliceIndex, interiorPerimeter, interiorRuns, percentile, rasterize
 import { stageRefGeom, stageScale, detectHints } from './stages'
 import { TriBvh } from './bvh'
 import { PXF, LYF, gridDims, expectedMask } from './raster'
+import { scanChannelNecks } from './necks'
 import {
   PX_FINAL, deviationVerdict,
   type DeviationInfo, type MeasureInfo, type RunMsg, type SliceMetric,
@@ -36,6 +37,8 @@ self.onmessage = (e: MessageEvent<WorkerInMsg>) => {
   try {
     if (e.data.type === 'run') run(e.data)
     else if (e.data.type === 'mask') maskFor(e.data.layer)
+    else if (e.data.type === 'scanstack') void scanStack(e.data.chMinPx)
+    else if (e.data.type === 'scancancel') scanCancelled = true
   } catch (err) {
     post({ type: 'error', message: err instanceof Error ? err.message : String(err) })
   }
@@ -379,4 +382,44 @@ function maskFor(layer: number): void {
   const segs = sliceSegments(positions, sliceIdx, li)
   rasterizeSegments(segs, mask, nx, ny, PXF, geom.coreWidth / 2, geom.coreLength / 2)
   post({ type: 'maskResult', layer: li, imported: mask, nx, ny }, [mask.buffer])
+}
+
+// ---------------------------------------------------------------------------
+// ⌖ stack scan (2026-07-30): the whole-stack worst-neck sweep, entirely
+// in-worker. The first version orchestrated this from the main thread — one
+// maskResult round trip per layer (~1 MB copy + two React renders + a
+// main-thread neck scan, fully serialized) which made a 271-layer sweep take
+// minutes. Here each layer is slice → rasterize → neck-scan in place; only
+// tiny progress numbers cross the thread boundary, and the winner is
+// reported once at the end. Chunked with a macrotask yield so a
+// 'scancancel' message can interrupt between chunks.
+// ---------------------------------------------------------------------------
+let scanCancelled = false
+
+async function scanStack(chMinPx: number): Promise<void> {
+  if (!state) return
+  scanCancelled = false
+  const { positions, sliceIdx, geom, nx, ny } = state
+  const total = sliceIdx.nLayers
+  const mask = new Uint8Array(nx * ny)
+  let best: { fi: number; worstPx: number; count: number; idx: number } | null = null
+  for (let fi = 0; fi < total; fi++) {
+    if (scanCancelled) {
+      post({ type: 'scanDone', total, best, cancelled: true })
+      return
+    }
+    mask.fill(0)
+    const segs = sliceSegments(positions, sliceIdx, fi)
+    rasterizeSegments(segs, mask, nx, ny, PXF, geom.coreWidth / 2, geom.coreLength / 2)
+    const neck = scanChannelNecks(mask, nx, ny, chMinPx)
+    if (neck.count > 0 && (best == null || neck.worstPx < best.worstPx
+        || (neck.worstPx === best.worstPx && neck.count > best.count))) {
+      best = { fi, worstPx: neck.worstPx, count: neck.count, idx: neck.worstIdx }
+    }
+    if (fi % 8 === 7) {
+      post({ type: 'scanProgress', fi, total, best })
+      await new Promise((r) => setTimeout(r, 0))
+    }
+  }
+  post({ type: 'scanDone', total, best, cancelled: false })
 }
