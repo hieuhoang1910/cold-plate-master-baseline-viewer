@@ -532,8 +532,9 @@ export function PixelPreview({
         )}
         {compareOn && (
           <span className="pxv-stat" style={{ color: stats.mismatch ? 'rgb(232,62,200)' : 'var(--pass)' }}>
-            {stats.mismatch == null ? 'diff: slicing…'
-              : stats.mismatch === 0 ? '✓ file matches this layer pixel-for-pixel'
+            {noBase && liFile < 0 ? 'diff: file has no base slab — nothing to compare on base layers'
+              : stats.mismatch == null ? 'diff: slicing…'
+              : stats.mismatch === 0 ? '✓ file matches this layer pixel-for-pixel — no magenta is the good outcome'
               : <>file differs in <b>{stats.mismatch.toLocaleString()}</b> px ({fmt(mismatchPct!, 3)} %)</>}
           </span>
         )}
