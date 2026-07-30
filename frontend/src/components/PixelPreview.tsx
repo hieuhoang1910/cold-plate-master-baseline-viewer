@@ -211,6 +211,7 @@ export function PixelPreview({
   useEffect(() => {
     if ((!compareOn && !showImported) || !verify) return
     if (liFile < 0) return // fins-only file: nothing exists below the base top
+    if (verify.mask && verify.mask.layer === liFile) return // already have it — don't re-slice
     verify.requestMask(liFile)
   }, [compareOn, showImported, li, liFile, verify])
   const importedMask = (compareOn || showImported) && liFile >= 0
@@ -481,6 +482,12 @@ export function PixelPreview({
         <input type="range" min={0} max={nLayers - 1} step={1} value={li}
           onChange={(e) => setLayer(Number(e.target.value))} title="build layer (25 µm green)" />
         <span className="pxv-stat">layer <b>{li + 1}</b>/{nLayers} · z {fmt(zF, 2)} mm{li < baseLayers ? ' · base slab' : ''}</span>
+        {li < baseLayers && (
+          <span className="pxv-stat muted"
+            title="base-slab layers are fully exposed — design and imported STL look identical here, and violation/neck tints only apply to the fin zone">
+            base slab: fully solid — slide the layer above {baseLayers} to see fins, violations & necks
+          </span>
+        )}
         <span className="pxv-stat" style={{ color: chOk ? (chRec ? undefined : 'var(--warn, #d9a441)') : 'var(--fail)' }}>
           channel <b>{stats.minChannelPx ?? '—'} px</b>{stats.minChannelPx != null ? ` (${fmt(stats.minChannelPx * LMM_PROC.pixelMm, 3)} mm green, need ≥ ${CH_MIN_PX}, rec ${CH_REC_PX})` : ''}
         </span>

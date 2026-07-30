@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ViewerGeom } from '../viewerGeom'
 import type { LayerProfile, Stage, StackScanBest, VerifyProgress, VerifyResult, WorkerOutMsg } from './types'
 
@@ -133,5 +133,13 @@ export function useVerify(): VerifyApi {
     setSession(IDLE)
   }, [])
 
-  return { session, run, requestMask, mask, scanStack, cancelStackScan, stack, reset }
+  // IMPORTANT: memoized — a fresh object every render put `verify` in effect
+  // dep arrays with a new identity each App render, re-firing PixelPreview's
+  // mask-request effect in a loop (each 1 MB maskResult → render → re-request).
+  // On large meshes that flood queued ahead of user clicks and made the tab
+  // feel frozen. Identity now changes only when the underlying state does.
+  return useMemo(
+    () => ({ session, run, requestMask, mask, scanStack, cancelStackScan, stack, reset }),
+    [session, run, requestMask, mask, scanStack, cancelStackScan, stack, reset],
+  )
 }
