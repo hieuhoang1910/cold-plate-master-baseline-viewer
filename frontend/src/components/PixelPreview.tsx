@@ -10,7 +10,10 @@ import type { Basis, DesignState } from '../types'
 // V3.3d — DLP pixel preview (spec §35D-7): the current design's cross-section
 // rasterized onto the Hammer EVO35 exposure grid, exactly as a slicer layer
 // mask. Sampling happens in FINAL (sintered) space at one printer pixel /
-// layer mapped back through the shrink factors. White = exposed (solid).
+// layer mapped back through the shrink factors. Display polarity (2026-07-30):
+// default = ⬛ ink view, black = material on white, matching Incus's guideline
+// figures + review screenshots; toggle off for the raw exposure mask
+// (white = exposed). Same mask, same measurements — colors only.
 //
 //   overpoly view: fins grow +1 px per side, channels lose 2 px — what an
 //   UNcompensated print delivers. The CAD pre-compensation (fin −2 px,
@@ -112,6 +115,12 @@ export function PixelPreview({
   const wrapRef = useRef<HTMLDivElement>(null)
   const [overpoly, setOverpoly] = useState(false)
   const [violations, setViolations] = useState(true)
+  // ⬛ ink view (2026-07-30, default ON): black = material on white, the
+  // polarity Incus's guideline figures and Paul's review screenshots use —
+  // so this tab compares 1:1 against their slicer images. Off = raw DLP
+  // exposure-mask polarity (white = exposed). Display only; the mask,
+  // violation logic and readouts are identical in both.
+  const [ink, setInk] = useState(true)
   const [compare, setCompare] = useState(initialLayer != null)
   // V4.3 — which geometry the layer image shows: the design's expected
   // exposure, or the imported STL's own slice rasterized on the same grid
@@ -413,11 +422,17 @@ export function PixelPreview({
         for (let p = i; p < end; p++) {
           const idx = j * nx + p
           if (chBad) paint(idx, 248, 81, 73)          // channel below the abs floor — red
-          else if (finBad) paint(idx, 217, 164, 65)   // fin below the abs floor — orange
-          else if (chWarn) paint(idx, 96, 42, 38)     // channel inside the band but < rec — dim red
-          else if (finWarn) paint(idx, 178, 168, 150) // fin printable but < rec — dulled solid
-          else if (v === 1) paint(idx, 235, 235, 238) // exposed / solid
-          else paint(idx, 12, 14, 18)                 // void
+          else if (finBad) {                          // fin below the abs floor — orange
+            if (ink) paint(idx, 196, 138, 40); else paint(idx, 217, 164, 65)
+          } else if (chWarn) {                        // channel inside the band but < rec — dim red
+            if (ink) paint(idx, 231, 146, 138); else paint(idx, 96, 42, 38)
+          } else if (finWarn) {                       // fin printable but < rec — dulled material
+            if (ink) paint(idx, 96, 86, 58); else paint(idx, 178, 168, 150)
+          } else if (v === 1) {                       // material (ink: black, exposure: white)
+            if (ink) paint(idx, 30, 32, 36); else paint(idx, 235, 235, 238)
+          } else {                                    // gap / void
+            if (ink) paint(idx, 246, 246, 248); else paint(idx, 12, 14, 18)
+          }
         }
         i = end
       }
@@ -446,7 +461,7 @@ export function PixelPreview({
       neckWorst: neck && neck.count > 0 ? neck.worstPx : null,
       neckWorstIdx: neck && neck.count > 0 ? neck.worstIdx : null,
     })
-  }, [g, dims, li, overpoly, violations, importedMask, compareOn, showImported, noBase, verify, CH_MIN_PX, scan])
+  }, [g, dims, li, overpoly, violations, ink, importedMask, compareOn, showImported, noBase, verify, CH_MIN_PX, scan])
 
   // hover = count the pixels for the user: which feature is under the cursor
   // and how many printer pixels wide its run is in this row.
@@ -502,6 +517,10 @@ export function PixelPreview({
           overpoly (uncompensated print)</label>
         <label className="pxv-t"><input type="checkbox" checked={violations} onChange={(e) => setViolations(e.target.checked)} />
           violations</label>
+        <label className="pxv-t"
+          title="black = material on white, the polarity of Incus's guideline figures and review screenshots — untick for the raw DLP exposure-mask view (white = exposed). Display only; measurements are identical.">
+          <input type="checkbox" checked={ink} onChange={(e) => setInk(e.target.checked)} />
+          ⬛ ink (Incus)</label>
         {hasImport && (
           <span className="pxv-t">
             {scan?.running
@@ -602,6 +621,10 @@ export function PixelPreview({
         </span>
       </div>
       <div className="pxv-note muted">
+        {ink
+          ? <><b>Ink view</b>: black = material, white = gap — the same polarity as Incus's guideline
+            figures and Paul's review screenshots, so this image compares 1:1 with theirs. </>
+          : <><b>Exposure view</b>: white = exposed (what the projector shines), dark = void. </>}
         Final-space raster at one printer pixel (35 µm ÷ 1.197 shrink). Overpoly ON shows an
         <b> uncompensated</b> print: fins +2 px, channels −2 px (≈ 25–35 µm per side) — the CAD
         pre-compensation (fin −2 px, channel +2 px) exists to cancel exactly this.
