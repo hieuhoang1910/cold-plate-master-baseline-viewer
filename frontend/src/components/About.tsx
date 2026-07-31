@@ -418,6 +418,38 @@ export function About({ onClose }: { onClose: () => void }) {
               will not be cleaned. Design in <b>Allow marginal</b> from M2 upward, or flip to
               <b>Design-to-manufacture</b> to stay at the 8 px recommendation (M3 territory). The
               optimizer's ☆ vs ★ gap always shows what manufacturability is costing.</DoIt>
+
+            <h4 className="kpi-h">Final vs green — one wall, three names (and the CAD → sliders → Pixel loop)</h4>
+            <Plain>
+              The app speaks two unit systems, and every surface labels which one it's using.
+              <b> Final (sintered) mm</b> is where the design state lives: sliders, KPIs, candidate
+              dims — the part after sintering shrink. <b>Green</b> is the as-printed state — final
+              × 1.197 (XY) / × 1.23 (Z) — and it's what INCUS sees: the CAD-draw column, the
+              ▦ Pixel tab and Paul's slicer all speak green, where 1 px = 35 µm. So one and the
+              same fin wall has three names: <b>0.088 mm final = 0.105 mm green = 3 px</b>. When
+              two views seem to disagree, check the units first — they're always exactly ×1.197
+              apart, never actually different.
+            </Plain>
+            <ul>
+              <li><b>"CAD draw — model this" means literally that.</b> The ⇄ CAD tab's draw column
+                is what you model in nTop: sinter scale <i>and</i> the ∓2 px overpoly edit are both
+                already in it. Export and send that file to Incus <b>as-is</b> — do not scale it
+                again. (If your nTop workflow scales at the end, model the <i>final</i> column
+                instead and let your ×1.197/×1.23 step produce the green — one road or the other,
+                never both.)</li>
+              <li><b>⇥ load CAD into sliders is exact, not snapped.</b> It stores the full-precision
+                value (CAD ÷ shrink, e.g. 0.105 ÷ 1.197 = 0.0877193…); the "0.088" on the slider is
+                display rounding only. Proof at a glance: the slider's "· 3.0 px" readout lands on a
+                whole pixel, and the green→CAD fold-out's GREEN column equals SNAP with no amber
+                off-grid flag. The ▦ Pixel view of the loaded state is therefore <b>pixel-for-pixel
+                the bitmap Paul's slicer will produce from your file</b> — unticked = his review
+                screenshot; overpoly ticked = the printed part, growing back to the nominal design.</li>
+              <li><b>Don't drag the loaded sliders.</b> Manual slider moves quantize to the 0.005 mm
+                step grid, which is <i>not</i> the pixel grid — one nudge and you're previewing a
+                slightly different design than the file. Look, verify in ▦ Pixel, then reset to the
+                candidate. While the drawing is loaded, the KPI panel is scoring the skinny-finned
+                <i>drawing</i>, not the printed part — ignore it until you reset.</li>
+            </ul>
           </section>
 
           <section>
