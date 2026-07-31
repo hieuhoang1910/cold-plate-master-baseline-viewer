@@ -63,12 +63,22 @@ def main() -> int:
     check("M2b passes gap_perp", m2b_rules.get("gap_perp") == "PASS", str(m2b_rules))
     check("M2b beats M4b thermally (tighter pitch)",
           by_id["v6_lmm_M2b_wavesafe"]["R_jc_K_W"] < by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"])
-    # Prototype 1 lineage anchor (mesh-measured as-built recipe)
+    # Prototype 1 lineage anchor (SW01.02 sinter-weld, green-scale-corrected
+    # mesh measurement). On paper it is the strongest R_jc in the catalog —
+    # and it FAILs gap_perp (perp ≈ 0 px at its 60° wave). The honest claim
+    # is therefore: M4b is the best RULE-PASSING design, not the best paper
+    # design; Proto 1's thermal edge rides on passages Incus now rejects.
     check("Proto1 reference present", "proto1_reference" in by_id)
-    check("Proto1 -> FAIL (57° wave, gap_perp)",
+    check("Proto1 -> FAIL (60° wave, gap_perp ~0 px)",
           by_id["proto1_reference"]["manufacturability"]["verdict"] == "FAIL")
-    check("M4b beats Proto1 thermally on the same basis",
-          by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"] < by_id["proto1_reference"]["R_jc_K_W"])
+    check("Proto1 beats M4b on paper (tight gap + steep wave)",
+          by_id["proto1_reference"]["R_jc_K_W"] < by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"])
+    passing = [c for c in cat["candidates"]
+               if c.get("manufacturability", {}).get("verdict") == "PASS"
+               and c.get("family") in ("wavy_fin", "straight_fin")]
+    check("M4b is the best rule-PASSING fin design",
+          bool(passing) and min(passing, key=lambda c: c["R_jc_K_W"])["design_id"] == "v6_lmm_M4b_wavesafe",
+          str([(c["design_id"], round(c["R_jc_K_W"] * 1000, 2)) for c in passing]))
     check("M4 beats M3 thermally, costs vs M2",
           by_id["v6_lmm_M2_backup"]["R_jc_K_W"] < by_id["v6_lmm_M4_guideline"]["R_jc_K_W"]
           < by_id["v6_lmm_M3_easyclean"]["R_jc_K_W"])

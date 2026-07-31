@@ -2225,22 +2225,42 @@ inherited from the validated v6 hero cannot be cleaned at any t/b.**
   M4b PASS, M2b MARGINAL, M2b < M4b thermally); parity 5/5 + all suites
   green.
 
-**Prototype 1 lineage anchor (`proto1_reference`, same day).** The as-built
-Proto 1 part (`Prototype_1_V1/Mesh/SW01_0.25_new base.stl`, 3.97 M tris)
-was mesh-measured — the V1 report's paper geometry (0.25 gap, pitch 0.5,
-active 21.25 mm) does not match the part: **t 0.25 ✓ but horizontal pitch
-0.700 → true gap 0.45; single-fin-tracked wave A 0.91 / λ 3.75 → 57°
-slope; H ≈ 5.9 on a 1.4 mm base; 42 fins over ~29 mm**. Scored on the
-GB202 die-coverage basis at 2.65 L/min (which IS the Proto 1 rig
-condition that validated the v1 solver — the tested baseline and every
-candidate now sit on one validated scale): **Proto 1 ≈ 25.0 mK/W
-(14.4 K @ 575 W) vs M4b 21.6 (12.4 K) — M4b −14 %, ≈ −2 K**, with ΔP
-still trivial (1.3 vs 50 kPa budget). The solver also reproduces the
-rig's Bykski-vs-Proto1 ordering (straight 0.25/0.25 ≈ 24.3, slightly
-ahead of Proto 1 — as measured). Proto 1's 57° wave honestly FAILs
-`gap_perp` — it is the design DNA the rev5 submissions inherited. Ships
-as an honest reference candidate row + 3 new v3-suite checks. Caveats
-stated: rig instrumentation carries ~±35 % R_jc uncertainty (test-kit
-BOM verdict), and the analytical model does not see surface finish or
-manifold topology differences (measured Bykski ran slightly cooler than
-the model's tie).
+**Prototype 1 lineage anchor (`proto1_reference`, same day — CORRECTED
+within hours; the correction supersedes the first reading).** First pass
+measured `SW01_0.25_new base.stl` assuming final-scale dims and concluded
+"M4b −14 % vs Proto 1" — **wrong**: the mesh files are **green-scaled**
+(×1.197). Proof: the sinter-welding part `SW01.02_0.25mm_no base.stl`
+(the one **Incus printed successfully**, fins-only + separate 40.6 mm
+base bonded during sinter — the guidelines §6 route, and the origin of
+the fins-only Proto2 workflow) measures pitch 0.600 green = **0.501 mm
+final — the documented 0.25/0.25 exactly** — with fins drawn at
+green-nominal ∓~0.7 px/side, i.e. a hand-rolled overpoly compensation.
+Corrected final geometry (mesh-measured): **t 0.25 / b 0.25 / pitch
+0.50, wave A 0.72 / λ 2.58 → 60° slope, H ≈ 5.0** (SW01 "new base" is a
+wider-pitch sibling: b 0.335, A 0.76 / λ 3.13, 57°). Scored on the GB202
+die-coverage basis at 2.65 L/min (the Proto 1 rig condition that
+validated the v1 solver):
+
+| design | R_jc | ΔT @575 W | perp @ max slope | verdict |
+|---|---:|---:|---:|---|
+| Proto 1 SW01.02 (0.25/0.25, 60°) | **16.97** | 9.8 K | ≈ 0 px | FAIL |
+| SW01 new-base sibling | 20.82 | 12.0 K | 2.4 px | FAIL |
+| M2b | 20.89 | 12.0 K | 6.3 px | MARGINAL |
+| **M4b** | 21.58 | 12.4 K | 6.1 px | **PASS** |
+
+The honest claim is therefore **not** "M4b beats Proto 1 on paper" — it
+doesn't. It is: **M4b is the best design that survives the current
+rulebook**, while Proto 1's thermal edge rides on ~2 px passages
+(raster of the actual green file at 35 µm: median local width 2.7 px,
+p5 2.0 px, 55 % of the void unreachable by a 6 px disc) — the same
+pixel class Incus's 2026-07-29 review rejects. **The open question this
+raises (for Paul):** Incus successfully printed those ~2 px passages on
+the OPEN-TOP fins-only part — does the sinter-weld route (channels
+fully accessible until the base is bonded) relax the enclosed-channel
+6 px cleaning floor? If Hieu confirms the Incus-printed SW01.02 was the
+part on the rig (flow + thermal data ⇒ channels demonstrably open),
+that is an empirical case for a fins-only tier in the rulebook — and
+the thermal prize for reopening the steep-wave corner is ≈ 4.6 mK/W
+(≈ 2.6 K @ 575 W). Until confirmed, the rules stand and M4b remains
+the target. Caveats unchanged: rig ±35 % R_jc instrumentation; model
+blind to surface finish/manifold topology.

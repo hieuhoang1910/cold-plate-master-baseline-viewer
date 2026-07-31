@@ -299,19 +299,29 @@ M_PRESET_CASES = [
      "notes": "M2b — aggressive wave-safe corner (2026-07-31): px-exact 5/7 px "
               "with A 5 px (20°); best R_jc in the allow-marginal tier (gap "
               "7 px is inside the 6–8 band, under the 8 px rec)."},
-    # 2026-07-31 — Prototype 1 lineage anchor: the as-built SW01 recipe,
-    # MESH-MEASURED (fin chord min 0.257 -> t 0.25; horizontal pitch 0.700 ->
-    # b 0.45; single-fin tracked wave A 0.91 / λ 3.75 -> 57° slope; H ~5.9 on
-    # a 1.4 mm base, 42 fins). The rig that validated the v1 solver ran THIS
-    # part at 2.65 L/min — the catalog's flow basis — so scoring it here puts
-    # the tested baseline and every candidate on one validated scale. Its 57°
-    # wave is the design DNA rev5 inherited; it honestly FAILs gap_perp.
+    # 2026-07-31 — Prototype 1 lineage anchor, CORRECTED same day: the mesh
+    # files are GREEN-scaled (x1.197 — SW01.02's pitch 0.600 green = 0.501
+    # final, matching the documented 0.25/0.25 exactly, drawn with ~0.7 px/
+    # side overpoly comp). The anchor part is SW01.02 "sinter welding" —
+    # fins-only + separate base, bonded during sinter (the guidelines §6
+    # route) — WHICH INCUS PRINTED SUCCESSFULLY. Final dims mesh-measured:
+    # t 0.25 / b 0.25 / pitch 0.50, wave A 0.72 / λ 2.58 -> 60° slope,
+    # H ≈ 5.0. On paper the strongest R_jc in the catalog — but its
+    # perpendicular passage ≈ 0 px at max slope (raster of the actual green
+    # file: median local width 2.7 px, p5 2.0 px), so it honestly FAILs
+    # gap_perp. The open question this row poses: Incus printed these ~2 px
+    # passages on the OPEN-TOP fins-only part — does the sinter-weld route
+    # relax the enclosed-channel 6 px cleaning floor? (Ask Paul; the rev5
+    # rejections were judged on the same bitmaps.)
     {"design_id": "proto1_reference", "family": "wavy_fin", "process_route": "LMM",
-     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.45, "fin_height_mm": 5.5,
-     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.91, "wavelength_mm": 3.75,
-     "notes": "Prototype 1 — the tested 2026-05 baseline (as-built recipe, "
-              "mesh-measured from SW01_0.25). M4b beats it by ~3.4 mK/W "
-              "(≈2 K @575 W) on this basis; its 57° wave fails the slope rule."},
+     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.25, "fin_height_mm": 5.0,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.719, "wavelength_mm": 2.581,
+     "notes": "Prototype 1 (SW01.02 sinter-weld) — the 2026-05 tested baseline; "
+              "fins printed separately by Incus + base bonded in sinter. Best "
+              "paper R_jc here, but perp passage ≈ 0 px at its 60° wave — FAILs "
+              "the slope rule. Open Q: does open-top sinter-weld printing relax "
+              "the 6 px floor? Its print success says maybe; rev5's rejection "
+              "says the review bar moved. Confirm with Paul before reusing."},
 ]
 
 
