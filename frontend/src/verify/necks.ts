@@ -13,6 +13,10 @@ export interface NeckScan {
   count: number
   worstIdx: number
   worstPx: number
+  /** exact Euclidean clearance to the nearest solid, per pixel (px units) —
+   *  2×clearance ≈ the local passage width; lets the hover explain WHY a
+   *  pixel is neck-flagged even when the nominal channel width is fine */
+  clearance: Float32Array
 }
 
 /** Overpoly what-if on a rasterized mask: grow every solid feature by ~1 px
@@ -101,7 +105,10 @@ export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx
   const INF = 1 << 29
   let anySolid = 0
   for (let i = 0; i < n; i++) if (mask[i]) { anySolid = 1; break }
-  if (!anySolid) return { flags: new Uint8Array(n), count: 0, worstIdx: -1, worstPx: 0 }
+  if (!anySolid) {
+    return { flags: new Uint8Array(n), count: 0, worstIdx: -1, worstPx: 0,
+      clearance: new Float32Array(n) }
+  }
   const r = minPx / 2
   const D = edt(mask, nx, ny)                    // exact clearance to solid, in px
   const seeds = new Uint8Array(n)                // px where a minPx disc fits
@@ -133,5 +140,6 @@ export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx
     const w = 2 * bMax   // exact Euclidean clearance → passage width in px
     if (w < worstW) { worstW = w; worstIdx = bIdx }
   }
-  return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10 }
+  return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10,
+    clearance: D }
 }

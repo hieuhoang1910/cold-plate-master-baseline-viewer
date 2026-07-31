@@ -40,7 +40,13 @@ interface Stats {
   minChannelPx: number | null; minFinPx: number | null; solidPct: number; mismatch: number | null
   neckPx: number | null; neckWorst: number | null; neckWorstIdx: number | null
 }
-interface Hover { kind: 'fin' | 'channel' | 'base' | 'margin' | 'diff'; runPx: number; perpPx: number | null }
+interface Hover {
+  kind: 'fin' | 'channel' | 'base' | 'margin' | 'diff'
+  runPx: number
+  perpPx: number | null
+  /** local passage width when hovering a neck-flagged pixel (2 × EDT clearance) */
+  neckPx: number | null
+}
 
 export function PixelPreview({
   design, basis, verify, initialLayer,
@@ -85,7 +91,11 @@ export function PixelPreview({
   const snappedTokenRef = useRef(0)
   // hover pixel-counter: the run under the cursor, so nobody has to count squares
   const [hover, setHover] = useState<Hover | null>(null)
-  const maskRef = useRef<{ mask: Uint8Array; diff: Uint8Array | null; nx: number; ny: number; inBase: boolean; finPx: number | null; chPx: number | null } | null>(null)
+  const maskRef = useRef<{
+    mask: Uint8Array; diff: Uint8Array | null; nx: number; ny: number; inBase: boolean
+    finPx: number | null; chPx: number | null
+    neckFlags: Uint8Array | null; neckClear: Float32Array | null
+  } | null>(null)
 
   const g = useMemo(() => geomFromCase(design, basis), [design, basis])
   const dims = useMemo(() => (g ? gridDims(g) : null), [g])
@@ -383,7 +393,8 @@ export function PixelPreview({
       }
     }
     ctx.putImageData(img, 0, 0)
-    maskRef.current = { mask, diff, nx, ny, inBase, finPx, chPx }
+    maskRef.current = { mask, diff, nx, ny, inBase, finPx, chPx,
+      neckFlags: neck ? neck.flags : null, neckClear: neck ? neck.clearance : null }
     setStats({
       minChannelPx: minCh, minFinPx: minFin, solidPct: (solidCount / (nx * ny)) * 100, mismatch,
       neckPx: neck ? neck.count : null,
@@ -402,17 +413,23 @@ export function PixelPreview({
     const i = Math.floor(e.nativeEvent.offsetX / scale)
     const j = Math.floor(e.nativeEvent.offsetY / scale)
     if (i < 0 || j < 0 || i >= m.nx || j >= m.ny) { setHover(null); return }
-    if (m.diff && m.diff[j * m.nx + i]) { setHover({ kind: 'diff', runPx: 0, perpPx: null }); return }
-    if (m.inBase) { setHover({ kind: 'base', runPx: 0, perpPx: null }); return }
-    const v = m.mask[j * m.nx + i]
+    if (m.diff && m.diff[j * m.nx + i]) { setHover({ kind: 'diff', runPx: 0, perpPx: null, neckPx: null }); return }
+    if (m.inBase) { setHover({ kind: 'base', runPx: 0, perpPx: null, neckPx: null }); return }
+    const idx = j * m.nx + i
+    const v = m.mask[idx]
     let a = i; while (a > 0 && m.mask[j * m.nx + a - 1] === v) a--
     let b = i; while (b < m.nx - 1 && m.mask[j * m.nx + b + 1] === v) b++
     const runPx = b - a + 1
     const edge = a === 0 || b === m.nx - 1
+    // neck-flagged pixel: report the LOCAL passage (2 × exact clearance) —
+    // the nominal width can be fine while the diagonal pinch is not
+    const neckPx = v === 0 && m.neckFlags && m.neckFlags[idx] && m.neckClear
+      ? Math.round(2 * m.neckClear[idx] * 10) / 10 : null
     setHover({
       kind: v === 1 ? 'fin' : edge ? 'margin' : 'channel',
       runPx,
       perpPx: v === 1 ? maskRef.current!.finPx : maskRef.current!.chPx,
+      neckPx,
     })
   }
 
@@ -567,8 +584,9 @@ export function PixelPreview({
             : hover.kind === 'base' ? 'base slab — fully exposed'
             : hover.kind === 'margin' ? 'side margin'
             : <>▸ <b>{hover.kind}</b>{hover.perpPx != null
-                ? <>: true width <b>{fmt(hover.perpPx, 1)} px</b> ({fmt(hover.perpPx * LMM_PROC.pixelMm, 3)} mm green){hover.runPx !== Math.round(hover.perpPx) ? ` · ${hover.runPx} px across this row (slanted cut)` : ''}</>
-                : <>: <b>{hover.runPx} px</b> across this row ({fmt(hover.runPx * LMM_PROC.pixelMm, 3)} mm green)</>}</>}
+                ? <>: nominal <b>{fmt(hover.perpPx, 1)} px</b> ({fmt(hover.perpPx * LMM_PROC.pixelMm, 3)} mm green){hover.runPx !== Math.round(hover.perpPx) ? ` · ${hover.runPx} px across this row (slanted cut)` : ''}</>
+                : <>: <b>{hover.runPx} px</b> across this row ({fmt(hover.runPx * LMM_PROC.pixelMm, 3)} mm green)</>}
+                {hover.neckPx != null && <b style={{ color: 'rgb(255,64,96)' }}> · ⌖ neck — local passage ≈ {fmt(hover.neckPx, 1)} px</b>}</>}
         </span>
       </div>
       <div className="pxv-note muted">
