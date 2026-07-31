@@ -72,8 +72,10 @@ export function PixelPreview({
   const anchorRef = useRef<{ fx: number; fy: number; mx: number; my: number } | null>(null)
   const [layer, setLayer] = useState<number | null>(initialLayer ?? null)
   const [stats, setStats] = useState<Stats>({ minChannelPx: null, minFinPx: null, solidPct: 0, mismatch: null, neckPx: null, neckWorst: null, neckWorstIdx: null })
-  // ⌖ jump-to-worst-neck: zoom in and center the narrowest passage
-  const [focus, setFocus] = useState<{ i: number; j: number; n: number } | null>(null)
+  // ⌖ jump-to-worst-neck: zoom in, center the narrowest passage AND mark it
+  // with a pulsing ring (li = the layer the mark belongs to — it hides when
+  // the user scrolls to a different layer so it never points at stale data)
+  const [focus, setFocus] = useState<{ i: number; j: number; li: number; n: number } | null>(null)
   // ⌖ stack scan (2026-07-30): the whole-stack sweep runs INSIDE the verify
   // worker (slice + rasterize + neck-scan per layer, only progress numbers
   // cross the thread) — see verify/worker.ts scanStack. The first version
@@ -121,10 +123,11 @@ export function PixelPreview({
     if (snappedTokenRef.current === stack.token) return
     snappedTokenRef.current = stack.token
     if (stack.best) {
-      setLayer(stack.best.fi + (noBase ? dims.baseLayers : 0))
+      const li2 = stack.best.fi + (noBase ? dims.baseLayers : 0)
+      setLayer(li2)
       setZoom(10)
       const bi = stack.best.idx
-      setFocus((prev) => ({ i: bi % dims.nx, j: Math.floor(bi / dims.nx), n: (prev?.n ?? 0) + 1 }))
+      setFocus((prev) => ({ i: bi % dims.nx, j: Math.floor(bi / dims.nx), li: li2, n: (prev?.n ?? 0) + 1 }))
       verify.requestMask(stack.best.fi)   // fetch the winner's mask for display
     }
   }, [stack, dims, noBase, verify])
@@ -484,6 +487,11 @@ export function PixelPreview({
           {zoom != null && zoom >= GRID_MIN_ZOOM && (
             <div className="pxv-grid" style={{ backgroundSize: `${zoom}px ${zoom}px` }} />
           )}
+          {focus != null && zoom != null && focus.li === li && (
+            <div className="pxv-mark"
+              title="⌖ the narrowest passage — the pixel 'show' / the stack scan landed on"
+              style={{ left: (focus.i + 0.5) * zoom, top: (focus.j + 0.5) * zoom }} />
+          )}
         </div>
       </div>
 
@@ -531,7 +539,7 @@ export function PixelPreview({
                   if (stats.neckWorstIdx == null || !dims) return
                   setZoom(10)
                   setFocus({ i: stats.neckWorstIdx % dims.nx,
-                    j: Math.floor(stats.neckWorstIdx / dims.nx), n: (focus?.n ?? 0) + 1 })
+                    j: Math.floor(stats.neckWorstIdx / dims.nx), li, n: (focus?.n ?? 0) + 1 })
                 }}>show</button>
             </span>
           : <span className="pxv-stat" style={{ color: 'var(--pass)' }}
