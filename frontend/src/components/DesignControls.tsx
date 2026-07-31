@@ -1,11 +1,11 @@
 import { fmt, pct } from '../format'
 import { PIN_PATTERNS, ROUTES, TPMS_LAYOUTS, TPMS_TYPES, derived, familyPatch, isGyroid, isPinStructure, routeFloor } from '../design'
-import { makeManufacturable, normalizeRoute, quickVerdict, routeRule, type Enforcement } from '../manufacturing'
+import { LMM_PROC, makeManufacturable, normalizeRoute, quickVerdict, routeRule, type Enforcement } from '../manufacturing'
 import type { Basis, DesignState, MfgInfo } from '../types'
 import { GreenCad } from './GreenCad'
 
 function Slider({
-  label, unit, min, max, step, value, digits, onChange, tiers,
+  label, unit, min, max, step, value, digits, onChange, tiers, green,
 }: {
   label: string
   unit: string
@@ -17,13 +17,18 @@ function Slider({
   onChange: (v: number) => void
   // V3.3 two-tier manufacturability bands: red below abs, amber abs→rec
   tiers?: { abs: number; rec: number }
+  /** green-state grid readout ("5.0 px" / "271 ly") — sliders hold FINAL mm,
+   *  the printer and the ⇄ CAD tab speak green; showing both kills the
+   *  unit-space confusion (final = green ÷ shrink) */
+  green?: string
 }) {
   const posPct = (v: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100))
   return (
     <div className="ds-row">
       <div className="ds-top">
         <span>{label}</span>
-        <span className="ds-val">{fmt(value, digits)} <span className="muted">{unit}</span></span>
+        <span className="ds-val">{fmt(value, digits)} <span className="muted">{unit}</span>
+          {green && <span className="muted" title="green-state size on the printer grid (final × shrink); the ⇄ CAD tab's mm are green — sliders are final (sintered)"> · {green}</span>}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))} />
@@ -184,18 +189,23 @@ export function DesignControls({
         <>
           <Slider label="Fin thickness t" unit="mm" min={fl.t} max={0.3} step={0.005} digits={3}
             value={design.fin_thickness_mm} onChange={(v) => onPatch({ fin_thickness_mm: v })}
-            tiers={{ abs: rule.wallAbs, rec: rule.wallRec }} />
+            tiers={{ abs: rule.wallAbs, rec: rule.wallRec }}
+            green={isLmm ? `${fmt(design.fin_thickness_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
           <Slider label="Channel gap b" unit="mm" min={fl.b} max={0.4} step={0.005} digits={3}
             value={design.channel_gap_mm} onChange={(v) => onPatch({ channel_gap_mm: v })}
-            tiers={{ abs: rule.gapAbs, rec: rule.gapRec }} />
+            tiers={{ abs: rule.gapAbs, rec: rule.gapRec }}
+            green={isLmm ? `${fmt(design.channel_gap_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
           <Slider label="Fin height H" unit="mm" min={2.0} max={6.5} step={0.05} digits={2}
-            value={design.fin_height_mm} onChange={(v) => onPatch({ fin_height_mm: v })} />
+            value={design.fin_height_mm} onChange={(v) => onPatch({ fin_height_mm: v })}
+            green={isLmm ? `${Math.round(design.fin_height_mm * LMM_PROC.shrinkZ / LMM_PROC.layerMm)} ly` : undefined} />
           {!isStraight && (
             <>
               <Slider label="Wave amplitude A" unit="mm" min={0} max={1.0} step={0.01} digits={2}
-                value={design.wave_amplitude_mm} onChange={(v) => onPatch({ wave_amplitude_mm: v })} />
+                value={design.wave_amplitude_mm} onChange={(v) => onPatch({ wave_amplitude_mm: v })}
+                green={isLmm ? `${fmt(design.wave_amplitude_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
               <Slider label="Wavelength λ" unit="mm" min={1.5} max={6.0} step={0.05} digits={2}
-                value={design.wavelength_mm} onChange={(v) => onPatch({ wavelength_mm: v })} />
+                value={design.wavelength_mm} onChange={(v) => onPatch({ wavelength_mm: v })}
+                green={isLmm ? `${fmt(design.wavelength_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 0)} px` : undefined} />
             </>
           )}
           <Slider label="Flow rate" unit="L/min" min={1.0} max={4.0} step={0.05} digits={2}
