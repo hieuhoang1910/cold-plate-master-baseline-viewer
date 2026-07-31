@@ -2224,3 +2224,23 @@ inherited from the validated v6 hero cannot be cleaned at any t/b.**
 - Tests re-baselined again (M2/M3/M4 FAIL via gap_perp with slope cited,
   M4b PASS, M2b MARGINAL, M2b < M4b thermally); parity 5/5 + all suites
   green.
+
+**Prototype 1 lineage anchor (`proto1_reference`, same day).** The as-built
+Proto 1 part (`Prototype_1_V1/Mesh/SW01_0.25_new base.stl`, 3.97 M tris)
+was mesh-measured — the V1 report's paper geometry (0.25 gap, pitch 0.5,
+active 21.25 mm) does not match the part: **t 0.25 ✓ but horizontal pitch
+0.700 → true gap 0.45; single-fin-tracked wave A 0.91 / λ 3.75 → 57°
+slope; H ≈ 5.9 on a 1.4 mm base; 42 fins over ~29 mm**. Scored on the
+GB202 die-coverage basis at 2.65 L/min (which IS the Proto 1 rig
+condition that validated the v1 solver — the tested baseline and every
+candidate now sit on one validated scale): **Proto 1 ≈ 25.0 mK/W
+(14.4 K @ 575 W) vs M4b 21.6 (12.4 K) — M4b −14 %, ≈ −2 K**, with ΔP
+still trivial (1.3 vs 50 kPa budget). The solver also reproduces the
+rig's Bykski-vs-Proto1 ordering (straight 0.25/0.25 ≈ 24.3, slightly
+ahead of Proto 1 — as measured). Proto 1's 57° wave honestly FAILs
+`gap_perp` — it is the design DNA the rev5 submissions inherited. Ships
+as an honest reference candidate row + 3 new v3-suite checks. Caveats
+stated: rig instrumentation carries ~±35 % R_jc uncertainty (test-kit
+BOM verdict), and the analytical model does not see surface finish or
+manifold topology differences (measured Bykski ran slightly cooler than
+the model's tie).

@@ -299,6 +299,19 @@ M_PRESET_CASES = [
      "notes": "M2b — aggressive wave-safe corner (2026-07-31): px-exact 5/7 px "
               "with A 5 px (20°); best R_jc in the allow-marginal tier (gap "
               "7 px is inside the 6–8 band, under the 8 px rec)."},
+    # 2026-07-31 — Prototype 1 lineage anchor: the as-built SW01 recipe,
+    # MESH-MEASURED (fin chord min 0.257 -> t 0.25; horizontal pitch 0.700 ->
+    # b 0.45; single-fin tracked wave A 0.91 / λ 3.75 -> 57° slope; H ~5.9 on
+    # a 1.4 mm base, 42 fins). The rig that validated the v1 solver ran THIS
+    # part at 2.65 L/min — the catalog's flow basis — so scoring it here puts
+    # the tested baseline and every candidate on one validated scale. Its 57°
+    # wave is the design DNA rev5 inherited; it honestly FAILs gap_perp.
+    {"design_id": "proto1_reference", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.45, "fin_height_mm": 5.5,
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.91, "wavelength_mm": 3.75,
+     "notes": "Prototype 1 — the tested 2026-05 baseline (as-built recipe, "
+              "mesh-measured from SW01_0.25). M4b beats it by ~3.4 mK/W "
+              "(≈2 K @575 W) on this basis; its 57° wave fails the slope rule."},
 ]
 
 
