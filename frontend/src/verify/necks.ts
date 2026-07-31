@@ -116,7 +116,15 @@ export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx
   const D2 = edt(seeds, nx, ny)                  // distance to nearest disc-fits px
   const flags = new Uint8Array(n)
   for (let i = 0; i < n; i++) if (!mask[i] && D2[i] > r + 1e-6) flags[i] = 1
-  // blob filter + worst passage (narrowest neck = blob with the smallest max clearance)
+  // blob filter + worst passage. "Worst" = the narrowest THROAT: the minimum
+  // 2×clearance over medial-ridge pixels (D a local max vs its 4 neighbours —
+  // the corridor spine). The first version reported each blob's WIDEST
+  // clearance, which is ≈ the throat for a small isolated neck but wildly
+  // overstates a systemic flood: when the whole channel network merges into
+  // one flagged region, its widest pocket sits just under the threshold
+  // (M2 read "worst ≈ 5.7 px" while its real squeezes are ~2 px). The ridge
+  // condition keeps corner notches out — clearance grows toward a channel's
+  // centre, so non-spine pixels always have a larger neighbour.
   const seen = new Uint8Array(n)
   const stack: number[] = []
   let count = 0, worstIdx = -1, worstW = INF
@@ -135,10 +143,22 @@ export function scanChannelNecks(mask: Uint8Array, nx: number, ny: number, minPx
     }
     if (blob.length < 3) { for (const p of blob) flags[p] = 0; continue }
     count += blob.length
+    let throat = INF, tIdx = -1
     let bMax = -1, bIdx = blob[0]
-    for (const p of blob) if (D[p] > bMax) { bMax = D[p]; bIdx = p }
-    const w = 2 * bMax   // exact Euclidean clearance → passage width in px
-    if (w < worstW) { worstW = w; worstIdx = bIdx }
+    for (const p of blob) {
+      const d = D[p]
+      if (d > bMax) { bMax = d; bIdx = p }
+      const pi = p % nx, pj = (p - pi) / nx
+      const ridge =
+        (pi + 1 >= nx || d >= D[p + 1] - 1e-6) &&
+        (pi - 1 < 0 || d >= D[p - 1] - 1e-6) &&
+        (pj + 1 >= ny || d >= D[p + nx] - 1e-6) &&
+        (pj - 1 < 0 || d >= D[p - nx] - 1e-6)
+      if (ridge && 2 * d < throat) { throat = 2 * d; tIdx = p }
+    }
+    const w = throat < INF ? throat : 2 * bMax
+    const wi = tIdx >= 0 ? tIdx : bIdx
+    if (w < worstW) { worstW = w; worstIdx = wi }
   }
   return { flags, count, worstIdx, worstPx: worstW === INF ? 0 : Math.round(worstW * 10) / 10,
     clearance: D }
