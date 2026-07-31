@@ -197,7 +197,7 @@ export function DesignControls({
             green={isLmm ? `${fmt(design.channel_gap_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
           <Slider label="Fin height H" unit="mm" min={2.0} max={6.5} step={0.05} digits={2}
             value={design.fin_height_mm} onChange={(v) => onPatch({ fin_height_mm: v })}
-            green={isLmm ? `${Math.round(design.fin_height_mm * LMM_PROC.shrinkZ / LMM_PROC.layerMm)} ly` : undefined} />
+            green={isLmm ? `${fmt(design.fin_height_mm * LMM_PROC.shrinkZ / LMM_PROC.layerMm, 1)} ly` : undefined} />
           {!isStraight && (
             <>
               <Slider label="Wave amplitude A" unit="mm" min={0} max={1.0} step={0.01} digits={2}
