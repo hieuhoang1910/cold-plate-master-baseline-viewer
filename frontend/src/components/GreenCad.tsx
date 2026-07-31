@@ -16,7 +16,9 @@ export function GreenCad({ design }: { design: DesignState }) {
       <summary>
         green → CAD converter <span className="muted">(Incus EVO35 · 35/25 µm · ×{LMM_PROC.shrinkXY}/{LMM_PROC.shrinkZ})</span>
       </summary>
-      <table className="gc-tbl">
+      {/* the drawer is narrow and the chain is 6 columns — scroll, don't clip */}
+      <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+      <table className="gc-tbl" style={{ whiteSpace: 'nowrap' }}>
         <thead>
           <tr><th>dim</th><th className="num">final</th><th className="num">green</th><th className="num">snap</th>
             <th className="num" title="what to model in nTop — pixels (XY) / layers (Z)">CAD draw</th>
@@ -43,6 +45,7 @@ export function GreenCad({ design }: { design: DesignState }) {
           })}
         </tbody>
       </table>
+      </div>
       {warnings.length > 0 && (
         <div className="gc-note">
           {warnings.map((w, i) => (
