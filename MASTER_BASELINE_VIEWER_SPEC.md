@@ -2264,3 +2264,18 @@ the thermal prize for reopening the steep-wave corner is ≈ 4.6 mK/W
 (≈ 2.6 K @ 575 W). Until confirmed, the rules stand and M4b remains
 the target. Caveats unchanged: rig ±35 % R_jc instrumentation; model
 blind to surface finish/manifold topology.
+
+**Pinned reference row (same day, user request):** a candidate case may
+now carry **`pinned_stack` + `pinned_operating`** — a FIXED reference is
+scored on its own as-sent envelope and operating point in every project;
+switching projects must never rescale a part that physically exists.
+`proto1_reference` pins its mesh-measured envelope (fin field 23.4 ×
+22.6 mm, H 5.0, 1.87 mm sinter base, rig flow 2.65 L/min; die/TIM held
+at the GB202 basis it was introduced under), the viewer draws that same
+envelope (`geomFromCase` honors the pin), live evaluate carries it, and
+the row shows a `pinned` flag. **Part-level comparison against the same
+die: as-built Proto 1 = 29.2 mK/W vs M4b 20.1 — M4b ≈ −31 %.** (The
+16.97 figure above is the Proto 1 *recipe* transplanted onto the
+die-coverage core — a recipe comparison; the catalog row is the physical
+part.) Suite checks: pinned flag present, M4b beats the as-built part,
+and pinned-row R_jc identical across projects to 1e-12.

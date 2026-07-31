@@ -71,8 +71,22 @@ def main() -> int:
     check("Proto1 reference present", "proto1_reference" in by_id)
     check("Proto1 -> FAIL (60° wave, gap_perp ~0 px)",
           by_id["proto1_reference"]["manufacturability"]["verdict"] == "FAIL")
-    check("Proto1 beats M4b on paper (tight gap + steep wave)",
-          by_id["proto1_reference"]["R_jc_K_W"] < by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"])
+    # PINNED part-level comparison: the as-built Proto 1 (own 23.4×22.6 core,
+    # 1.87 mm sinter base, rig flow) scores WORSE than M4b against the same
+    # die — the recipe-on-equal-core comparison (Proto1 recipe 16.97 < M4b)
+    # lives in the spec; the catalog row is the physical part.
+    check("Proto1 row is pinned", by_id["proto1_reference"].get("pinned") is True)
+    check("M4b beats the as-built Proto1 part",
+          by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"] < by_id["proto1_reference"]["R_jc_K_W"])
+    # the pin's contract: switching projects must not rescale the part
+    alt = dict(server.GB202_PROJECT)
+    alt = {**alt, "id": "pin-test", "builtin": False,
+           "problem": {**alt["problem"], "core_width_mm": 28.0, "core_length_mm": 28.0}}
+    cat_alt = server.project_catalog_payload({"project": alt})
+    p_alt = next(c for c in cat_alt["candidates"] if c["design_id"] == "proto1_reference")
+    check("pinned Proto1 identical across projects",
+          abs(p_alt["R_jc_K_W"] - by_id["proto1_reference"]["R_jc_K_W"]) < 1e-12,
+          f"{p_alt['R_jc_K_W']} vs {by_id['proto1_reference']['R_jc_K_W']}")
     passing = [c for c in cat["candidates"]
                if c.get("manufacturability", {}).get("verdict") == "PASS"
                and c.get("family") in ("wavy_fin", "straight_fin")]

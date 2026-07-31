@@ -52,6 +52,7 @@ export function initDesign(c: DesignCase, basis: Basis): DesignState {
     pin_pitch_mm: c.pin_pitch_mm ?? 1.4,
     pin_pattern: c.pin_pattern ?? 'staggered',
     flow_lpm: Number(basis.operating.flow_lpm ?? 2.65),
+    pinned_stack: c.pinned_stack,
   }
 }
 
@@ -144,6 +145,13 @@ export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}
     operating: { ...basis.operating, flow_lpm: d.flow_lpm },
     architecture: basis.architecture,
   }
+  if (d.pinned_stack) {
+    // fixed reference (e.g. Prototype 1): evaluate on its own as-sent
+    // envelope — the project basis must not rescale it
+    payload.stack = { ...basis.stack, ...d.pinned_stack }
+    const cl = d.pinned_stack.core_length_mm
+    if (cl) payload.architecture = { ...basis.architecture, path_length_mm: cl / 2 }
+  }
   if (opts.coolant) payload.coolant = opts.coolant
   const t: Record<string, unknown> = {}
   if (opts.rjcGateOverride != null) t.R_jc_gate_K_W = opts.rjcGateOverride
@@ -157,7 +165,8 @@ export function evalPayload(d: DesignState, basis: Basis, opts: ProblemOpts = {}
 /** Client-side geometric derivations shown next to the fin sliders. */
 export function derived(d: DesignState, basis: Basis) {
   const pitch = d.fin_thickness_mm + d.channel_gap_mm
-  const usable = basis.stack.core_width_mm - 2 * d.side_margin_mm
+  const coreW = d.pinned_stack?.core_width_mm ?? basis.stack.core_width_mm
+  const usable = coreW - 2 * d.side_margin_mm
   const finCount = pitch > 0 && usable > 0 ? Math.max(1, Math.floor(usable / pitch)) : 0
   const nCh = finCount + 1
   const activeW = finCount * d.fin_thickness_mm + nCh * d.channel_gap_mm

@@ -316,12 +316,25 @@ M_PRESET_CASES = [
     {"design_id": "proto1_reference", "family": "wavy_fin", "process_route": "LMM",
      "fin_thickness_mm": 0.25, "channel_gap_mm": 0.25, "fin_height_mm": 5.0,
      "side_margin_mm": 0.9, "wave_amplitude_mm": 0.719, "wavelength_mm": 2.581,
+     # FIXED reference: the part physically exists — score it on its own
+     # as-sent envelope (mesh-measured, green ÷ shrink) + the rig's flow,
+     # never on the active project's die/core. Fin field final ≈ 23.4 mm
+     # transverse × 22.6 mm flow, H 5.0, sinter base 2.3 green -> 1.87 final;
+     # die/TIM pinned to the GB202 basis it was introduced under so the row
+     # reads identically in every project.
+     "pinned_stack": {"die_width_mm": 24.0, "die_length_mm": 31.0,
+                      "core_width_mm": 23.4, "core_length_mm": 22.6,
+                      "core_height_mm": 5.0, "base_thickness_mm": 1.87,
+                      "k_solid_W_mK": 340.0, "tim_areal_Kcm2_W": 0.05},
+     "pinned_operating": {"flow_lpm": 2.65},
      "notes": "Prototype 1 (SW01.02 sinter-weld) — the 2026-05 tested baseline; "
-              "fins printed separately by Incus + base bonded in sinter. Best "
-              "paper R_jc here, but perp passage ≈ 0 px at its 60° wave — FAILs "
-              "the slope rule. Open Q: does open-top sinter-weld printing relax "
-              "the 6 px floor? Its print success says maybe; rev5's rejection "
-              "says the review bar moved. Confirm with Paul before reusing."},
+              "fins printed separately by Incus + base bonded in sinter. PINNED "
+              "to its as-sent envelope (23.4×22.6 core, its own base + rig flow) "
+              "— project settings never rescale this row. Best paper R_jc, but "
+              "perp passage ≈ 0 px at its 60° wave — FAILs the slope rule. Open "
+              "Q for Paul: does open-top sinter-weld printing relax the 6 px "
+              "floor? Its print success says maybe; rev5's rejection says the "
+              "bar moved."},
 ]
 
 
@@ -350,12 +363,26 @@ def _build_catalog(stack_d: dict, arch_d: dict, op_d: dict, *,
         candidates.append(_augment(out, c, stack_d))
 
     # V3.3 — Incus-compliant LMM presets ride along as first-class candidates.
+    # A preset may carry `pinned_stack` / `pinned_operating` (Prototype 1): a
+    # FIXED reference scored on its own as-sent envelope + rig operating point
+    # — switching projects must never rescale a part that physically exists.
     m_cases = []
     for c in M_PRESET_CASES:
         case = mbc.GeometryCase(**_filtered(c, _CASE_FIELDS))
-        out = _sanitize(asdict(mbc.evaluate_case(case, stack, op, arch)))
+        ps = c.get("pinned_stack")
+        if ps:
+            stack_c = replace(stack, **_filtered(ps, _STACK_FIELDS))
+            arch_c = replace(arch, path_length_mm=stack_c.core_length_mm / 2.0)
+            po = c.get("pinned_operating")
+            op_c = replace(op, **_filtered(po, _OP_FIELDS)) if po else op
+            stack_cd = {**(stack_d or {}), **ps}
+        else:
+            stack_c, arch_c, op_c, stack_cd = stack, arch, op, stack_d
+        out = _sanitize(asdict(mbc.evaluate_case(case, stack_c, op_c, arch_c)))
         out["preset"] = True
-        candidates.append(_augment(out, c, stack_d))
+        if ps:
+            out["pinned"] = True
+        candidates.append(_augment(out, c, stack_cd))
         m_cases.append(c)
     cases = cases + m_cases
 

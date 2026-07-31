@@ -188,6 +188,9 @@ export interface DesignCase {
   family: string
   process_route?: string
   validation_stage?: string
+  /** fixed reference (e.g. Prototype 1): its own as-sent envelope — scoring
+   *  and the viewer use these stack overrides instead of the project basis */
+  pinned_stack?: Record<string, number>
   fin_thickness_mm?: number
   channel_gap_mm?: number
   fin_height_mm?: number
@@ -343,6 +346,9 @@ export interface DesignState {
   design_id: string        // source candidate the design was seeded from
   family: string
   process_route: string
+  /** carried from a pinned reference case — live evaluate + viewer stay on
+   *  the as-sent envelope, not the project's */
+  pinned_stack?: Record<string, number>
   // fin families
   fin_thickness_mm: number
   channel_gap_mm: number

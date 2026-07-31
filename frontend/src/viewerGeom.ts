@@ -39,7 +39,8 @@ export function isViewable(family: string): boolean {
 /** Build viewer geometry from a design case/state + the shared stack/arch basis. */
 export function geomFromCase(c: DesignCase, basis: Basis): ViewerGeom | null {
   if (!isViewable(c.family)) return null
-  const s = basis.stack
+  // pinned reference (e.g. Prototype 1): draw its own as-sent envelope
+  const s = c.pinned_stack ? { ...basis.stack, ...c.pinned_stack } : basis.stack
   const t = c.fin_thickness_mm ?? 0.1
   const b = c.channel_gap_mm ?? 0.1
   const margin = c.side_margin_mm ?? 0.9
