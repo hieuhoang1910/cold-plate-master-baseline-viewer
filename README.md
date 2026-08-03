@@ -335,6 +335,10 @@ architecture, families). The built-in **GB202 GPU** preset reproduces the V1
 catalog view exactly (gate pinned to the historical 0.078 K/W). User projects
 persist under `07_WebApp/projects/` (server-local, LAN-shared, git-ignored).
 Physics is `engine/projects.py` (webapp-native), reusing `coolants` + `targets`.
+Saving a slider design as a candidate writes **only the designs list** to the
+stored project — unsaved Design Studio draft edits never ride along (the
+problem itself is saved explicitly in the studio) — and re-saving a saved
+candidate under its default name updates that entry in place.
 
 **V2.1 `/api/evaluate` extras (additive, optional).** Add `"coolant"` (a preset
 name like `"water"`/`"pg50"`, or `{name, rho_kg_m3?, ...}` for custom) to swap

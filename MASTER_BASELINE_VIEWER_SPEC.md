@@ -2288,6 +2288,36 @@ pair into the sliders through the same `patchDesign` path:
   the ◆ candidate diamonds (full saved designs, hover-only — selecting
   them belongs to the left list / Comparison tab).
 
+## 2026-08-03 — design saves no longer commit the live problem draft (BUILT)
+
+Found live on AD102: saving a slider design while the Design Studio held
+an unsaved draft (die enlarged past the core) silently committed that
+draft to the project store — every non-pinned row then read
+FAIL:coverage, and it looked like the design's fault. Root cause:
+`saveAsCandidate` / `addCandidates` / `removeSavedDesign` wrote
+`{ ...activeProject, designs }`, and `activeProject` carries any dirty
+draft applied from the studio.
+
+- **`saveDesignsOnly`** — designs writes now merge into the last
+  **store-confirmed** project (`storedProject`, tracked through
+  boot/load/save). A candidate save can never alter the stored problem;
+  the live draft (and its dirty flag) stays untouched in the UI apart
+  from the refreshed designs list. Saving the problem itself remains the
+  Design Studio's explicit save.
+- **Re-save updates in place** — re-saving a selected saved candidate
+  now defaults the name prompt to the entry's ORIGINAL name (reverse
+  lookup `saved_<slug>` → name), so accepting the prompt overwrites that
+  entry. Previously it defaulted to the internal `saved_…` id and minted
+  a duplicate, leaving the stored copy stale — "my tuned sliders never
+  reached the saved design".
+- Built-in projects keep the fork-on-first-save behavior
+  (`forkBuiltinWith`) — the "(custom)" fork intentionally carries the
+  full live draft, because that fork IS the save.
+- Coverage note, restated while diagnosing: `FAIL:coverage` is
+  `(core_W × core_L) < (die_W × die_L)` — a property of the project's
+  stack, identical for every non-pinned candidate; only pinned rows
+  (Prototype 1) carry their own envelope and can differ.
+
 **Pinned reference row (same day, user request):** a candidate case may
 now carry **`pinned_stack` + `pinned_operating`** — a FIXED reference is
 scored on its own as-sent envelope and operating point in every project;

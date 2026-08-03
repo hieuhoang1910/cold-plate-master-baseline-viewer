@@ -49,6 +49,12 @@ export default function App() {
 
   // V2.2 — the active project scopes the whole app (basis, gates, coolant).
   const [activeProject, setActiveProject] = useState<Project | null>(null)
+  // The last store-confirmed copy of the active project. Design saves merge
+  // into THIS, never into the live draft — saving a slider design must not
+  // silently commit unsaved Design Studio edits (found live 2026-08-03: a
+  // draft die enlarged past the core rode along with a candidate save and
+  // flipped the whole stored project to FAIL:coverage).
+  const [storedProject, setStoredProject] = useState<Project | null>(null)
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [dirty, setDirty] = useState(false)
   const [showStudio, setShowStudio] = useState(false)
@@ -107,7 +113,7 @@ export default function App() {
     getSchema().then(setSchema).catch(() => { /* optional */ })
     getProjects().then((r) => setProjects(r.projects)).catch(() => { /* optional */ })
     getProject(DEFAULT_PROJECT_ID)
-      .then((p) => { setActiveProject(p); setDirty(false) })
+      .then((p) => { setActiveProject(p); setStoredProject(p); setDirty(false) })
       .catch((e) => setError(String(e.message ?? e)))
   }, [])
 
@@ -202,14 +208,14 @@ export default function App() {
   const setTjMax = (v: number) => { patchProject((p) => ({ ...p, targets: { ...p.targets, T_j_max_C: v, R_jc_gate_override: null } })); setDirty(true) }
 
   const loadProject = (id: string) => {
-    getProject(id).then((p) => { setActiveProject(p); setDirty(false); setShowStudio(false) })
+    getProject(id).then((p) => { setActiveProject(p); setStoredProject(p); setDirty(false); setShowStudio(false) })
       .catch((e) => setError(String(e.message ?? e)))
   }
   const applyProjectDraft = (p: Project) => { setActiveProject(p); setDirty(true); setShowStudio(false) }
   const saveProjectDraft = async (p: Project) => {
     const { project: stored } = await saveProject(p)
     const r = await getProjects(); setProjects(r.projects)
-    setActiveProject(stored); setDirty(false); setShowStudio(false)
+    setActiveProject(stored); setStoredProject(stored); setDirty(false); setShowStudio(false)
   }
   const removeProject = (id: string) => {
     deleteProject(id).then(async () => {
@@ -222,25 +228,48 @@ export default function App() {
   const slug = (s: string) =>
     s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'design'
 
+  // Persist a designs-only change WITHOUT committing live Design Studio edits:
+  // the write is based on the store-confirmed project, so an unsaved draft die/
+  // core/target never rides along with a candidate save. The live draft (and
+  // its dirty flag) stays as-is in the UI apart from the designs list.
+  const saveDesignsOnly = async (mutate: (designs: SavedDesign[]) => SavedDesign[]) => {
+    const base = (storedProject?.id && storedProject.id === activeProject?.id)
+      ? storedProject : activeProject
+    if (!base) return
+    const designs = mutate(base.designs ?? [])
+    const { project: stored } = await saveProject({ ...base, designs })
+    const r = await getProjects(); setProjects(r.projects)
+    setStoredProject(stored)
+    setActiveProject((p) => (p ? { ...p, designs: stored.designs ?? designs } : p))
+  }
+
+  // Built-in projects can't be written, so the first save forks a "(custom)"
+  // copy — that fork intentionally carries the full live draft (it IS the save).
+  const forkBuiltinWith = async (mutate: (designs: SavedDesign[]) => SavedDesign[]) => {
+    if (!activeProject) return
+    const proj = { ...activeProject, id: undefined, name: `${activeProject.name} (custom)`, builtin: false }
+    await saveProjectDraft({ ...proj, designs: mutate(proj.designs ?? []) })
+  }
+
   // Persist the current live design as a named candidate on the active project.
-  // Built-in projects can't be written, so the first save forks a "(custom)" copy.
   const saveAsCandidate = async () => {
     if (!design || !activeProject) return
-    const name = window.prompt('Name this design (it becomes a candidate):', design.design_id)?.trim()
+    // Re-saving a saved candidate defaults to its ORIGINAL name, so accepting
+    // the prompt updates that entry in place instead of minting a "saved_…"
+    // duplicate and leaving the stored copy stale (found live 2026-08-03).
+    const src = (activeProject.designs ?? []).find((d) => 'saved_' + slug(d.name) === design.design_id)
+    const name = window.prompt('Name this design (it becomes a candidate):', src?.name ?? design.design_id)?.trim()
     if (!name) return
-    let proj = activeProject
-    if (proj.builtin) proj = { ...proj, id: undefined, name: `${proj.name} (custom)`, builtin: false }
-    const designs = [...(proj.designs ?? []).filter((d) => d.name !== name), { name, design }]
+    const mutate = (ds: SavedDesign[]) => [...ds.filter((d) => d.name !== name), { name, design }]
     try {
-      await saveProjectDraft({ ...proj, designs })
+      await (activeProject.builtin ? forkBuiltinWith(mutate) : saveDesignsOnly(mutate))
       setSelectedId('saved_' + slug(name))
     } catch (e) { setError(String((e as Error).message ?? e)) }
   }
 
   const removeSavedDesign = async (name: string) => {
     if (!activeProject) return
-    const designs = (activeProject.designs ?? []).filter((d) => d.name !== name)
-    try { await saveProjectDraft({ ...activeProject, designs }) }
+    try { await saveDesignsOnly((ds) => ds.filter((d) => d.name !== name)) }
     catch (e) { setError(String((e as Error).message ?? e)) }
   }
 
@@ -248,12 +277,10 @@ export default function App() {
   // candidates on the active project; re-adding replaces same-named entries.
   const addCandidates = async (entries: SavedDesign[]) => {
     if (!activeProject || entries.length === 0) return
-    let proj = activeProject
-    if (proj.builtin) proj = { ...proj, id: undefined, name: `${proj.name} (custom)`, builtin: false }
     const incoming = new Set(entries.map((e) => e.name))
-    const designs = [...(proj.designs ?? []).filter((d) => !incoming.has(d.name)), ...entries]
+    const mutate = (ds: SavedDesign[]) => [...ds.filter((d) => !incoming.has(d.name)), ...entries]
     try {
-      await saveProjectDraft({ ...proj, designs })
+      await (activeProject.builtin ? forkBuiltinWith(mutate) : saveDesignsOnly(mutate))
       setSelectedId('saved_' + slug(entries[0].name))
     } catch (e) { setError(String((e as Error).message ?? e)) }
   }
