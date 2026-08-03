@@ -141,12 +141,13 @@ export function generateReport(
   const rows = mRows.length ? mRows : catalog.candidates
   L.push('## 4. Candidate comparison — M1 and forward')
   if (mRows.length) L.push('_Default catalog reference rows (v6 hero, straight fin, supplier floor, LPBF fallback, gyroid screening) are excluded — Incus M-presets + this project\'s saved designs only._')
-  L.push('_Pixel cells are **have/reference** in GREEN px (35 µm px; final mm × 1.197 ÷ 0.035 — Incus guidelines 07/2026): fin t vs the 4 px recommendation, gap b vs the 8 px deep-channel recommendation (6 px floor), perpendicular passage at max wave slope vs its 6 px floor (hard rule, no rec tier — at zero slope perp = gap). ⚠ marginal · ✗ below floor._')
-  L.push('| Design | Family | Route | R_jc (mK/W) | ΔP (kPa) | pump (W) | fin t (px) | gap b (px) | perp (px) | Mfg | Status |',
-    '|---|---|---|---|---|---|---|---|---|---|---|')
+  L.push('_SA = fin-only structure area / effective (η_f × uniformity × access derated). Pixel cells are **have/reference** in GREEN px (35 µm px; final mm × 1.197 ÷ 0.035 — Incus guidelines 07/2026): fin t vs the 4 px recommendation, gap b vs the 8 px deep-channel recommendation (6 px floor), perpendicular passage at max wave slope vs its 6 px floor (hard rule, no rec tier — at zero slope perp = gap). ⚠ marginal · ✗ below floor._')
+  L.push('| Design | Family | Route | SA fin/eff (mm²) | R_jc (mK/W) | ΔP (kPa) | pump (W) | fin t (px) | gap b (px) | perp (px) | Mfg | Status |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|')
   rows.forEach((k) => {
     const pass = k.R_jc_K_W <= g.limit_R_jc_K_W
-    L.push(`| ${k.name ?? k.design_id}${k.pinned ? ' (pinned)' : ''} | ${k.family} | ${k.process_route} | ${milliKW(k.R_jc_K_W)}${pass ? '' : ' ⚠'} | ${kPa(k.DeltaP_Pa)} | ${fmt(k.pump_power_W, 3)} | ${pxCell(k, 'wall_min', 'rec')} | ${pxCell(k, 'gap_min', 'rec')} | ${pxCell(k, 'gap_perp', 'abs')} | ${k.manufacturability?.verdict ?? '—'} | ${k.kpi_status} |`)
+    const sa = k.areas ? `${fmt(k.areas.fin_mm2, 0)} / ${fmt(k.areas.fin_eff_mm2, 0)}` : '—'
+    L.push(`| ${k.name ?? k.design_id}${k.pinned ? ' (pinned)' : ''} | ${k.family} | ${k.process_route} | ${sa} | ${milliKW(k.R_jc_K_W)}${pass ? '' : ' ⚠'} | ${kPa(k.DeltaP_Pa)} | ${fmt(k.pump_power_W, 3)} | ${pxCell(k, 'wall_min', 'rec')} | ${pxCell(k, 'gap_min', 'rec')} | ${pxCell(k, 'gap_perp', 'abs')} | ${k.manufacturability?.verdict ?? '—'} | ${k.kpi_status} |`)
   })
   L.push('')
 

@@ -2338,6 +2338,11 @@ manufacturability now share the ONE table:
   (rule → mm value/bounds), converted via the TS mirror's `LMM_PROC`;
   non-LMM routes render `—`. Pinned rows are labeled `(pinned)`
   (`pinned` added to the TS `BaselineResult`).
+- **SA column (same day, user request):** `SA fin/eff (mm²)` — the V3.2
+  fin-only structure area and its effective value (η_f × uniformity ×
+  access derated), from the per-candidate `areas` block. Raw SA flatters
+  thin-fin designs (low η_f), so both are shown; completes the requested
+  SA · R_jc · ΔP performance set in the one comparison table.
 
 **Pinned reference row (same day, user request):** a candidate case may
 now carry **`pinned_stack` + `pinned_operating`** — a FIXED reference is
