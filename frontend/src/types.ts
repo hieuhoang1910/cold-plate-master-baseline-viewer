@@ -144,6 +144,9 @@ export interface BaselineResult {
   manufacturability?: MfgInfo
   // V3.3 — set on the built-in Incus M-presets.
   preset?: boolean
+  // 2026-07-31 — set on fixed references scored on their own as-sent envelope
+  // (Prototype 1): project settings never rescale a part that exists.
+  pinned?: boolean
   // V5.1 — S6 flow-network block (fin families; spec §47).
   flow_network?: FlowNetworkBlock
 }

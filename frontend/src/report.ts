@@ -1,4 +1,5 @@
 import { fmt, kPa, milliKW, pct } from './format'
+import { LMM_PROC, normalizeRoute } from './manufacturing'
 import type { BaselineResult, Catalog, DesignState, Project } from './types'
 
 // V2.6 — assemble a print-ready Markdown design-review from the current state
@@ -123,11 +124,29 @@ export function generateReport(
     L.push('')
   }
 
-  L.push('## 4. Candidate comparison')
-  L.push('| Design | Family | Route | R_jc (mK/W) | ΔP (kPa) | pump (W) | Status |', '|---|---|---|---|---|---|---|')
-  catalog.candidates.forEach((k) => {
+  // §4 — M1-and-forward only (user decision 2026-08-03): the default catalog
+  // rows (v6 hero, straight, supplier floor, LPBF fallback, gyroid screening)
+  // are physics references, not build candidates. Performance and the Incus
+  // pixel checks share ONE table, each px cell as have/Paul's-reference.
+  const toPx = (mm: number) => mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm
+  const glyph = (s: string) => (s === 'FAIL' ? ' ✗' : s === 'MARGINAL' ? ' ⚠' : '')
+  const pxCell = (k: BaselineResult, rule: string, ref: 'rec' | 'abs') => {
+    if (normalizeRoute(k.process_route) !== 'LMM') return '—'
+    const c = k.manufacturability?.checks.find((x) => x.rule === rule)
+    if (!c || c.value == null) return '—'
+    const bound = ref === 'rec' ? (c.rec ?? c.abs) : (c.abs ?? c.rec)
+    return `${fmt(toPx(c.value), 1)}/${bound != null ? fmt(toPx(bound), 0) : '—'}${glyph(c.status)}`
+  }
+  const mRows = catalog.candidates.filter((k) => k.preset || k.saved)
+  const rows = mRows.length ? mRows : catalog.candidates
+  L.push('## 4. Candidate comparison — M1 and forward')
+  if (mRows.length) L.push('_Default catalog reference rows (v6 hero, straight fin, supplier floor, LPBF fallback, gyroid screening) are excluded — Incus M-presets + this project\'s saved designs only._')
+  L.push('_Pixel cells are **have/reference** in GREEN px (35 µm px; final mm × 1.197 ÷ 0.035 — Incus guidelines 07/2026): fin t vs the 4 px recommendation, gap b vs the 8 px deep-channel recommendation (6 px floor), perpendicular passage at max wave slope vs its 6 px floor (hard rule, no rec tier — at zero slope perp = gap). ⚠ marginal · ✗ below floor._')
+  L.push('| Design | Family | Route | R_jc (mK/W) | ΔP (kPa) | pump (W) | fin t (px) | gap b (px) | perp (px) | Mfg | Status |',
+    '|---|---|---|---|---|---|---|---|---|---|---|')
+  rows.forEach((k) => {
     const pass = k.R_jc_K_W <= g.limit_R_jc_K_W
-    L.push(`| ${k.name ?? k.design_id} | ${k.family} | ${k.process_route} | ${milliKW(k.R_jc_K_W)}${pass ? '' : ' ⚠'} | ${kPa(k.DeltaP_Pa)} | ${fmt(k.pump_power_W, 3)} | ${k.kpi_status} |`)
+    L.push(`| ${k.name ?? k.design_id}${k.pinned ? ' (pinned)' : ''} | ${k.family} | ${k.process_route} | ${milliKW(k.R_jc_K_W)}${pass ? '' : ' ⚠'} | ${kPa(k.DeltaP_Pa)} | ${fmt(k.pump_power_W, 3)} | ${pxCell(k, 'wall_min', 'rec')} | ${pxCell(k, 'gap_min', 'rec')} | ${pxCell(k, 'gap_perp', 'abs')} | ${k.manufacturability?.verdict ?? '—'} | ${k.kpi_status} |`)
   })
   L.push('')
 

@@ -2318,6 +2318,27 @@ draft applied from the studio.
   stack, identical for every non-pinned candidate; only pinned rows
   (Prototype 1) carry their own envelope and can differ.
 
+## 2026-08-03 — Report §4: M1-forward only, px checks in the comparison table (BUILT)
+
+User decision: the Report's candidate comparison drops the default catalog
+rows (v6 hero, straight fin, supplier floor, LPBF fallback, gyroid
+screening — physics references, not build candidates) and compares only
+the **Incus M-presets + the project's saved designs** (falls back to the
+full list if a catalog somehow has neither). Performance and
+manufacturability now share the ONE table:
+
+- New columns `fin t (px)` · `gap b (px)` · `perp (px)` · `Mfg`, each px
+  cell rendered **have/reference** in GREEN px (final mm × 1.197 ÷ 0.035,
+  guidelines 07/2026): fin t vs the **4 px** recommendation, gap b vs the
+  **8 px** deep-channel recommendation (6 px floor), perpendicular
+  wave-slope passage vs its **6 px floor** (hard rule — no rec tier, at
+  zero slope perp = gap). ⚠ = MARGINAL, ✗ = below floor, e.g. M1 reads
+  `b 5.1/8 ✗ · perp 1.3/6 ✗` and M4b `8.0/8 · 6.1/6`.
+- Values come from the API's per-candidate `manufacturability.checks`
+  (rule → mm value/bounds), converted via the TS mirror's `LMM_PROC`;
+  non-LMM routes render `—`. Pinned rows are labeled `(pinned)`
+  (`pinned` added to the TS `BaselineResult`).
+
 **Pinned reference row (same day, user request):** a candidate case may
 now carry **`pinned_stack` + `pinned_operating`** — a FIXED reference is
 scored on its own as-sent envelope and operating point in every project;

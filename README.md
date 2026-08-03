@@ -58,6 +58,15 @@ corrects. ICE rev 3's distribution topology (10 feed ducts, interdigitated
 side-venting returns, 1.40 mm compartment pitch) was mesh-extracted from the
 actual INCUS part during the build, resolving spec §54 Q1.
 
+The Report's candidate comparison (§4) covers **M1 and forward only** — the
+Incus M-presets plus the project's saved designs; the default catalog rows
+(v6 hero, straight fin, supplier floor, LPBF fallback, gyroid screening) are
+physics references and stay out. Performance and manufacturability share one
+table: each Incus pixel check appears as **have/reference** in green px
+(e.g. gap `5.1/8 ✗` = the design's 5.1 px vs Paul's 8 px deep-channel
+recommendation) for fin t (rec 4 px), gap b (rec 8 px, floor 6) and the
+perpendicular wave-slope passage (6 px floor), plus the per-route verdict.
+
 **Verify (V4).** Drop the binary STL Hieu exports from nTop onto the ✓ Verify
 tab and the app checks it against the same implicit geometry the solvers
 scored — entirely in the browser (a Web Worker; no new endpoints, no pip):
