@@ -17,7 +17,10 @@ function goodBadColor(t: number): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`
 }
 
-export function Heatmap({ result }: { result: SweepResult }) {
+export function Heatmap({ result, onPick }: {
+  result: SweepResult
+  onPick?: (x: number, y: number) => void
+}) {
   const ob = objectiveOf(result.objective)
   const xs = Array.from(new Set(result.grid.map((g) => g.x))).sort((a, b) => a - b)
   const ys = Array.from(new Set(result.grid.map((g) => g.y))).sort((a, b) => a - b)
@@ -65,8 +68,10 @@ export function Heatmap({ result }: { result: SweepResult }) {
           if (!c || c.objective == null) return null
           return (
             <rect key={`${i}-${j}`} x={xi(i)} y={yj(j)} width={cw + 0.6} height={chh + 0.6}
-              fill={goodBadColor(norm(c.objective))} opacity={cellOpacity(c)}>
-              <title>{`${varLabel(result.x_var)}=${fmt(x, 3)}, ${varLabel(result.y_var)}=${fmt(y, 3)}\n${ob.label}=${fmt(c.objective * ob.scale, ob.digits)} ${ob.unit}\nR_jc=${fmt((c.R_jc_K_W ?? 0) * 1000, 2)} mK/W · ΔP=${fmt((c.DeltaP_Pa ?? 0) / 1000, 2)} kPa · ${c.kpi_status}${c.mfg ? ` · mfg ${c.mfg}` : ''}`}</title>
+              fill={goodBadColor(norm(c.objective))} opacity={cellOpacity(c)}
+              onClick={onPick ? () => onPick(x, y) : undefined}
+              style={onPick ? { cursor: 'pointer' } : undefined}>
+              <title>{`${varLabel(result.x_var)}=${fmt(x, 3)}, ${varLabel(result.y_var)}=${fmt(y, 3)}\n${ob.label}=${fmt(c.objective * ob.scale, ob.digits)} ${ob.unit}\nR_jc=${fmt((c.R_jc_K_W ?? 0) * 1000, 2)} mK/W · ΔP=${fmt((c.DeltaP_Pa ?? 0) / 1000, 2)} kPa · ${c.kpi_status}${c.mfg ? ` · mfg ${c.mfg}` : ''}${onPick ? '\nclick → load into sliders' : ''}`}</title>
             </rect>
           )
         }),

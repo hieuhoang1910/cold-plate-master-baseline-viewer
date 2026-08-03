@@ -57,9 +57,15 @@ export function OptimizerPanel({
   }
 
   const o = result?.optimum
+  // Any swept point can be loaded into the sliders, not just the ★ optimum —
+  // click a heatmap cell or a Pareto point to try that (x, y) combination.
+  const loadPoint = (x: number, y: number) => {
+    if (!result) return
+    onLoadOptimum({ [result.x_var]: x, [result.y_var]: y } as Partial<DesignState>)
+  }
   const loadOpt = () => {
     if (!result || !o) return
-    onLoadOptimum({ [result.x_var]: o.x, [result.y_var]: o.y } as Partial<DesignState>)
+    loadPoint(o.x, o.y)
   }
 
   // Take the top-N sweep points (Pareto front, ranked by the objective) and add
@@ -163,16 +169,16 @@ export function OptimizerPanel({
           <div className="opt-chart">
             <div className="opt-cap">
               {objectiveOf(result.objective).label} heatmap · {varLabel(result.x_var)} × {varLabel(result.y_var)}{' '}
-              <span className="muted">green = better · ★ optimum · ☆ gates-only · dim = gate fail / mfg FAIL / marginal</span>
+              <span className="muted">green = better · ★ optimum · ☆ gates-only · dim = gate fail / mfg FAIL / marginal · click a cell → sliders</span>
             </div>
-            <Heatmap result={result} />
+            <Heatmap result={result} onPick={loadPoint} />
           </div>
           <div className="opt-chart">
             <div className="opt-cap">
               Pareto · R_jc vs pump{' '}
-              <span className="muted">● grid · ◆ candidates · ○ current · ★ optimum · — floor/gate</span>
+              <span className="muted">● grid · ◆ candidates · ○ current · ★ optimum · — floor/gate · click a point → sliders</span>
             </div>
-            <Pareto result={result} candidates={candidates} current={current} />
+            <Pareto result={result} candidates={candidates} current={current} onPick={loadPoint} />
           </div>
         </div>
       )}

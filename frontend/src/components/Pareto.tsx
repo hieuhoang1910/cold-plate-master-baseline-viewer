@@ -1,4 +1,5 @@
 import { fmt } from '../format'
+import { varLabel, varUnit } from '../optimizer'
 import type { BaselineResult, SweepResult } from '../types'
 
 const MUTED = '#93a0b5'
@@ -6,11 +7,12 @@ const FAINT = '#6b7688'
 const AXIS = '#2a3547'
 
 export function Pareto({
-  result, candidates, current,
+  result, candidates, current, onPick,
 }: {
   result: SweepResult
   candidates: BaselineResult[]
   current: BaselineResult | null
+  onPick?: (x: number, y: number) => void
 }) {
   const pts = result.grid.filter((g) => g.pump_power_W != null && g.R_jc_K_W != null)
   if (pts.length === 0) return null
@@ -76,6 +78,21 @@ export function Pareto({
         fill="none" stroke="#5b9dff" strokeWidth={1.5} opacity={0.85} />
       {pareto.map((p, i) => (
         <circle key={`p${i}`} cx={X(p.pump_power_W!)} cy={Y(p.R_jc_K_W! * 1000)} r={2.6} fill="#5b9dff" />
+      ))}
+
+      {/* invisible, larger hit targets: click any swept point to load its (x, y)
+          into the sliders — front points drawn last so they win where dots overlap */}
+      {onPick && pts.map((p, i) => (
+        <circle key={`gh${i}`} cx={X(p.pump_power_W!)} cy={Y(p.R_jc_K_W! * 1000)} r={4.5}
+          fill="transparent" style={{ cursor: 'pointer' }} onClick={() => onPick(p.x, p.y)}>
+          <title>{`${varLabel(result.x_var)} ${fmt(p.x, 3)} ${varUnit(result.x_var)} · ${varLabel(result.y_var)} ${fmt(p.y, 3)} ${varUnit(result.y_var)}\nR_jc=${fmt(p.R_jc_K_W! * 1000, 2)} mK/W · pump ${fmt(p.pump_power_W!, 3)} W\nclick → load into sliders`}</title>
+        </circle>
+      ))}
+      {onPick && pareto.map((p, i) => (
+        <circle key={`ph${i}`} cx={X(p.pump_power_W!)} cy={Y(p.R_jc_K_W! * 1000)} r={6}
+          fill="transparent" style={{ cursor: 'pointer' }} onClick={() => onPick(p.x, p.y)}>
+          <title>{`Pareto front\n${varLabel(result.x_var)} ${fmt(p.x, 3)} ${varUnit(result.x_var)} · ${varLabel(result.y_var)} ${fmt(p.y, 3)} ${varUnit(result.y_var)}\nR_jc=${fmt(p.R_jc_K_W! * 1000, 2)} mK/W · pump ${fmt(p.pump_power_W!, 3)} W\nclick → load into sliders`}</title>
+        </circle>
       ))}
 
       {candidates.map((c, i) => (

@@ -466,7 +466,9 @@ export function About({ onClose }: { onClose: () => void }) {
               minimizing it. The <b>Optimizer</b> tab sweeps two family-appropriate variables with the active
               project's coolant, budgets <i>and manufacturing rulebook</i> riding on every grid point — ★ is the
               best point that fits all of it, ☆ is what the physics alone would pick, and the distance between
-              them is the price of manufacturability, stated in mK/W and kelvin.</p>
+              them is the price of manufacturability, stated in mK/W and kelvin. Every swept point is
+              clickable: a heatmap cell or a Pareto point loads its values into the sliders, so you can
+              hand-tune from <i>any</i> corner of the landscape, not just the optimum.</p>
           </section>
 
           <section>

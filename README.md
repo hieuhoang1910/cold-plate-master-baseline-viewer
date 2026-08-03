@@ -109,7 +109,10 @@ R_jc (or pump/ΔP) *among points that fit the T_j gate + ΔP + pump budgets* —
 reported with its T_j margin in °C; the Pareto chart draws the pump-budget
 line. Set the budgets in the Design Studio (◆ chip in the header) and the
 optimizer re-runs against them. "★ add top 5 → candidates" turns the best
-sweep points into named, tunable candidates. Since V3 every sweep point also
+sweep points into named, tunable candidates. **Any swept point is clickable**
+— a heatmap cell or a Pareto point (front or grid dot) loads its (x, y)
+values straight into the sliders, so you can try any corner of the
+landscape, not just the ★ optimum. Since V3 every sweep point also
 carries a manufacturability verdict: the heatmap dims non-compliant tiers and
 the optimizer shows **two stars** — ★ the best point that also passes the
 active manufacturing rulebook, ☆ the gates-only optimum — so the price of

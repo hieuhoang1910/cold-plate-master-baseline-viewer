@@ -179,6 +179,8 @@ k_solid override, wavy-Nu override, apply thermal-entry uplift, relative roughne
 - **Pareto front** — **default R_jc vs pump power** (pump has its own 5 W gate); toggle to **R_jc vs ΔP** (cold-plate 50 kPa gate, the v6-native axis). At fixed flow pump = V̇·ΔP so the axes are equivalent — they diverge only when flow is swept. All 5 candidates + the live design plotted; click a point → load it.
 - **Tornado / sensitivity**: which variable moves R_jc most.
 - **"Load into sliders"** on any optimum/candidate → hand-tune from there.
+  **(BUILT 2026-08-03 for every swept point — see the dated addendum: click any
+  heatmap cell or Pareto point, not just the ★ optimum.)**
 
 **Discipline:** label optimizer output as a **screening optimum (uncalibrated multipliers until CFD)** — a design direction, not frozen CAD.
 
@@ -2264,6 +2266,27 @@ the thermal prize for reopening the steep-wave corner is ≈ 4.6 mK/W
 (≈ 2.6 K @ 575 W). Until confirmed, the rules stand and M4b remains
 the target. Caveats unchanged: rig ±35 % R_jc instrumentation; model
 blind to surface finish/manifold topology.
+
+## 2026-08-03 — Optimizer: click ANY swept point → sliders (BUILT)
+
+§8 always said "click a point → load it", but only the ★ optimum had a
+button. Now every swept point is a click target that loads its (x, y)
+pair into the sliders through the same `patchDesign` path:
+
+- **Heatmap** — every cell (including dimmed gate-fail / mfg-FAIL cells,
+  so a failing corner can be inspected on the sliders); the hover tooltip
+  gains a "click → load into sliders" hint line.
+- **Pareto** — both the blue front points and the grey grid dots. The
+  visible marks are 1.6–2.6 px, so invisible ~4.5–6 px hit circles are
+  drawn on top (front targets drawn last → they win where the cloud
+  overlaps). Grid/front points also gain tooltips (x/y values in
+  engineering units + R_jc + pump) they never had.
+- Chart captions now end in "click a cell/point → sliders" for
+  discoverability. `OptimizerPanel` exposes one `loadPoint(x, y)`;
+  `Heatmap`/`Pareto` take an optional `onPick` prop.
+- Unchanged: "load optimum → sliders", "★ add top 5 → candidates", and
+  the ◆ candidate diamonds (full saved designs, hover-only — selecting
+  them belongs to the left list / Comparison tab).
 
 **Pinned reference row (same day, user request):** a candidate case may
 now carry **`pinned_stack` + `pinned_operating`** — a FIXED reference is
