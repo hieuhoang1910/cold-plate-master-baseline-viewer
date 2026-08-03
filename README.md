@@ -7,6 +7,17 @@ runs a second physics model.
 
 Project lead: **Hieu Hoang** — Vinnotek.
 
+## 📦 Download (team)
+
+**[⬇ ColdPlateViewer.zip — latest build](https://github.com/hieuhoang1910/cold-plate-master-baseline-viewer/releases/latest/download/ColdPlateViewer.zip)**
+— unzip, double-click `ColdPlateViewer.exe`; it starts locally and opens the
+viewer in your browser (no install, no Python/Node). Saved projects live in a
+`projects\` folder created next to the exe. The link always serves the newest
+build — the [release](https://github.com/hieuhoang1910/cold-plate-master-baseline-viewer/releases/tag/standalone-latest)
+is rolling and its asset is replaced on every ship (see the commit history on
+`main` for what changed). Windows SmartScreen may warn on first run (unsigned
+exe): More info → Run anyway.
+
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
