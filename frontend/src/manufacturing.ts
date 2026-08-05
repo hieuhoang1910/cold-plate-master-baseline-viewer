@@ -92,6 +92,31 @@ export const LMM_PROC = {
   pixelMm: 0.035, layerMm: 0.025, shrinkXY: 1.197, shrinkZ: 1.23, overpolyPx: 1,
 }
 
+// 2026-08-05 — read out of Incus's own Chitubox configs (Peritsch, archived in
+// 01_Inputs_and_References). pixelMm is DERIVED from platform/resolution so it
+// can never drift from the supplier file: Evo35 56.0/1600 = 35 µm exactly.
+export const LMM_MACHINES = {
+  EVO35: {
+    label: 'Incus Hammer Evo35', resolutionPx: [1600, 2560] as [number, number],
+    platformMm: [56.0, 89.6, 150.02] as [number, number, number],
+    pixelMm: 56.0 / 1600, layerMm: 0.025, preferred: true,
+  },
+  PRO25: {
+    label: 'Incus Hammer Pro25', resolutionPx: [8000, 8128] as [number, number],
+    platformMm: [200.0, 203.2, 140.0] as [number, number, number],
+    pixelMm: 200.0 / 8000, layerMm: 0.025, preferred: false,
+  },
+}
+/** The machine every LMM bound in this file is expressed in (Peritsch
+ *  2026-08-05: "for these parts please always use the HammerEvo35"). */
+export const LMM_MACHINE: keyof typeof LMM_MACHINES = 'EVO35'
+/** Incus's own Chitubox shrink-compensation profile — anisotropic in XY, and
+ *  1–2 % off the 1.197/1.23 basis this app uses. Open question for Paul. */
+export const LMM_SC_PROFILE = { x: 1.21, y: 1.22, z: 1.25, name: 'SCx121y122z125' }
+
+/** FINAL mm → green px (35 µm) — the unit Incus counts on the slice raster. */
+export const greenPx = (finalMm: number) => (finalMm * LMM_PROC.shrinkXY) / LMM_PROC.pixelMm
+
 export interface GreenRow {
   name: string
   final: number
@@ -211,9 +236,10 @@ export function makeManufacturable(d: DesignState): Partial<DesignState> {
       H = snapFinal(H, 'z')
       let A = d.wave_amplitude_mm
       if (d.family === 'wavy_fin' && A > 0 && d.wavelength_mm > 0) {
-        // tame the wave to the slope budget: perp passage ≥ abs floor.
+        // tame the wave to the slope budget: perp passage b·cosθ ≥ abs floor,
+        // AND the fin t·cosθ ≥ its own floor (2026-08-05 shear correction).
         // Snap A DOWN to the grid so the snapped value never re-breaks it.
-        const cNeed = Math.min(1, (r.gapAbs + t) / (t + b))
+        const cNeed = Math.min(1, Math.max(r.gapAbs / b, r.wallAbs / t))
         const aMax = d.wavelength_mm * Math.tan(Math.acos(cNeed)) / (2 * Math.PI)
         A = Math.min(A, aMax)
         A = Math.floor((A * LMM_PROC.shrinkXY) / LMM_PROC.pixelMm) * LMM_PROC.pixelMm / LMM_PROC.shrinkXY
@@ -257,12 +283,16 @@ export function quickVerdict(d: DesignState): MfgVerdict {
   // Incus 2026-07-29: gaps should be wider than fins (LMM fin families)
   if (isFin && normalizeRoute(d.process_route) === 'LMM' && gap != null && gap < wall - 1e-9)
     grades.push('MARGINAL')
-  // 2026-07-31 wave-slope pinch: perpendicular passage (t+b)·cosθ − t at
-  // tanθ = 2πA/λ must hold the abs floor — Incus's "only 2 px" mechanism
+  // 2026-07-31 wave-slope pinch, CORRECTED 2026-08-05: the fin field is a
+  // SHEAR of a straight array, so gap_perp = b·cosθ and fin_perp = t·cosθ at
+  // tanθ = 2πA/λ (not (t+b)·cosθ − t, which is an offset sweep). Measured on
+  // the mesh sent to Incus: 8.11 px actual vs 8.14 px predicted.
   if (d.family === 'wavy_fin' && normalizeRoute(d.process_route) === 'LMM'
       && gap != null && d.wave_amplitude_mm > 0 && d.wavelength_mm > 0) {
-    const th = Math.atan(2 * Math.PI * d.wave_amplitude_mm / d.wavelength_mm)
-    if ((wall + gap) * Math.cos(th) - wall < r.gapAbs - 1e-9) grades.push('FAIL')
+    const c = Math.cos(Math.atan(2 * Math.PI * d.wave_amplitude_mm / d.wavelength_mm))
+    if (gap * c < r.gapAbs - 1e-9) grades.push('FAIL')
+    if (wall * c < r.wallAbs - 1e-9) grades.push('FAIL')
+    else if (wall * c < r.wallRec - 1e-9) grades.push('MARGINAL')
   }
   if (grades.includes('FAIL')) return 'FAIL'
   if (grades.includes('MARGINAL')) return 'MARGINAL'

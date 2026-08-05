@@ -69,7 +69,12 @@ def main() -> int:
     # is therefore: M4b is the best RULE-PASSING design, not the best paper
     # design; Proto 1's thermal edge rides on passages Incus now rejects.
     check("Proto1 reference present", "proto1_reference" in by_id)
-    check("Proto1 -> FAIL (60° wave, gap_perp ~0 px)",
+    # rev 2026-08-05 — under the corrected shear form (b·cosθ) Proto 1's closed
+    # form reads 4.2 px, not ~0; it still FAILs the 6 px floor. Its ACTUAL
+    # passages are worse than any closed form says (raster of the green file:
+    # median 2.7 px, p5 2.0 px) because its wave is graded across the field —
+    # that is the neck scan's job, not this rule's.
+    check("Proto1 -> FAIL (60° wave, perp 4.2 px < 6 px floor)",
           by_id["proto1_reference"]["manufacturability"]["verdict"] == "FAIL")
     # PINNED part-level comparison: the as-built Proto 1 (own 23.4×22.6 core,
     # 1.87 mm sinter base, rig flow) scores WORSE than M4b against the same
@@ -196,6 +201,53 @@ def main() -> int:
     slm = next(r for r in s["routes"] if r["key"] == "SLM_IR")
     check("SLM_IR is literature grade w/ Nikon note", slm["grade"] == "literature"
           and "Nikon" in slm["label"])
+
+    # --- 2026-08-05: anchored to Incus's own Chitubox configs -----------------
+    lp = s["lmm_process"]
+    evo = lp["machines"]["EVO35"]
+    # pixel size is DERIVED from the supplier file, never typed in twice
+    check("Evo35 px = platform/resolution = 35 um",
+          abs(evo["pixel_mm"] - 56.0 / 1600) < 1e-12 and abs(evo["pixel_mm"] - lp["pixel_mm"]) < 1e-12)
+    check("Pro25 px = 25 um", abs(lp["machines"]["PRO25"]["pixel_mm"] - 0.025) < 1e-12)
+    check("Evo35 is the route machine + platform 56 x 89.6 x 150",
+          lp["machine"] == "EVO35" and evo["platform_mm"][:2] == [56.0, 89.6])
+    check("Incus SC profile carried (anisotropic XY)",
+          lp["sc_profile"]["x"] == 1.21 and lp["sc_profile"]["y"] == 1.22
+          and lp["sc_profile"]["x"] != lp["sc_profile"]["y"])
+
+    p2 = by_id["proto2_as_sent"]
+    p2r = {c["rule"]: c for c in p2["manufacturability"]["checks"]}
+    # the mesh actually sent to Incus, ray-probed: 6 / 10 / 16 px green — the
+    # SAME numbers Paul's slicer reported, so slice_px must reproduce them
+    check("Proto2 as-sent present + pinned",
+          p2.get("pinned") is True and p2["manufacturability"]["verdict"] == "PASS")
+    check("Proto2 slice_px = fin 6.0 / gap 10.0 / pitch 16.0 px (Incus measured 6 and 10)",
+          all(s_ in p2r["slice_px"]["message"]
+              for s_ in ("fin 6.0 px", "gap 10.0 px", "pitch 16.0 px")),
+          p2r["slice_px"]["message"])
+    # shear form validated against the mesh: measured 8.11 px vs 8.14 predicted
+    check("Proto2 gap_perp ~ 8.1 px green (measured 8.11)",
+          abs(p2r["gap_perp"]["value"] * manufacturing.LMM_SHRINK_XY
+              / manufacturing.LMM_PIXEL_MM - 8.14) < 0.05,
+          str(p2r["gap_perp"]["value"]))
+    check("Proto2 wall_perp ~ 4.9 px green (measured 4.89)",
+          abs(p2r["wall_perp"]["value"] * manufacturing.LMM_SHRINK_XY
+              / manufacturing.LMM_PIXEL_MM - 4.89) < 0.05,
+          str(p2r["wall_perp"]["value"]))
+    check("Proto2 green envelope fits the Evo35 platform",
+          p2r["build_envelope"]["status"] == "PASS"
+          and "33.5" in p2r["build_envelope"]["message"])
+    check("shrink_basis flags the 1.197 vs SCx121y122z125 delta",
+          "SCx121y122z125" in p2r["shrink_basis"]["message"])
+    # a part too big for the platform must FAIL, not pass silently
+    big = manufacturing.check_case(
+        {"family": "wavy_fin", "process_route": "LMM", "fin_thickness_mm": 0.2,
+         "channel_gap_mm": 0.3, "fin_height_mm": 5.0},
+        {"core_width_mm": 60.0, "core_length_mm": 80.0, "core_height_mm": 5.0,
+         "base_thickness_mm": 0.7})
+    big_r = {c["rule"]: c["status"] for c in big["checks"]}
+    check("oversize green part FAILs build_envelope (60x80 -> 71.8x95.8 green)",
+          big_r["build_envelope"] == "FAIL" and big["verdict"] == "FAIL", str(big_r))
 
     print("-" * 60)
     if FAILURES:

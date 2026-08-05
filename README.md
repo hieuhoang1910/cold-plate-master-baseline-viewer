@@ -21,6 +21,21 @@ exe): More info → Run anyway.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Status (2026-08-05):** the LMM rulebook is now anchored to **Incus's own
+  Chitubox machine configs** (`Chitubox_Evo35_config.cfgx` / `_Pro25_`, sent
+  by Paul Peritsch and archived in `01_Inputs_and_References/`): pixel size is
+  **derived** from platform ÷ resolution (Evo35 56.0 mm ÷ 1600 px = 35.000 µm
+  exactly — the constant was already right, it is now *sourced*), plus new
+  **`build_envelope`** (the green mesh must fit the 56 × 89.6 × 150 mm
+  platform), **`slice_px`** (fin · gap · **pitch** in green px — *pitch is not
+  the gap*), **`wall_perp`** (the wave thins the fin too) and a
+  **`shrink_basis`** advisory (Incus's profile reads `SCx121y122z125`,
+  anisotropic, vs our x1.197/x1.23 — open question). `gap_perp` corrected to
+  the **shear** form `b·cosθ`, validated against the ray-probed mesh Incus
+  sliced (8.11 measured / 8.14 predicted). New pinned row **`proto2_as_sent`**
+  = Prototype 2 exactly as shipped (6 px fin / 10 px gap / 16 px pitch green,
+  **PASS**) — the first design whose px numbers the supplier's own slicer
+  confirmed. Details in the spec's `2026-08-05` section.
 - **Status (2026-07-30):** all of the below **plus the Incus-guidelines
   revision**: LMM rulebook re-anchored to the official
   `Incus_Design_Guidelines.pdf` (green-px basis; the hero-wave presets now
@@ -160,13 +175,21 @@ wider than fins", 2026-07-29); and a tall-fin advisory (fin rules tested at
 ~1 mm height). Under these bounds the presets read honestly: **M1
 (0.12/0.15, ≈ 5 px gap) FAILS** — Incus confirmed on our rev5/ICE parts that
 such gaps won't clean; the historical 0.10 hero stays as a reference row.
-**2026-07-31 — the wave-slope pinch (`gap_perp`):** between in-phase wavy
-fins the *perpendicular* passage at the wave's steepest section is
-(t+b)·cosθ − t with tanθ = 2πA/λ — the hero wave (A 0.55/λ 2.5, 54°)
-pinches it to ~2 px, exactly reproducing Incus's 2026-07-29 "cross section
-only 2 px" findings on rev5/ICE. Nominal widths were never the whole story:
+**2026-07-31 — the wave-slope pinch (`gap_perp`), corrected 2026-08-05:**
+the wavy fin field is a **shear** of a straight array (`x → x − A·sin(2πy/λ)`),
+so the *perpendicular* passage at the wave's steepest section is
+**`b·cosθ`** and the fin across the wave is **`t·cosθ`**, with tanθ = 2πA/λ.
+(The rule first shipped as `(t+b)·cosθ − t`, which describes an *offset*
+sweep — not what nTop or the app's own rasterizer builds. Ray-probing the
+mesh Incus sliced settles it: **measured 8.11 px vs 8.14 px predicted**.)
+The hero wave (A 0.55/λ 2.5, **54°**) still pinches a compliant 8 px gap to
+4.7 px and a 6 px fin to 3.5 px. Nominal widths were never the whole story:
 **every hero-wave preset (M1–M4) honestly FAILs**; compensation fixes
-widths, never slope. The wave-safe presets from the joint (t, b, A) sweep:
+widths, never slope. *Caveat carried in the rule's own message:* the closed
+form assumes a **uniform, in-phase** wave — meshes whose amplitude is graded
+across the field pinch far worse (rev6 measures 1.43 px gaps against a
+13.9 px nominal), and for those the **⌖ neck scan is authoritative**.
+The wave-safe presets from the joint (t, b, A) sweep:
 **M4b (px-exact 6/8 px, A 8 px ⇒ 30°, ≈ 21.5 mK/W — PASS-tier optimum,
 default selection)** and M2b (5/7 px, A 5 px ⇒ 20°, ≈ 20.7 mK/W — best
 allow-marginal corner). ⚒ make-manufacturable now clamps A to the slope

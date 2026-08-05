@@ -37,6 +37,43 @@ sinter shrink x1.197 XY / x1.23 Z, overpolymerization ~1 px per side
 2026-07-29 px review of our rev5/ICE parts: fins 3 px abs / 4-5 px rec;
 channels deeper than 1 mm 6 px abs / 8 px rec (<= 1 mm: 5 px); NEW gap_ratio
 rule (gaps wider than fins); tall-fin advisory (tested at ~1 mm height only).
+
+2026-08-05 revision — anchored to Incus's OWN Chitubox machine configs
+(Chitubox_Evo35_config.cfgx / Chitubox_Pro25_confic.cfgx + "Installation
+manual.txt", Peritsch 2026-08-05, archived in 01_Inputs_and_References):
+  * pixel size is now DERIVED from the config, not assumed — Evo35 is
+    56.0 mm / 1600 px = 35.000 um exactly (Pro25: 200.0/8000 = 25 um).
+    Layer 25 um confirmed on every Evo35 profile. Both were already right.
+  * NEW machine envelope rule — the GREEN part must fit the 56 x 89.6 x 150
+    platform. The app had no such check.
+  * NEW slice_px readout — the three numbers Incus actually counts on the
+    raster (fin / gap / PITCH in green px). Added because the Proto 2 mesh
+    shipped as "6 px fin 16 px gap" when 16 px is its PITCH and the gap is
+    10 px, which cost a supplier review cycle (Peritsch 2026-08-05: "could
+    you please clarify which mesh you intended to send?").
+  * gap_perp CORRECTED to the shear construction (see below) and joined by a
+    new wall_perp — the wave thins the FIN perpendicular too.
+  * NEW shrink_basis advisory — Incus's own profiles carry SC x121/y122/z125
+    (anisotropic!) against this app's x1.197 / x1.23. Open question for Paul.
+
+The wave-slope model (corrected 2026-08-05 against a measured mesh)
+-------------------------------------------------------------------
+Both nTop and this app's own rasterizer build a wavy fin field by SHEARING a
+straight array: x -> x - A*sin(2*pi*y/lambda). Under a shear the horizontal
+widths are invariant and the PERPENDICULAR ones scale by cos(theta):
+      gap_perp = b*cos(theta),  fin_perp = t*cos(theta),  tan(theta) = 2*pi*A/lambda
+The 2026-07-31 rule used (t+b)*cos(theta) - t, which is the perpendicular gap
+of an OFFSET construction (a constant-thickness band swept along the curve) —
+not what we build. Verified by ray-probing the mesh actually sent to Incus
+("wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl"): horizontal fin/gap
+are constant to 0.4 % / 0.2 % across all 55 fins (a shear signature), and the
+measured minimum perpendicular passage is 8.11 px against 8.14 px predicted
+by b*cos(theta) — the old form predicted 7.03 px.
+CAVEAT: this closed form assumes a UNIFORM, IN-PHASE wave. Legacy meshes
+(rev5/rev6, Prototype 1) grade the amplitude across the field, so adjacent
+fins converge and the passage pinches far below b*cos(theta) — rev6 measures
+1.4 px horizontal gaps where the nominal is 13.9 px. For those the Verify
+tab's raster/EDT neck scan is authoritative, not this rule.
 """
 
 from __future__ import annotations
@@ -68,12 +105,52 @@ LMM_GAP_REC_PX_SHALLOW = 6
 LMM_DEEP_CHANNEL_MM_GREEN = 1.0   # depth threshold separating the two bands
 LMM_FIN_TESTED_H_MM_GREEN = 1.0   # fin rules tested at ~1 mm height only
 
+# ---------------------------------------------------------------------------
+# Incus machines, read out of the Chitubox configs Paul shipped 2026-08-05.
+# pixel_mm is DERIVED (platform / resolution), so it can never drift from the
+# supplier's own file: Evo35 56.0/1600 = 0.035 exactly, Pro25 200.0/8000 = 0.025.
+# ---------------------------------------------------------------------------
+LMM_MACHINES: Dict[str, Dict[str, Any]] = {
+    "EVO35": {
+        "label": "Incus Hammer Evo35",
+        "resolution_px": [1600, 2560],
+        "platform_mm": [56.0, 89.6, 150.02],
+        "pixel_mm": 56.0 / 1600,      # = 0.035
+        "layer_mm": 0.025,
+        "preferred": True,            # Peritsch 2026-08-05: "for these parts
+                                      # please always use the HammerEvo35"
+    },
+    "PRO25": {
+        "label": "Incus Hammer Pro25",
+        "resolution_px": [8000, 8128],
+        "platform_mm": [200.0, 203.2, 140.0],
+        "pixel_mm": 200.0 / 8000,     # = 0.025
+        "layer_mm": 0.025,
+        "preferred": False,
+    },
+}
+LMM_MACHINE = "EVO35"                 # the route's machine (all bounds are its px)
+
+# Incus's own Chitubox shrinkage-compensation profiles ("SCx121y122z125") vs
+# the x1.197 / x1.23 basis this rulebook has used since the 2026-07 review.
+# Theirs is ANISOTROPIC in XY. Which one governs OUR Cu-OF feedstock is an
+# open question (asked 2026-08-05) — the rulebook keeps 1.197/1.23 (that is
+# what the shipped Proto 2 mesh was scaled by) and flags the delta instead of
+# silently re-scaling every number in the app.
+LMM_SC_PROFILE = {"x": 1.21, "y": 1.22, "z": 1.25, "name": "SCx121y122z125"}
+
 
 def _px_final(px: float) -> float:
     """Green px -> final (sintered) mm through the XY shrink. Unrounded so a
     px-exact design (e.g. a 4 px fin = 0.116959... mm) sits ON its bound, not
     a rounding hair below it."""
     return px * LMM_PIXEL_MM / LMM_SHRINK_XY
+
+
+def _green_px(final_mm: float) -> float:
+    """FINAL mm -> green px (35 um) — the unit Incus counts on the slice."""
+    return final_mm * LMM_SHRINK_XY / LMM_PIXEL_MM
+
 
 PASS, MARGINAL, FAIL, INFO = "PASS", "MARGINAL", "FAIL", "INFO"
 
@@ -259,26 +336,44 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
         A = case.get("wave_amplitude_mm") or 0.0
         lam = case.get("wavelength_mm") or 0.0
         if route == "LMM" and t and b and family == "wavy_fin" and A > 0 and lam > 0:
-            # 2026-07-31 — the wave-slope pinch: between in-phase sine fins the
-            # PERPENDICULAR passage at the steepest section is (t+b)·cosθ − t
-            # with tanθ = 2πA/λ. This is what Incus's slicer measures — it
-            # reproduces their "cross section only 2 px" findings on rev5
-            # (predicted 1.3 px vs measured ~2 px) even when the nominal gap
-            # passes. Hard rule vs the abs floor; the nominal-gap rec tier
-            # stays with gap_min (no wave can reach the rec perpendicular).
+            # 2026-07-31, CORRECTED 2026-08-05 — the wave-slope pinch. The fin
+            # field is a SHEAR of a straight array (x -> x − A·sin(2πy/λ)), so
+            # horizontal widths are invariant and the perpendicular ones scale
+            # by cosθ with tanθ = 2πA/λ: gap_perp = b·cosθ, fin_perp = t·cosθ.
+            # (The 2026-07-31 form (t+b)·cosθ − t belongs to an OFFSET sweep,
+            # which is not what nTop or our own rasterizer builds.) Validated
+            # on the mesh sent to Incus: measured 8.11 px vs 8.14 px predicted.
+            # Hard rule vs the abs floor only — the rec tier stays on the
+            # nominal gap_min so a wave never re-grades an already-graded gap.
             theta = math.atan(2.0 * math.pi * A / lam)
-            perp = (t + b) * math.cos(theta) - t
-            c_need = (gap_abs + t) / (t + b)
+            cos_t = math.cos(theta)
+            perp = b * cos_t
+            fin_perp = t * cos_t
+            # largest A that still holds BOTH floors at this λ:
+            # b·cosθ ≥ gap_abs and t·cosθ ≥ wall_abs
+            c_need = max(gap_abs / b, rb["wall_abs"] / t)
             A_budget = (lam * math.tan(math.acos(c_need)) / (2.0 * math.pi)
                         if c_need < 1.0 else 0.0)
             checks.append(_check(
                 "gap_perp", "min perpendicular passage (wave slope)", perp,
                 gap_abs, None,
                 PASS if perp >= gap_abs - 1e-9 else FAIL,
-                f"(t+b)·cos{math.degrees(theta):.0f}° − t = {perp:.3f} mm vs "
-                f"floor {gap_abs:.3f} — the wave's steep sections pinch the "
-                f"channel (Incus 2026-07-29 'only 2 px' mechanism); "
-                f"max A ≈ {A_budget:.3f} mm at λ {lam:.2f}"))
+                f"b·cos{math.degrees(theta):.0f}° = {perp:.3f} mm "
+                f"({_green_px(perp):.1f} px green) vs floor {gap_abs:.3f} "
+                f"({_green_px(gap_abs):.0f} px) / rec {gap_rec:.3f} "
+                f"({_green_px(gap_rec):.0f} px) — the wave's steep sections "
+                f"narrow the passage; max A ≈ {A_budget:.3f} mm at λ {lam:.2f}. "
+                "Uniform in-phase wave assumed — a graded wave pinches further "
+                "(use the ⌖ neck scan on imported meshes)"))
+            checks.append(_check(
+                "wall_perp", "fin thickness across the wave", fin_perp,
+                rb["wall_abs"], rb["wall_rec"],
+                _status(fin_perp, rb["wall_abs"], rb["wall_rec"]),
+                f"t·cos{math.degrees(theta):.0f}° = {fin_perp:.3f} mm "
+                f"({_green_px(fin_perp):.1f} px green) vs floor "
+                f"{rb['wall_abs']:.3f} / rec {rb['wall_rec']:.3f} — the slope "
+                "thins the fin as well as the channel (the slice still shows "
+                f"the full {_green_px(t):.1f} px horizontally)"))
         if b:
             ar = H / b
             checks.append(_check(
@@ -295,6 +390,17 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
                 "pixel_snap", "green pitch on 35 µm grid", pitch_green, None, None, INFO,
                 f"green pitch {pitch_green:.4f} mm = {pitch_green / LMM_PIXEL_MM:.2f} px "
                 + ("(on grid)" if off < 0.02 else "(off grid — snap before CAD export)")))
+            # 2026-08-05 — the three numbers Incus counts in GIMP on the sliced
+            # PNG. Quote all three by name: the Proto 2 mesh went out labelled
+            # "6 px fin 16 px gap" when 16 px is the PITCH and the gap is 10 px,
+            # and Paul had to ask which mesh we meant.
+            checks.append(_check(
+                "slice_px", "what Incus counts on the slice (green px)",
+                _green_px(b), None, None, INFO,
+                f"fin {_green_px(t):.1f} px · gap {_green_px(b):.1f} px · "
+                f"pitch {_green_px(t + b):.1f} px — horizontal runs on the "
+                "raster, the wave does not change them. Name all three when "
+                "sending a mesh: pitch is NOT the gap"))
             # constant-width rule: in-phase parallel fins keep b constant by
             # construction; flag it as the checklist item it is.
             checks.append(_check(
@@ -354,6 +460,36 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
                 f"green fin height {H_green:.2f} mm is beyond the ~1 mm Incus has "
                 "tested — taller fins may deform during cleaning/processing "
                 "(guidelines §4)"))
+        # 2026-08-05 — the part is submitted GREEN (we pre-scale in CAD), so it
+        # is the green envelope that has to fit the platform Paul slices on.
+        mach = LMM_MACHINES[LMM_MACHINE]
+        px, py, pz = mach["platform_mm"]
+        gw = stack.get("core_width_mm", 35.0) * LMM_SHRINK_XY
+        gl = stack.get("core_length_mm", 28.0) * LMM_SHRINK_XY
+        gh = (stack.get("base_thickness_mm", 0.7) + H) * LMM_SHRINK_Z
+        # allow either in-plane orientation on the platform
+        fits = (max(gw, gl) <= max(px, py) and min(gw, gl) <= min(px, py) and gh <= pz)
+        checks.append(_check(
+            "build_envelope", f"green part fits the {mach['label']} platform",
+            max(gw / max(px, py), gl / min(px, py)), None, 1.0,
+            PASS if fits else FAIL,
+            f"green {gw:.1f} × {gl:.1f} × {gh:.2f} mm vs platform "
+            f"{px:.0f} × {py:.1f} × {pz:.0f} mm "
+            f"({mach['resolution_px'][0]}×{mach['resolution_px'][1]} px @ "
+            f"{mach['pixel_mm'] * 1000:.0f} µm) — the submitted mesh is "
+            "green-scaled, so the platform sees the ×1.197 footprint"))
+        # Incus's own Chitubox profiles disagree with our shrink basis.
+        sc = LMM_SC_PROFILE
+        dx = stack.get("core_width_mm", 35.0) * (LMM_SHRINK_XY / sc["x"] - 1.0)
+        dy = stack.get("core_length_mm", 28.0) * (LMM_SHRINK_XY / sc["y"] - 1.0)
+        checks.append(_check(
+            "shrink_basis", "shrink basis vs Incus's slicer profile", None, None, None, INFO,
+            f"this app scales green = final × {LMM_SHRINK_XY} XY / {LMM_SHRINK_Z} Z; "
+            f"Incus's Chitubox profile '{sc['name']}' carries x{sc['x']} y{sc['y']} "
+            f"z{sc['z']} (anisotropic). If theirs governs, the sintered part lands "
+            f"{dx:+.2f} mm in X and {dy:+.2f} mm in Y — open question for Paul "
+            "(2026-08-05). Slice our meshes with shrink compensation OFF: they "
+            "are already green-scaled, and a profile with SC on would apply it twice"))
         checks.append(_check(
             "drainage", "drainage + gravity drain path", None, None, None, INFO,
             "add drainage holes at pocket low points + channel ends; orient for "
@@ -391,6 +527,10 @@ def schema() -> Dict[str, Any]:
             "gap_rec_px_shallow": LMM_GAP_REC_PX_SHALLOW,
             "deep_channel_mm_green": LMM_DEEP_CHANNEL_MM_GREEN,
             "gap_wider_than_fin": True,
+            # 2026-08-05 — straight out of Incus's Chitubox configs
+            "machine": LMM_MACHINE,
+            "machines": LMM_MACHINES,
+            "sc_profile": LMM_SC_PROFILE,
         },
         "enforcement_modes": [
             {"key": "enforce", "label": "Design-to-manufacture",

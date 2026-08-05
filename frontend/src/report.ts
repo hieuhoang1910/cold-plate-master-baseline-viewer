@@ -141,7 +141,8 @@ export function generateReport(
   const rows = mRows.length ? mRows : catalog.candidates
   L.push('## 4. Candidate comparison — M1 and forward')
   if (mRows.length) L.push('_Default catalog reference rows (v6 hero, straight fin, supplier floor, LPBF fallback, gyroid screening) are excluded — Incus M-presets + this project\'s saved designs only._')
-  L.push('_SA = fin-only structure area / effective (η_f × uniformity × access derated). Pixel cells are **have/reference** in GREEN px (35 µm px; final mm × 1.197 ÷ 0.035 — Incus guidelines 07/2026): fin t vs the 4 px recommendation, gap b vs the 8 px deep-channel recommendation (6 px floor), perpendicular passage at max wave slope vs its 6 px floor (hard rule, no rec tier — at zero slope perp = gap). ⚠ marginal · ✗ below floor._')
+  L.push('_SA = fin-only structure area / effective (η_f × uniformity × access derated). Pixel cells are **have/reference** in GREEN px (35 µm px; final mm × 1.197 ÷ 0.035 — Incus guidelines 07/2026, px size derived from their own Evo35 config: 56.0 mm ÷ 1600 px): fin t vs the 4 px recommendation, gap b vs the 8 px deep-channel recommendation (6 px floor), perpendicular passage `b·cosθ` at max wave slope vs its 6 px floor (hard rule, no rec tier — at zero slope perp = gap). ⚠ marginal · ✗ below floor._')
+  L.push('_**Quoting a mesh to Incus:** they count fin, gap and PITCH as separate horizontal runs on the slice raster — pitch = fin + gap, and the wave does not change any of them. Name all three (the Proto 2 mesh went out labelled "16 px gap" when 16 px was its pitch and the gap was 10 px)._')
   L.push('| Design | Family | Route | SA fin/eff (mm²) | R_jc (mK/W) | ΔP (kPa) | pump (W) | fin t (px) | gap b (px) | perp (px) | Mfg | Status |',
     '|---|---|---|---|---|---|---|---|---|---|---|---|')
   rows.forEach((k) => {

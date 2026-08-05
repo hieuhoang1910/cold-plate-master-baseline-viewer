@@ -335,6 +335,33 @@ M_PRESET_CASES = [
               "Q for Paul: does open-top sinter-weld printing relax the 6 px "
               "floor? Its print success says maybe; rev5's rejection says the "
               "bar moved."},
+    # 2026-08-05 — Prototype 2 AS SENT to Incus, ray-probed straight off
+    # "wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl" (green file,
+    # ÷1.197 XY / ÷1.23 Z here). Fins-only + central rib, prismatic in Z (no
+    # base — the SW01.02 sinter-weld route), 55 fins over a 28×28 core.
+    # Green px measured on the raster: fin 6.00, gap 10.00, pitch 16.00 —
+    # EXACTLY what Paul's slicer reported ("the fins are now 6 px and the gaps
+    # are 10 px", 2026-08-05). The file name's "16 px gap" is the PITCH; the
+    # gap is 10 px. "0.34 mm amp" is the GREEN amplitude (0.3417) = 0.2855
+    # final. λ 3.0115 green = 86 px = 2.5159 final.
+    {"design_id": "proto2_as_sent", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 6 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "channel_gap_mm": 10 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "fin_height_mm": 6.7752 / manufacturing.LMM_SHRINK_Z,     # 5.508 final
+     "side_margin_mm": 1.13,
+     "wave_amplitude_mm": 0.3417 / manufacturing.LMM_SHRINK_XY,  # 0.2855 final
+     "wavelength_mm": 86 * manufacturing.LMM_PIXEL_MM / manufacturing.LMM_SHRINK_XY,
+     "pinned_stack": {"die_width_mm": 24.0, "die_length_mm": 31.0,
+                      "core_width_mm": 28.0, "core_length_mm": 28.0,
+                      "core_height_mm": 6.7752 / manufacturing.LMM_SHRINK_Z,
+                      "base_thickness_mm": 1.87,
+                      "k_solid_W_mK": 340.0, "tim_areal_Kcm2_W": 0.05},
+     "notes": "Prototype 2 AS SENT (2026-08-04 mesh, Incus-sliced 2026-08-05) — "
+              "mesh-measured 6 px fin / 10 px gap / 16 px pitch green, wave "
+              "A 0.34 green (0.286 final) / λ 86 px → 35.5° slope. Paul: "
+              "\"this version actually looks quite feasible\". PINNED to its "
+              "as-sent 28×28 envelope. NB the file name says \"16 px gap\" but "
+              "16 px is the pitch — quote fin/gap/pitch separately from now on."},
 ]
 
 

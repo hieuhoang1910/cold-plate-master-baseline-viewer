@@ -72,7 +72,7 @@ export function About({ onClose }: { onClose: () => void }) {
               <li><b>Coolant:</b> water, 2.65 L/min, 25 °C inlet.</li>
               <li><b>Cooler:</b> printed copper (k ≈ 340 W/m·K), die-coverage active core physically <b>28 mm wide × 35 mm long</b>, 5.5 mm tall, on a 0.7 mm base. Center-feed bidirectional flow (2 paths), fins parallel to the 28 mm side.</li>
               <li><b>Gates:</b> R_jc ≤ 0.078 K/W · ΔP ≤ 50 kPa · pump ≤ 5 W · coverage ≥ 1.</li>
-              <li><b>Manufacturing target (updated 2026-07-31):</b> LMM route, design <b>M4b</b> (t 0.175 / b 0.234, px-exact 6/8 px, wave tamed to A 0.234 / λ 2.5 ⇒ 30° slope) — the constrained optimum that holds every guideline rule <i>including</i> the wave-slope pinch. The July-2026 guidelines put deep channels at 6–8 px green, and the 2026-07-29 px review revealed the deeper issue: the hero wave (A 0.55, 54° slope) pinches the <i>perpendicular</i> passage to ~2 px at the steep sections, so <b>M1–M4 with that wave all read FAIL</b> regardless of nominal widths. <b>M2b</b> (5/7 px, A 0.146) is the aggressive allow-marginal corner — thermally ~1 mK/W better, thinner margins everywhere. The 0.10 hero stays as an unprintable reference row.</li>
+              <li><b>Manufacturing target (updated 2026-07-31):</b> LMM route, design <b>M4b</b> (t 0.175 / b 0.234, px-exact 6/8 px, wave tamed to A 0.234 / λ 2.5 ⇒ 30° slope) — the constrained optimum that holds every guideline rule <i>including</i> the wave-slope pinch. The July-2026 guidelines put deep channels at 6–8 px green, and the 2026-07-29 px review revealed the deeper issue: the hero wave (A 0.55, 54° slope) pinches the <i>perpendicular</i> passage to ~2 px at the steep sections, so <b>M1–M4 with that wave all read FAIL</b> regardless of nominal widths. <b>M2b</b> (5/7 px, A 0.146) is the aggressive allow-marginal corner — thermally ~1 mK/W better, thinner margins everywhere. The 0.10 hero stays as an unprintable reference row. <b>2026-08-05:</b> the slope rule was corrected to the shear form (perpendicular passage <b>b·cosθ</b>, fin <b>t·cosθ</b>) and validated against the mesh Incus actually sliced — every verdict above is unchanged, the numbers are now measured rather than modelled. <b>Prototype 2 as sent</b> (6 px fin / 10 px gap / 16 px pitch green, 35.5° wave) is in the catalog as a pinned row and reads <b>PASS</b> on every rule; Paul's own slice reported the same 6 and 10 px.</li>
             </ul>
             <p className="note">
               Axis note: physically 28 mm is the flow direction and 35 mm is transverse (it sets the fin count).
@@ -358,12 +358,31 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>Gap vs fin</td><td>—</td><td>b ≥ t</td>
                   <td>"Gaps should be wider than fins" (2026-07-29) — overpolymerisation narrows the
                     printed channel ~1 px per side, so the drawn gap must dominate the pitch.</td></tr>
-                <tr><td>Wave slope (perp. passage)</td><td>≥ 6 px at max slope</td><td>—</td>
-                  <td>Between in-phase wavy fins the true passage at the steepest section is
-                    (t+b)·cosθ − t with tanθ = 2πA/λ. The hero wave (A 0.55/λ 2.5, 54°) pinches
-                    it to ~2 px — exactly Incus's "cross section only 2 px" findings — no matter
-                    how wide the nominal gap is. M4b/M2b carry the largest wave the floor allows
-                    (30°/20°); compensation cannot fix slope, only widths.</td></tr>
+                <tr><td>Wave slope — perp. passage</td><td>≥ 6 px at max slope</td><td>—</td>
+                  <td>The fin field is a <b>shear</b> of a straight array (x → x − A·sin(2πy/λ)), so
+                    horizontal widths never change but the <i>perpendicular</i> passage at the
+                    steepest section is <b>b·cosθ</b>, tanθ = 2πA/λ. The hero wave (A 0.55/λ 2.5,
+                    <b>54°</b>) squeezes a compliant 8 px gap to 4.7 px no matter how wide the
+                    nominal is. M4b/M2b carry the largest wave the floor allows (30°/20°);
+                    compensation cannot fix slope, only widths. <b>Assumes a uniform, in-phase
+                    wave</b> — if the amplitude is graded across the field, adjacent fins converge
+                    and the real passage is far worse (rev6: 1.4 px against a 13.9 px nominal). Use
+                    the ▦ Pixel tab's ⌖ neck scan on any imported mesh.</td></tr>
+                <tr><td>Wave slope — fin across the wave</td><td>≥ 3 px</td><td>≥ 4 px</td>
+                  <td>The same cosine thins the <i>fin</i>: <b>t·cosθ</b>. At 54° a 6 px fin is only
+                    3.5 px thick perpendicular, even though the slice still shows a full 6 px
+                    horizontal run.</td></tr>
+                <tr><td>What Incus counts</td><td colSpan={2}>fin · gap · <b>pitch</b> (green px)</td>
+                  <td>They measure horizontal pixel runs on the sliced PNG (in GIMP, with the raster
+                    grid on). <b>Pitch = fin + gap and is not the gap</b> — the Proto 2 mesh went out
+                    named "16 px gap" when 16 px was its pitch and the gap was 10 px, which cost a
+                    review cycle. Quote all three whenever a mesh is sent.</td></tr>
+                <tr><td>Build platform</td><td colSpan={2}>56 × 89.6 × 150 mm (Evo35)</td>
+                  <td>1600 × 2560 px at 35 µm — the pixel size is <i>derived</i> from Incus's own
+                    Chitubox config (56.0 mm ÷ 1600 px), not assumed. The mesh we submit is
+                    green-scaled, so it is the ×1.197 footprint that has to fit. (Pro25 is
+                    200 × 203.2 × 140 mm at 25 µm — Paul: "for these parts please always use the
+                    HammerEvo35".)</td></tr>
                 <tr><td>Aspect ratio H/b</td><td>—</td><td>≤ ~30</td>
                   <td>"Taller fins need thicker fins" — deformation during processing.</td></tr>
                 <tr><td>Pixel grid</td><td colSpan={2}>35 µm XY / 25 µm Z (green)</td>
@@ -372,7 +391,12 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>Process chain</td><td colSpan={2}>×1.197 XY / ×1.23 Z shrink · overpoly ∓2 px</td>
                   <td>The print is drawn oversized (sinter shrink) and features grow ~1 px/side during
                     exposure — fins are drawn 2 px thinner and channels 2 px wider in CAD to cancel it.
-                    The ▦ Pixel tab shows exactly this effect.</td></tr>
+                    The ▦ Pixel tab shows exactly this effect. <b>Open question (2026-08-05):</b> Incus's
+                    own Chitubox profile reads <code>SCx121y122z125</code> — x 1.21 / y 1.22 / z 1.25,
+                    <i>anisotropic in XY</i>. If that governs our Cu-OF, a 28 mm part lands ~0.3 mm short
+                    in X and ~0.5 mm in Y. We keep 1.197/1.23 (what the shipped Proto 2 mesh used) until
+                    Paul confirms. Either way our meshes are <b>already green-scaled</b>, so they must be
+                    sliced with shrink compensation <b>OFF</b> or it is applied twice.</td></tr>
                 <tr><td>Cleanability at size</td><td colSpan={2}>warning</td>
                   <td>Incus's proven-clean coupon is 7.7 × 7.7 mm; our core is ~17× larger — "big part,
                     small channels" traps feedstock. The Option-2 coupon matrix is the confirmation path.</td></tr>
@@ -881,6 +905,8 @@ export function About({ onClose }: { onClose: () => void }) {
               <li>Incus GmbH. <i>Component Design for Lithography-based Metal Manufacturing of Cu-OF</i> (Incus_Design_Guidelines.pdf), July 2026 — official DLP design rules, all dims green-state px. <span className="muted">Primary source of the LMM rulebook since 2026-07-30: shrink ×1.197/×1.23, 35/25 µm grids, overpoly ≈1 px/side (∓2 px CAD comp), fins 3 px abs / 4–5 px rec, deep channels 6–8 px, sinter bonding for enclosed cavities.</span></li>
               <li>Peritsch, P. (Incus GmbH). Email "AW: [EXTERN] Re: [Incus – Vinnotek] 3d printing quotation", 2026-07-07 — DfAM review of our three v6 STLs. <span className="muted">Distilled in <code>cold_plate_v6_incus_manufacturability_review_20260708.md</code>; first supplier-verified LMM rulebook.</span></li>
               <li>Peritsch, P. (Incus GmbH). Email, 2026-07-29 — px review of the rev5 wavy + ICE fin arrays: 2 px gap cross-sections "will not be cleaned", 1–2 px fins too thin; "increase the ratio fins to gaps — gaps should be wider than fins". <span className="muted">Source of the gap_ratio rule.</span></li>
+              <li>Peritsch, P. (Incus GmbH). Email + attachments, 2026-08-05 — slice of our Proto 2 mesh ("the fins are now 6 px and the gaps are 10 px … a good chance of success with this one"), the Chitubox machine configs <code>Chitubox_Evo35_config.cfgx</code> / <code>Chitubox_Pro25_confic.cfgx</code> and <code>Installation manual.txt</code>, and the instruction "for these parts please always use the HammerEvo35". <span className="muted">Archived in <code>01_Inputs_and_References/</code>. Source of the derived 35 µm pixel, the 56 × 89.6 × 150 mm build envelope, the SCx121y122z125 shrink question, and the note that exposed areas are BLACK in Incus's in-house slicer but WHITE in Chitubox.</span></li>
+              <li>Vinnotek mesh measurement, 2026-08-05 — ray probe of <code>wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl</code>: 6.00 / 10.00 / 16.00 px green, A 0.3417 green, λ 86 px, 35.5° max slope, fins-only and prismatic in Z. <span className="muted">Validated the shear form of gap_perp (8.11 px measured vs 8.14 predicted) and proved the file name's "16 px gap" was the pitch.</span></li>
               <li>LPBF thin-wall &amp; channel design limits: vendor design guides (EOS CuCrZr, MakerVerse L-PBF guide) + thin-wall fabrication-limit studies (e.g. Int. J. Adv. Manuf. Technol. 2020, <Doi id="10.1007/s00170-020-05827-4" />). <span className="muted">Basis of the SLM_IR rulebook (literature grade; Nikon SLM Solutions DfM review pending).</span></li>
               <li>Green-laser pure-Cu LPBF capability: Physical and geometrical properties of pure-Cu green-laser samples, <i>Materials</i> 14(13), 3642 (2021), <Doi id="10.3390/ma14133642" />; high-precision LPBF processing of pure copper, <i>Additive Manufacturing</i> (2021), <a className="doi" href="https://www.sciencedirect.com/science/article/abs/pii/S2214860421005704" target="_blank" rel="noopener noreferrer">sciencedirect: S2214860421005704</a>. <span className="muted">Basis of the SLM_GREEN rulebook.</span></li>
             </ol>

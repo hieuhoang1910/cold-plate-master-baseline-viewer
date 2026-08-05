@@ -927,6 +927,11 @@ wider than fins"). Rulebook bounds convert green px → final mm via ÷1.197.
 | `lmm.gap_ratio` | gap vs fin: `b ≥ t` ("gaps should be wider than fins", email 2026-07-29) | — | b ≥ t | soft |
 | `lmm.fin_height` | fin height vs the ~1 mm tested envelope (taller may deform in cleaning) | — | advisory | ℹ |
 | `lmm.aspect` | fin aspect ratio H/b | ≤ 40 (legacy) | **≤ ~30** ("taller fins need thicker fins") | soft |
+| `lmm.gap_perp` | perpendicular passage across the wave `b·cosθ`, `tanθ = 2πA/λ` (shear construction — corrected 2026-08-05, validated on a measured mesh) | ≥ 0.175 mm (6 px green) | — (rec tier stays on `gap_min`) | hard |
+| `lmm.wall_perp` | fin thickness across the wave `t·cosθ` — the slope thins the fin too (2026-08-05) | ≥ 0.088 mm (3 px) | ≥ 0.117 mm (4 px) | hard / soft |
+| `lmm.build_envelope` | GREEN part fits the Evo35 platform 56 × 89.6 × 150 mm (2026-08-05, from Incus's `.cfgx`) | must fit | — | hard |
+| `lmm.slice_px` | fin · gap · **pitch** in green px — what Incus counts on the raster; pitch is NOT the gap (2026-08-05) | — | quote all three | ℹ |
+| `lmm.shrink_basis` | our x1.197/x1.23 vs Incus's profile `SCx121y122z125` (anisotropic); slice with SC **off** (meshes are pre-scaled) | — | open question for Paul | ℹ |
 | `lmm.pixel_snap` | XY dims = n × 35 µm; Z = n × 25 µm (green) | — | snap all of t, b, p, A, λ, H | advisory + helper |
 | `lmm.overpoly` | CAD pre-compensation: fin −2 px, channel +2 px (in CAD, not slicer) | — | applied in export recipe | advisory (export) |
 | `lmm.shrink` | green = final × 1.197 (XY) / × 1.23 (Z) | — | applied in export recipe | advisory (export) |
@@ -2358,3 +2363,127 @@ die: as-built Proto 1 = 29.2 mK/W vs M4b 20.1 — M4b ≈ −31 %.** (The
 die-coverage core — a recipe comparison; the catalog row is the physical
 part.) Suite checks: pinned flag present, M4b beats the as-built part,
 and pinned-row R_jc identical across projects to 1e-12.
+
+## 2026-08-05 — anchored to Incus's own slicer config; the shear correction to `gap_perp` (BUILT)
+
+**Trigger.** Paul Peritsch sliced the Proto 2 mesh
+(`wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl`, sent 2026-08-04)
+and reported: *"the fins are now 6 px and the gaps are 10 px … this version
+actually looks quite feasible, and I think we have a good chance of success
+with this one"* — plus a direct question: *"I do not understand the reference
+in your last email … could you please clarify which mesh you intended to
+send?"* He also shipped his **Chitubox machine configs**
+(`Chitubox_Evo35_config.cfgx`, `Chitubox_Pro25_confic.cfgx`,
+`Installation manual.txt`, archived in `01_Inputs_and_References/`) and the
+instruction **"for these parts please always use the HammerEvo35"**.
+
+### What the mesh actually is (ray-probed, not assumed)
+
+The STL was measured directly (pure-Python ray probe, 206 246 triangles,
+X-scanlines at mid-height plus centreline tracking over the full field):
+
+| quantity | green | final (÷1.197 / ÷1.23) |
+|---|---:|---:|
+| envelope | 33.516 × 33.516 × 6.775 mm | 28 × 28 × 5.508 mm |
+| fin `t` | 0.2100 mm = **6.00 px** | 0.1754 mm |
+| gap `b` | 0.3500 mm = **10.00 px** | 0.2924 mm |
+| pitch | 0.5600 mm = **16.00 px** | 0.4678 mm |
+| wave `A` | 0.3417 mm | 0.2855 mm |
+| wavelength `λ` | 3.0115 mm = 86 px | 2.5159 mm |
+| max slope | tanθ = 0.7145 → **θ = 35.5°** | — |
+
+55 fins + a central rib, **prismatic in Z** (identical section at 2 % and
+98 % height — fins-only, no base: the SW01.02 sinter-weld route), and
+**dead uniform**: horizontal fin 5.92–6.09 px and gap 9.91–10.08 px across
+*all* fins, amplitude identical at fin #1, #27 and #53.
+
+**The mesh matches Paul's slice exactly (6 px / 10 px). The file NAME is
+what was wrong: "16 px gap" is the PITCH.** ("0.34 mm amp" is the *green*
+amplitude, and is right.) That is the whole answer to his question — no
+slicer discrepancy, no scaling error, a naming error.
+
+### Rule changes
+
+- **`gap_perp` CORRECTED — the shear form.** Both nTop and this app's own
+  rasterizer ([`verify/raster.ts`](frontend/src/verify/raster.ts)) build the
+  fin field by **shearing** a straight array, `x → x − A·sin(2πy/λ)`. Under a
+  shear the horizontal widths are invariant and the perpendicular ones scale
+  by cosθ:
+
+  > `gap_perp = b·cosθ`  ·  `fin_perp = t·cosθ`  ·  `tanθ = 2πA/λ`
+
+  The 2026-07-31 rule used `(t+b)·cosθ − t`, which is the perpendicular gap
+  of an **offset** sweep (a constant-thickness band swept along the curve) —
+  not what we build. The measurement settles it: perpendicular passage
+  **measured 8.11 px** on the shipped mesh vs **8.14 px** predicted by
+  `b·cosθ` and 7.03 px by the old form; fin `t·cosθ` predicts 4.89 px and
+  measures 4.89 px.
+- **NEW `wall_perp`** — the slope thins the **fin** as well as the channel
+  (`t·cosθ`), graded against the same 3 px abs / 4 px rec fin bounds. At 54°
+  a 6 px fin is only 3.5 px across. The app previously checked the nominal
+  `t` only.
+- **The `A` budget widens accordingly:** the largest wave that holds both
+  floors is `cosθ ≥ max(gap_abs/b, wall_abs/t)`, so at M4b's dims
+  A ≤ 0.351 mm (was 0.241). ⚒ make-manufacturable clamps to the new budget.
+- **Verdict cascade is unchanged** — M1/M2/M3/M4 and the hero still FAIL,
+  M4b PASS, M2b MARGINAL, Proto 1 FAIL. Only the *numbers* move, and they
+  now match a measured mesh.
+
+**Honest caveat, recorded in the rule's own message.** The closed form
+assumes a **uniform, in-phase** wave. Legacy meshes grade the amplitude
+across the field, so adjacent fins converge and the passage pinches far
+below `b·cosθ` — rev6 measures **1.43 px** horizontal gaps where its
+nominal is 13.9 px, and Prototype 1 rasters to a median 2.7 px / p5 2.0 px
+against a closed-form 4.2 px. **For imported or graded meshes the ⌖ neck
+scan is authoritative, not this rule.** (This also revises the 2026-07-31
+claim that the slope cosine alone explained the rev5 rejections: the
+dominant mechanism there was wave-amplitude grading, and the fix that made
+Proto 2 printable was making the wave uniform and in phase.)
+
+### Anchored to the supplier's config
+
+- **`LMM_MACHINES`** — Evo35 and Pro25 read straight out of the `.cfgx`
+  files, with **pixel size DERIVED** (`platform ÷ resolution`) so it can
+  never drift from Paul's own file: Evo35 `56.0/1600 = 35.000 µm`
+  (1600 × 2560, platform 56 × 89.6 × 150.02); Pro25 `200.0/8000 = 25 µm`
+  (8000 × 8128, 200 × 203.2 × 140). Layer 25 µm confirmed on every Evo35
+  profile. **Both constants were already correct** — they are now sourced
+  rather than asserted, and `LMM_MACHINE = EVO35` records Paul's
+  "always use the HammerEvo35".
+- **NEW `build_envelope`** — the submitted mesh is *green*, so it is the
+  ×1.197 footprint that has to fit the platform. FAIL if it does not; the
+  app had no such check. Proto 2 green 33.5 × 33.5 → PASS; a 60 × 80 core
+  (71.8 × 95.8 green) now FAILs instead of passing silently.
+- **NEW `slice_px`** (INFO) — the three numbers Incus counts in GIMP on the
+  sliced PNG: **fin · gap · PITCH** in green px, with the rule stated in the
+  message: *pitch is NOT the gap*. This is the rule that would have caught
+  the mis-named mesh. The Report §4 caption carries the same warning.
+- **NEW `shrink_basis`** (INFO) — **open question for Paul.** Incus's own
+  profiles carry `SCx121y122z125` (x 1.21 / y 1.22 / z 1.25 — **anisotropic
+  in XY**) against this app's isotropic x1.197 / x1.23. If theirs governs our
+  Cu-OF, a 28 × 28 part lands **−0.30 mm in X and −0.53 mm in Y**. The
+  rulebook **keeps 1.197/1.23** (that is what the shipped mesh was scaled by
+  — changing it would silently move every number in the app and de-snap the
+  px-exact presets) and reports the delta instead. The check also states the
+  process rule: **slice our meshes with shrink compensation OFF** — they are
+  already green-scaled, and Paul's `noSC` profile is the correct one (his
+  6 px reading proves he used it; an SC profile would have shown 7.3 px).
+
+### New pinned reference row: `proto2_as_sent`
+
+Prototype 2 exactly as sent, from the mesh measurement above — pinned to its
+own 28 × 28 fins-only envelope like `proto1_reference`, scored on the
+project's operating point. **Verdict PASS on every rule** (fin 6 px, gap
+10 px, `b/t` 1.67, perp 8.1 px ≥ 6 px floor and ≥ the 8 px rec, fin-perp
+4.9 px, envelope fits) — consistent with Paul's "quite feasible". At
+**30.6 mK/W** on its own smaller core it is not a thermal competitor to M4b
+(20.1 on the 35 × 28 core); it is the manufacturability proof point, and the
+first design in the catalog whose px numbers were confirmed by the supplier's
+own slicer.
+
+**Tests:** 9 new checks in `test_v3_manufacturing.py` — derived pixel sizes,
+platform, anisotropic SC carried, Proto 2 present/pinned/PASS, `slice_px`
+reproducing Paul's 6/10/16, `gap_perp`/`wall_perp` matching the measured
+8.11/4.89 px to ±0.05 px, and an oversize part FAILing `build_envelope`.
+All Python suites green (golden parity 5/5); frontend verify 26/26 + build
+clean.
