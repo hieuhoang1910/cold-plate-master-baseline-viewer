@@ -21,6 +21,14 @@ exe): More info → Run anyway.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Status (2026-08-05c):** new pinned row **`proto1_own_block`** — Prototype 1
+  scored against **its own block footprint** as sized in Materialise Magics
+  (28.002 × 27.010 × 6.207 mm green = 23.393 × 22.565 × 5.046 final; bbox
+  byte-identical to our ray probe), die = core → **coverage exactly 1.00**, no
+  GB202 in the row. Reads 32.24 mK/W vs 29.45 on the GB202 basis — the smaller
+  die concentrates TIM + base, and the suite asserts that direction. The
+  design **sliders** now take **typed exact values** (click the number; finer
+  than the drag step) and got wider ranges + 1 µm steps on widths.
 - **Status (2026-08-05b):** **Incus Innovation Study 502/1** (the Prototype 1
   build report) is now in the rulebook and closes three questions: the shrink
   basis is **confirmed** at x/y 1.197 / z 1.23 ("standard factors for copper" —

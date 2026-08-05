@@ -157,6 +157,15 @@ header .api-bad { color: var(--fail); font-size: 14px; }
 .ds-row { margin-bottom: 11px; }
 .ds-top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
 .ds-val { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 14px; }
+/* 2026-08-05 — editable slider value: type exact numbers finer than the drag step */
+.ds-num {
+  width: 72px; background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: inherit; font: inherit; text-align: right; padding: 0 3px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.ds-num::-webkit-outer-spin-button, .ds-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ds-num:hover { border-color: var(--border, #444); }
+.ds-num:focus { border-color: var(--accent, #4da3ff); outline: none; background: var(--bg2, rgba(255,255,255,0.04)); }
 .ds-row input[type=range] { width: 100%; }
 .ds-derived {
   display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 13px; color: var(--muted);

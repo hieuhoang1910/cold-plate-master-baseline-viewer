@@ -286,6 +286,20 @@ def main() -> int:
     check("shrink basis confirmed, not an open question",
           "CONFIRMED" in p1r["shrink_basis"]["message"])
 
+    # --- 2026-08-05c: Prototype 1 on its OWN block footprint ------------------
+    # die = the whole block as sized in Magics (28.002 x 27.010 green, bbox
+    # identical to our ray probe) -> coverage exactly 1.0, no GB202 involved.
+    p1b = by_id["proto1_own_block"]
+    check("proto1_own_block: coverage EXACTLY 1.0 (die = own block)",
+          abs(p1b["coverage"] - 1.0) < 1e-9, str(p1b["coverage"]))
+    check("proto1_own_block: kpi passes (no coverage penalty), mfg still FAIL",
+          p1b["kpi_status"] == "PASS"
+          and p1b["manufacturability"]["verdict"] == "FAIL"
+          and p1b.get("pinned") is True)
+    check("own-block basis reads HIGHER R_jc than the GB202 basis (smaller die "
+          "concentrates TIM+base)",
+          p1b["R_jc_K_W"] > by_id["proto1_reference"]["R_jc_K_W"])
+
     # a part too big for the platform must FAIL, not pass silently
     big = manufacturing.check_case(
         {"family": "wavy_fin", "process_route": "LMM", "fin_thickness_mm": 0.2,

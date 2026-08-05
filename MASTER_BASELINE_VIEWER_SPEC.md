@@ -2600,3 +2600,50 @@ robust method"* — the Proto 2 fins-only workflow is on solid ground.
 dims, Proto 1 dims/law/1.7 px, offset holds `wall_perp = t`, `wave_merge`
 present, overpoly stays on the guidelines, shrink confirmed). All Python suites
 green, golden parity 5/5.
+
+## 2026-08-05c — Prototype 1 on its own block; sliders get exact-entry + wider ranges (BUILT)
+
+**The coverage question resolved (user + Magics).** The `proto1_reference`
+FAIL:coverage chip prompted a check: the fin field really is 23.4 × 22.6 mm
+final — confirmed three independent ways (our ray probe, the report 502/1
+photos by proportion against the 33.9 mm base, and Hieu's Materialise Magics
+part dimensions: **28.002 × 27.010 × 6.207 mm green, bbox identical to the
+probe to the µm, 4 039 320 triangles**). The chip was correct but answers a
+GB202 question about a part that was never sized for the GB202: the physical
+part **thickens two sides beyond the fin field** (as all our designs do), so
+the fair self-referenced row scores the block against itself.
+
+- **NEW pinned row `proto1_own_block`** — die = core = the whole block as
+  sized in Magics (÷1.197/÷1.23 → 23.393 × 22.565 × 5.046 final), 1.87 mm
+  sinter base, rig flow. **Coverage exactly 1.000, KPI PASS.** No GB202
+  anywhere in the row.
+- The three Prototype rows now form a clean triptych: `proto1_reference`
+  ("this part on the GB202" — coverage 0.71, FAIL:coverage),
+  `proto1_own_block` ("this part on its own footprint" — coverage 1.00,
+  **R_jc 32.24 mK/W**), `proto2_as_sent` (28 × 28 fins-only, 30.63). The
+  own-block basis reads HIGHER than the GB202 basis (32.24 vs 29.45) because
+  TIM + base resistances concentrate over the smaller 529 mm² die — asserted
+  in the suite so nobody "fixes" it backwards. Manufacturability is identical
+  across both Proto 1 rows (FAIL, supplier-confirmed) — the reference die
+  never changes printability.
+
+**Design sliders: exact entry + wider ranges (user request).** The slider
+value readout is now an **editable number field** — click, type any value at
+full precision (finer than the drag step), Enter/blur commits, clamped to the
+slider range; a draft state means typing "0.2924" never commits "0" on the
+way through. Drag steps refined to 1 µm on widths; ranges widened so every
+mesh we have measured now fits on-slider:
+
+| slider | was | now |
+|---|---|---|
+| fin t | floor–0.30, 5 µm | floor–**0.60**, 1 µm |
+| gap b | floor–0.40, 5 µm | floor–**0.80**, 1 µm |
+| height H | 2.0–6.5 | **0.5–8.0**, 10 µm |
+| wave A | 0–1.0 | **0–1.5**, 5 µm |
+| wavelength λ | 1.5–6.0 | **0.8–8.0**, 10 µm |
+| flow | 1.0–4.0 | **0.2–8.0**, 0.01 |
+| pin d / pitch | 0.2–2.0 / 0.5–4.0 | 0.1–**3.0** / 0.3–**6.0**, 10 µm |
+| TPMS cell / wall / D_h | 1–4 / ≤0.3 / 0.1–1.0 | **0.5–6** / ≤**0.6** / **0.05–2.0** |
+
+(Proto 1's λ 3.20 and t 0.25, Proto 2's b 0.292, the hero's A 0.55 — all now
+inside range with room to explore beyond.)

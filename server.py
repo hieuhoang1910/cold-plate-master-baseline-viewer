@@ -353,6 +353,38 @@ M_PRESET_CASES = [
               "Q for Paul: does open-top sinter-weld printing relax the 6 px "
               "floor? Its print success says maybe; rev5's rejection says the "
               "bar moved."},
+    # 2026-08-05 — Prototype 1 on its OWN block footprint (user request). The
+    # part always thickens two sides beyond the fin field (all our designs get
+    # that treatment), so the honest self-referenced row sets the DIE equal to
+    # the whole block as sized in Materialise Magics: 28.002 x 27.010 x 6.207
+    # green (bbox confirmed identical by our ray probe, 4 039 320 tris) ->
+    # 23.3934 x 22.5647 x 5.0463 final. die = core = block -> coverage 1.000
+    # EXACT, no GB202 in the picture. Same recipe as proto1_reference
+    # (t 0.25 / b 0.16, offset wave, 1.87 sinter base, rig flow) — the only
+    # difference vs that row is WHAT IT IS SCORED AGAINST: proto1_reference
+    # answers "on the GB202 die" (coverage 0.71), this row answers "on its own
+    # footprint" (coverage 1.00). Mfg verdict identical (FAIL, supplier-
+    # confirmed) — footprint does not change printability.
+    {"design_id": "proto1_own_block", "family": "wavy_fin", "process_route": "LMM",
+     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16,
+     "fin_height_mm": 6.207 / manufacturing.LMM_SHRINK_Z,   # 5.0463 final
+     "wave_construction": "offset",
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.471, "wavelength_mm": 3.20,
+     "pinned_stack": {"die_width_mm": 28.002 / manufacturing.LMM_SHRINK_XY,
+                      "die_length_mm": 27.010 / manufacturing.LMM_SHRINK_XY,
+                      "core_width_mm": 28.002 / manufacturing.LMM_SHRINK_XY,
+                      "core_length_mm": 27.010 / manufacturing.LMM_SHRINK_XY,
+                      "core_height_mm": 6.207 / manufacturing.LMM_SHRINK_Z,
+                      "base_thickness_mm": 1.87,
+                      "k_solid_W_mK": 340.0, "tim_areal_Kcm2_W": 0.05},
+     "pinned_operating": {"flow_lpm": 2.65},
+     "notes": "Prototype 1 on its own block (2026-08-05): die = the whole block "
+              "as sized in Magics — 28.002 × 27.010 × 6.207 green = 23.393 × "
+              "22.565 × 5.046 final — so coverage is exactly 1.00 with no GB202 "
+              "in the picture. The part thickens two sides beyond the fin field "
+              "(all designs do), so this is the fair self-referenced score. Same "
+              "recipe and same supplier-confirmed mfg FAIL as proto1_reference; "
+              "only the reference die differs."},
     # 2026-08-05 — Prototype 2 AS SENT to Incus, ray-probed straight off
     # "wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl" (green file,
     # ÷1.197 XY / ÷1.23 Z here). Fins-only + central rib, prismatic in Z (no
