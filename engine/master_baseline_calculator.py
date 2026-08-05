@@ -172,6 +172,13 @@ class BaselineResult:
     # V3.2 — structure-only surface area (fin faces / pin laterals / TPMS sheet),
     # no channel-floor base. Falls back to wetted_area for surface families.
     fin_area_m2: Optional[float] = None
+    # 2026-08-05 — the SA/V denominator factors, echoed so the UI can show the
+    # calculation (V = core W × L × H) instead of a bare number. These are the
+    # dims of the stack ACTUALLY used (a pinned row's own stack, not the
+    # project's). Pure echo — nothing downstream reads them.
+    core_width_mm: Optional[float] = None
+    core_length_mm: Optional[float] = None
+    core_height_mm: Optional[float] = None
     warnings: List[str] = field(default_factory=list)
 
     def display_row(self) -> Dict[str, Any]:
@@ -372,6 +379,9 @@ def evaluate_case(
         heat_load_deltaT_K=R_jc * op.heat_load_W,
         margin_heat_load_deltaT_K=R_jc * op.margin_heat_load_W,
         kpi_status=kpi_status,
+        core_width_mm=stack.core_width_mm,
+        core_length_mm=stack.core_length_mm,
+        core_height_mm=stack.core_height_mm,
         warnings=warnings + result.get("warnings", []),
     )
 

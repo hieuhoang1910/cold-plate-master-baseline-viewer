@@ -682,7 +682,10 @@ export function About({ onClose }: { onClose: () => void }) {
                 </tr>
                 <tr>
                   <td>SA/V raw (m²/m³)</td>
-                  <td>Total wetted surface per unit of active-core volume — the "brochure" area density.</td>
+                  <td>Total wetted surface per unit of active-core volume — the "brochure" area density. The card
+                    shows the division explicitly (2026-08-05): <b>V<sub>core</sub> = core W × L × H</b> (the
+                    fin-band envelope, base slab excluded; pinned rows use their own core) and SA/V = wetted
+                    area ÷ that V — every factor is a design dim exactly as entered, never shrink-scaled.</td>
                   <td>Mostly a <b>diagnostic, not a goal</b>. It only counts area, not whether that area is hot enough
                     to matter. Chasing raw SA/V alone is how designs end up with impressive area and mediocre R_jc.</td>
                 </tr>

@@ -154,6 +154,20 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
             </div>
           </div>
         )}
+        {r.core_width_mm != null && r.core_length_mm != null && r.core_height_mm != null && (
+          <div className="muted" style={{ fontSize: 12, margin: '8px 0 2px' }}
+            title={'The SA/V denominator, shown as the solver computes it: core envelope '
+              + 'V = core width × core length × core height (the fin-band box; base slab '
+              + 'excluded). Dims are the design values exactly as entered — pinned rows use '
+              + 'their own core. SA/V raw = wetted area ÷ this V; wetted = fin walls + '
+              + 'channel floors along the wavy arc.'}>
+            V<sub>core</sub> = {fmt(r.core_width_mm, 1)} × {fmt(r.core_length_mm, 1)} × {fmt(r.core_height_mm, 1)} mm
+            {' = '}<b>{fmtInt(r.core_width_mm * r.core_length_mm * r.core_height_mm)}</b> mm³
+            {r.wetted_area_m2 != null && (
+              <> · SA/V raw = {fmtInt(r.wetted_area_m2 * 1e6)} mm² ÷ {fmtInt(r.core_width_mm * r.core_length_mm * r.core_height_mm)} mm³</>
+            )}
+          </div>
+        )}
         <div className="metrics">
           <Metric label="SA/V raw" value={`${fmt(r.raw_SA_V_m2_m3, 0)}`} />
           <Metric label="SA/V eff" value={`${fmt(r.effective_SA_V_m2_m3, 0)}`} />

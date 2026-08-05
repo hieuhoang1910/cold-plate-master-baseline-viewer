@@ -115,6 +115,11 @@ export interface BaselineResult {
   wetted_area_m2: number
   flow_area_m2: number
   fin_area_m2?: number | null
+  // 2026-08-05 — SA/V denominator factors echoed by the engine (the stack
+  // actually used — a pinned row's own core, not the project's)
+  core_width_mm?: number | null
+  core_length_mm?: number | null
+  core_height_mm?: number | null
   UA_W_K: number
   eta_f: number | null
   eta_o: number | null

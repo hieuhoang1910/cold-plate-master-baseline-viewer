@@ -2688,3 +2688,13 @@ cost three rounds of confusion on Proto 1's fin-field size, 2026-08-05.)
   do the CAD to slider, I don't care about the performance anymore, I care
   about manufacturability."* UI and reports must never present performance
   as the point of that flow.
+
+### 2026-08-05e — V_core shown with its factors (user request)
+
+The Surface & thermal card now prints the SA/V denominator as the solver
+computes it, e.g. `V_core = 23.4 × 22.6 × 5.0 mm = 2,644 mm³ · SA/V raw =
+14,271 mm² ÷ 2,644 mm³` — every factor a design dim exactly as entered
+(pinned rows echo their own core, not the project's), base slab excluded,
+never shrink-scaled. Engine: `BaselineResult` gains `core_width/length/
+height_mm` echo fields (pure pass-through; parity 5/5). The About Card-3
+glossary documents the formula.
