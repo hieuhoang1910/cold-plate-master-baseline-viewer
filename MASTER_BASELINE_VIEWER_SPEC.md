@@ -2613,19 +2613,22 @@ GB202 question about a part that was never sized for the GB202: the physical
 part **thickens two sides beyond the fin field** (as all our designs do), so
 the fair self-referenced row scores the block against itself.
 
-- **NEW pinned row `proto1_own_block`** — die = core = the whole block as
-  sized in Magics (÷1.197/÷1.23 → 23.393 × 22.565 × 5.046 final), 1.87 mm
-  sinter base, rig flow. **Coverage exactly 1.000, KPI PASS.** No GB202
-  anywhere in the row.
+- **NEW pinned row `proto1_own_block`** — die = core = the whole block with
+  the dimensions **exactly as sized in Materialise Magics: 28.002 × 27.010 ×
+  6.207 mm** (user instruction 2026-08-05, rev 2: taken as-is, no shrink
+  conversion — the first cut of this row divided by ×1.197/×1.23 and was
+  corrected). 1.87 mm sinter base, rig flow. **Coverage exactly 1.000, KPI
+  PASS.** No GB202 anywhere in the row.
 - The three Prototype rows now form a clean triptych: `proto1_reference`
   ("this part on the GB202" — coverage 0.71, FAIL:coverage),
-  `proto1_own_block` ("this part on its own footprint" — coverage 1.00,
-  **R_jc 32.24 mK/W**), `proto2_as_sent` (28 × 28 fins-only, 30.63). The
-  own-block basis reads HIGHER than the GB202 basis (32.24 vs 29.45) because
-  TIM + base resistances concentrate over the smaller 529 mm² die — asserted
-  in the suite so nobody "fixes" it backwards. Manufacturability is identical
-  across both Proto 1 rows (FAIL, supplier-confirmed) — the reference die
-  never changes printability.
+  `proto1_own_block` ("this part on its own Magics-sized footprint" —
+  coverage 1.00, **R_jc 22.57 mK/W**), `proto2_as_sent` (28 × 28 fins-only,
+  30.63). Manufacturability is identical across both Proto 1 rows (FAIL,
+  supplier-confirmed) — the reference die never changes printability.
+  *Basis note, one caliper settles it:* the mesh bbox numerically equals
+  these dims; if they are green state the sintered part measures 23.4 × 22.6
+  (÷1.197), if the part measures 28 × 27 they are final. The row carries the
+  team's Magics numbers by instruction.
 
 **Design sliders: exact entry + wider ranges (user request).** The slider
 value readout is now an **editable number field** — click, type any value at

@@ -287,18 +287,22 @@ def main() -> int:
           "CONFIRMED" in p1r["shrink_basis"]["message"])
 
     # --- 2026-08-05c: Prototype 1 on its OWN block footprint ------------------
-    # die = the whole block as sized in Magics (28.002 x 27.010 green, bbox
-    # identical to our ray probe) -> coverage exactly 1.0, no GB202 involved.
+    # Dimensions EXACTLY as sized in Materialise Magics (28.002 x 27.010 x
+    # 6.207 mm — Hieu's screenshot, taken as-is per instruction, no shrink
+    # conversion). die = core = the block -> coverage exactly 1.0, no GB202.
     p1b = by_id["proto1_own_block"]
+    p1bc = next(c for c in server.M_PRESET_CASES if c["design_id"] == "proto1_own_block")
+    check("proto1_own_block: dims are the Magics numbers AS-IS (28.002 x 27.010 x 6.207)",
+          p1bc["pinned_stack"]["core_width_mm"] == 28.002
+          and p1bc["pinned_stack"]["core_length_mm"] == 27.010
+          and p1bc["pinned_stack"]["die_width_mm"] == 28.002
+          and p1bc["fin_height_mm"] == 6.207)
     check("proto1_own_block: coverage EXACTLY 1.0 (die = own block)",
           abs(p1b["coverage"] - 1.0) < 1e-9, str(p1b["coverage"]))
     check("proto1_own_block: kpi passes (no coverage penalty), mfg still FAIL",
           p1b["kpi_status"] == "PASS"
           and p1b["manufacturability"]["verdict"] == "FAIL"
           and p1b.get("pinned") is True)
-    check("own-block basis reads HIGHER R_jc than the GB202 basis (smaller die "
-          "concentrates TIM+base)",
-          p1b["R_jc_K_W"] > by_id["proto1_reference"]["R_jc_K_W"])
 
     # a part too big for the platform must FAIL, not pass silently
     big = manufacturing.check_case(
