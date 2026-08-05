@@ -21,6 +21,20 @@ exe): More info → Run anyway.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Status (2026-08-05b):** **Incus Innovation Study 502/1** (the Prototype 1
+  build report) is now in the rulebook and closes three questions: the shrink
+  basis is **confirmed** at x/y 1.197 / z 1.23 ("standard factors for copper" —
+  the generic Chitubox `SCx121y122z125` profile is *not* the Cu-OF basis);
+  overpolymerisation **stays on the guidelines** (25–35 µm/side, compensated in
+  CAD); and **sinter-bonding does NOT relax the cleaning floor** — the 0.16 mm
+  part, cleaned separately, still held residual feedstock. The rulebook is now
+  bracketed by two supplier-cleaned parts: **0.25 mm (8.55 px) "well cleaned"**
+  vs **0.16 mm (5.47 px) "not fully cleaned"** — our 6 px floor / 8 px
+  recommendation sits exactly between them. `gap_perp` is now
+  **construction-aware** (shear vs offset sweep — both occur in our nTop
+  models), with a new `wave_merge` rule for offset sweeps whose fins touch.
+  `proto1_reference` corrected to the report's design 2: **fin 0.25 / channel
+  0.16**, offset sweep, A 0.471 / λ 3.20 — still FAIL, now supplier-confirmed.
 - **Status (2026-08-05):** the LMM rulebook is now anchored to **Incus's own
   Chitubox machine configs** (`Chitubox_Evo35_config.cfgx` / `_Pro25_`, sent
   by Paul Peritsch and archived in `01_Inputs_and_References/`): pixel size is
@@ -175,13 +189,23 @@ wider than fins", 2026-07-29); and a tall-fin advisory (fin rules tested at
 ~1 mm height). Under these bounds the presets read honestly: **M1
 (0.12/0.15, ≈ 5 px gap) FAILS** — Incus confirmed on our rev5/ICE parts that
 such gaps won't clean; the historical 0.10 hero stays as a reference row.
-**2026-07-31 — the wave-slope pinch (`gap_perp`), corrected 2026-08-05:**
-the wavy fin field is a **shear** of a straight array (`x → x − A·sin(2πy/λ)`),
-so the *perpendicular* passage at the wave's steepest section is
-**`b·cosθ`** and the fin across the wave is **`t·cosθ`**, with tanθ = 2πA/λ.
-(The rule first shipped as `(t+b)·cosθ − t`, which describes an *offset*
-sweep — not what nTop or the app's own rasterizer builds. Ray-probing the
-mesh Incus sliced settles it: **measured 8.11 px vs 8.14 px predicted**.)
+**2026-07-31 — the wave-slope pinch (`gap_perp`), now construction-aware
+(2026-08-05b):** the perpendicular passage at the wave's steepest section
+depends on **how the fin field is built**, and both forms occur in our own
+nTop models — decided per part by ray-probing (bin scanlines by slope, see
+which quantity is invariant):
+
+| construction | `gap_perp` | `fin_perp` | our parts |
+|---|---|---|---|
+| **shear** `x → x − A·sin(2πy/λ)` | `b·cosθ` | `t·cosθ` | Proto 2; the app's own rasterizer |
+| **offset** (constant-thickness band swept along the curve) | `(t+b)·cosθ − t` | `t` | Prototype 1, rev5-era |
+
+Proto 2 measures 8.11 px against 8.14 predicted by the shear law; Prototype 1's
+offset law gives **2.05 px at 55°** — Paul's *"cross section only 2 px"* — where
+the shear law would have said 3.6 px. An offset sweep can also **close the
+channel outright** once `(t+b)·cosθ ≤ t` (new `wave_merge` rule): Prototype 1
+measures solid bands every λ/2, ~20% of its flow length, because its `A/pitch`
+is 0.94 against Proto 2's 0.61.
 The hero wave (A 0.55/λ 2.5, **54°**) still pinches a compliant 8 px gap to
 4.7 px and a 6 px fin to 3.5 px. Nominal widths were never the whole story:
 **every hero-wave preset (M1–M4) honestly FAILs**; compensation fixes

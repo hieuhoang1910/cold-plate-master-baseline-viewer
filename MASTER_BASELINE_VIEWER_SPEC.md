@@ -927,8 +927,9 @@ wider than fins"). Rulebook bounds convert green px → final mm via ÷1.197.
 | `lmm.gap_ratio` | gap vs fin: `b ≥ t` ("gaps should be wider than fins", email 2026-07-29) | — | b ≥ t | soft |
 | `lmm.fin_height` | fin height vs the ~1 mm tested envelope (taller may deform in cleaning) | — | advisory | ℹ |
 | `lmm.aspect` | fin aspect ratio H/b | ≤ 40 (legacy) | **≤ ~30** ("taller fins need thicker fins") | soft |
-| `lmm.gap_perp` | perpendicular passage across the wave `b·cosθ`, `tanθ = 2πA/λ` (shear construction — corrected 2026-08-05, validated on a measured mesh) | ≥ 0.175 mm (6 px green) | — (rec tier stays on `gap_min`) | hard |
-| `lmm.wall_perp` | fin thickness across the wave `t·cosθ` — the slope thins the fin too (2026-08-05) | ≥ 0.088 mm (3 px) | ≥ 0.117 mm (4 px) | hard / soft |
+| `lmm.gap_perp` | perpendicular passage across the wave, `tanθ = 2πA/λ` — **construction-dependent** (2026-08-05b): shear `b·cosθ`, offset `(t+b)·cosθ − t`. Both mesh-validated | ≥ 0.175 mm (6 px green) | — (rec tier stays on `gap_min`) | hard |
+| `lmm.wall_perp` | fin across the wave: `t·cosθ` for a shear, constant `t` for an offset sweep (2026-08-05) | ≥ 0.088 mm (3 px) | ≥ 0.117 mm (4 px) | hard / soft |
+| `lmm.wave_merge` | offset sweeps only: fins TOUCH once `(t+b)·cosθ ≤ t` — channel closed, not merely narrow (2026-08-05b) | slope < merge angle | — | hard |
 | `lmm.build_envelope` | GREEN part fits the Evo35 platform 56 × 89.6 × 150 mm (2026-08-05, from Incus's `.cfgx`) | must fit | — | hard |
 | `lmm.slice_px` | fin · gap · **pitch** in green px — what Incus counts on the raster; pitch is NOT the gap (2026-08-05) | — | quote all three | ℹ |
 | `lmm.shrink_basis` | our x1.197/x1.23 vs Incus's profile `SCx121y122z125` (anisotropic); slice with SC **off** (meshes are pre-scaled) | — | open question for Paul | ℹ |
@@ -2487,3 +2488,115 @@ reproducing Paul's 6/10/16, `gap_perp`/`wall_perp` matching the measured
 8.11/4.89 px to ±0.05 px, and an oversize part FAILing `build_envelope`.
 All Python suites green (golden parity 5/5); frontend verify 26/26 + build
 clean.
+
+## 2026-08-05b — the wave pinch is CONSTRUCTION-dependent; Incus report 502/1 closes three open questions (BUILT)
+
+Same day, hours after the shear correction above. Hieu supplied (a) the actual
+Prototype 1 mesh Incus printed, (b) its true design dims, and (c) **Incus
+Innovation Study 502/1, "Vinnotek Heatsink – cleanability and sinterbonding"
+(Paul Peritsch, 14.01.2026)** — the build report for Prototype 1. Together they
+correct this morning's section and settle three standing questions.
+
+### Both pinch laws are real — it depends how the fin field is BUILT
+
+The 2026-08-05 section claimed `(t+b)·cosθ − t` "is not what nTop builds". That
+is wrong: it is not what nTop built for **Proto 2**, but it is exactly what it
+built for **Prototype 1**. Ray-probing decides it, per part, with no ambiguity —
+bin the scanlines by local slope and see which quantity stays constant:
+
+| construction | invariant | `gap_perp` | `fin_perp` | seen in |
+|---|---|---|---|---|
+| **shear** `x → x − A·sin(2πy/λ)` | horizontal widths | `b·cosθ` | `t·cosθ` | Proto 2; this app's own `raster.ts` |
+| **offset** (constant-thickness band swept along the curve) | perpendicular thickness | `(t+b)·cosθ − t` | `t` | Prototype 1, rev5-era models |
+
+Prototype 1, `fin_x·cosθ` across slope bins: **7.93 / 7.76 / 7.77 / 7.76 / 7.70 px**
+(0–50°) while `fin_x` itself swings 8.03 → 10.33 px. Constant to 3% — an offset
+sweep, conclusively. Proto 2 is the mirror image (`fin_x` constant to 0.43%,
+`fin_x·cosθ` scattered 7.4%) — a shear.
+
+**Why it matters:** on Prototype 1's dims the offset law gives **2.05 px at 55°**
+— Paul's *"cross section only 2 px"* — where the shear law would say 3.6 px. The
+offset sweep also has a failure mode the shear cannot reach: once
+`(t+b)·cosθ ≤ t` the neighbouring fins **touch and the channel closes outright**.
+Measured on the Prototype 1 green mesh: **9–12 fully solid bands spaced λ/2 ≈
+1.9 mm, ~20% of the flow length**. Its `A/pitch` is **0.94**, against Proto 2's
+0.61 — the amplitude is nearly a whole pitch, so neighbours cannot help but
+collide.
+
+- `GeometryCase.wave_construction` ∈ {`shear` (default), `offset`} — a pure
+  manufacturability descriptor; the thermal/hydraulic path never reads it, so
+  golden parity is untouched (5/5).
+- `lmm.gap_perp` grades the case's own law and reports what the other would say.
+  `lmm.wall_perp` reports `t·cosθ` for a shear and constant `t` for an offset.
+- **NEW `lmm.wave_merge`** (offset only): FAIL once the slope passes the angle
+  at which the fins merge.
+
+### Prototype 1 was recorded wrong — corrected against the report
+
+Report 502/1 §1 lists **"Heatsink design 1 — 0.25 mm — printed and sintered as
+one"** and **"Heatsink design 2 — 0.16 mm — sinterbonding of base and top"**.
+`proto1_reference` is **design 2**, and its dims are **fin 0.25 / channel 0.16**
+(⊥ pitch 0.41) — not the 0.25/0.25 we had recorded.
+
+The green mesh confirms the guidelines' overpoly compensation was applied and
+the pitch preserved exactly:
+
+| | design (final) | green nominal | measured green |
+|---|---:|---:|---:|
+| fin `t` ⊥ | 0.25 | 8.55 px | **7.80 px** (−0.75) |
+| gap `b` ⊥ | 0.16 | 5.47 px | **6.22 px** (+0.75) |
+| ⊥ pitch | 0.41 | 14.02 px | **14.02 px** ✓ |
+
+Envelope also confirmed: green 28.002 × 27.010 × 6.207 → final 23.393 × 22.564
+× 5.046 mm, fins-only and prismatic in Z. Wave re-measured by lattice-phase fit
+(immune to single-fin tracking errors): **A 0.471 / λ 3.20 final**, replacing the
+recorded 0.719 / 2.581. *Caveat:* the waveform is **not a sine** — the directly
+measured steepest section is 55.6° against 42.7° from `2πA/λ` — so the closed
+form under-reads this part, and the ⌖ neck scan remains authoritative.
+Row verdict is unchanged (**FAIL**) but now for the right reasons: `gap_min`
+5.5 px < 6 px floor, `gap_perp` **1.7 px**. R_jc moves 29.20 → 29.45 mK/W, so
+**M4b still beats the as-built Prototype 1** and that headline is unaffected.
+
+### Three questions closed by the report
+
+1. **Shrink basis — CONFIRMED, not an open question.** §3.1.1: *"Both designs
+   were printed using the standard shrinkage compensation factors for copper:
+   x/y = 1.197, z = 1.23."* Guidelines §1 says the same. The generic Chitubox
+   `SCx121y122z125` profile is **not** the Cu-OF basis; `lmm.shrink_basis`
+   now says so instead of raising it as a question.
+2. **Overpolymerisation — stays on the guidelines (team call, Hieu).** Report
+   502/1 mentions ~half a pixel and a −15 µm contour offset applied by Incus at
+   slicing for *that* build; guidelines §3 (July 2026) says **25–35 µm per side,
+   compensated in the CAD: fin −2 px, channel +2 px**. We design to the
+   guidelines — the conservative choice, since over-compensating widens channels.
+   `LMM_OVERPOLY_PX = 1`, `LMM_OVERPOLY_IN = "cad"`, both asserted in the suite.
+3. **Does sinter-bonding relax the cleaning floor? — NO.** This was the open
+   question posed by the Prototype 1 row. §2/§3.1.1 answer it directly: the
+   0.16 mm part, *printed and cleaned separately*, still showed **"residual
+   feedstock ... after 20 minutes"** of heated ultrasonic plus manual air, and
+   *"the small channels may still not be completely free"*. Incus's own
+   recommendation: **"increasing the minimum channel to 0.25 mm ... is expected
+   to significantly improve cleanability."**
+
+### The rulebook is now empirically anchored at both ends
+
+Two supplier-cleaned parts bracket our 6 px floor / 8 px recommendation exactly:
+
+| part | channel (final) | green px | Incus result |
+|---|---:|---:|---|
+| design 1 | 0.25 mm | **8.55 px** | *"appeared to be well cleaned"* ✓ |
+| design 2 | 0.16 mm | **5.47 px** | *"not all channels could be fully cleaned"* ✗ |
+
+5.5 px fails, 8.5 px passes — the 6–8 px band is not a guess, it is measured on
+our own geometry. **Proto 2's 10 px gap sits above both.**
+
+Also recorded from the report: printed on the **Hammer Lab35** (35 µm, same
+pixel as the Evo35 the Proto 2 parts go on), 55 vol% Cu (−22 µm) in Binder CP82,
+H₂ sinter to **~95% relative density** (supports the k ≈ 340 W/mK basis), all
+parts sintered without deformation, and sinter bonding judged *"a feasible and
+robust method"* — the Proto 2 fins-only workflow is on solid ground.
+
+**Tests:** 11 further checks (construction flag changes the verdict on identical
+dims, Proto 1 dims/law/1.7 px, offset holds `wall_perp = t`, `wave_merge`
+present, overpoly stays on the guidelines, shrink confirmed). All Python suites
+green, golden parity 5/5.

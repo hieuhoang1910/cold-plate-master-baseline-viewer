@@ -117,6 +117,17 @@ export const LMM_SC_PROFILE = { x: 1.21, y: 1.22, z: 1.25, name: 'SCx121y122z125
 /** FINAL mm → green px (35 µm) — the unit Incus counts on the slice raster. */
 export const greenPx = (finalMm: number) => (finalMm * LMM_PROC.shrinkXY) / LMM_PROC.pixelMm
 
+/** How the wavy fin field is built — decides which pinch law applies.
+ *  'shear'  x → x − A·sin(2πy/λ): every fin the same curve translated, so
+ *           horizontal widths are invariant (Proto 2; this app's rasterizer).
+ *  'offset' a constant-thickness band swept along the curve: the fin holds t
+ *           perpendicular and the channel pays the whole cosine loss, so it
+ *           pinches much harder and can close outright (Prototype 1). */
+export type WaveConstruction = 'shear' | 'offset'
+export function waveConstruction(d: { wave_construction?: string }): WaveConstruction {
+  return String(d.wave_construction ?? '').toLowerCase() === 'offset' ? 'offset' : 'shear'
+}
+
 export interface GreenRow {
   name: string
   final: number
@@ -283,16 +294,23 @@ export function quickVerdict(d: DesignState): MfgVerdict {
   // Incus 2026-07-29: gaps should be wider than fins (LMM fin families)
   if (isFin && normalizeRoute(d.process_route) === 'LMM' && gap != null && gap < wall - 1e-9)
     grades.push('MARGINAL')
-  // 2026-07-31 wave-slope pinch, CORRECTED 2026-08-05: the fin field is a
-  // SHEAR of a straight array, so gap_perp = b·cosθ and fin_perp = t·cosθ at
-  // tanθ = 2πA/λ (not (t+b)·cosθ − t, which is an offset sweep). Measured on
-  // the mesh sent to Incus: 8.11 px actual vs 8.14 px predicted.
+  // 2026-07-31 wave-slope pinch, made construction-aware 2026-08-05. BOTH
+  // laws are real and both occur in our nTop models (mesh-measured):
+  //   shear  (Proto 2, and the app's own rasterizer): gap_perp = b·cosθ
+  //   offset (Proto 1, rev5-era):        gap_perp = (t+b)·cosθ − t, fin ⊥ = t
+  // The offset sweep pinches far harder and can close outright.
   if (d.family === 'wavy_fin' && normalizeRoute(d.process_route) === 'LMM'
       && gap != null && d.wave_amplitude_mm > 0 && d.wavelength_mm > 0) {
-    const c = Math.cos(Math.atan(2 * Math.PI * d.wave_amplitude_mm / d.wavelength_mm))
-    if (gap * c < r.gapAbs - 1e-9) grades.push('FAIL')
-    if (wall * c < r.wallAbs - 1e-9) grades.push('FAIL')
-    else if (wall * c < r.wallRec - 1e-9) grades.push('MARGINAL')
+    const th = Math.atan(2 * Math.PI * d.wave_amplitude_mm / d.wavelength_mm)
+    const c = Math.cos(th)
+    if (waveConstruction(d) === 'offset') {
+      if ((wall + gap) * c - wall < r.gapAbs - 1e-9) grades.push('FAIL')
+      if (c <= wall / (wall + gap) + 1e-9) grades.push('FAIL')   // fins merge
+    } else {
+      if (gap * c < r.gapAbs - 1e-9) grades.push('FAIL')
+      if (wall * c < r.wallAbs - 1e-9) grades.push('FAIL')
+      else if (wall * c < r.wallRec - 1e-9) grades.push('MARGINAL')
+    }
   }
   if (grades.includes('FAIL')) return 'FAIL'
   if (grades.includes('MARGINAL')) return 'MARGINAL'

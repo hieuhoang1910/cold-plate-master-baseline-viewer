@@ -88,7 +88,16 @@ LMM_PIXEL_MM = 0.035          # XY pixel
 LMM_LAYER_MM = 0.025          # Z layer
 LMM_SHRINK_XY = 1.197         # green = final * shrink
 LMM_SHRINK_Z = 1.23
-LMM_OVERPOLY_PX = 1           # per side (~25-35 um); CAD edit = -+2 px on a width
+# Over-polymerization — per the OFFICIAL guidelines (Incus_Design_Guidelines.pdf
+# July 2026 §3): "approximately 25-35 um per side", and "the compensation is
+# applied in the CAD model — fins are designed two pixels smaller than the
+# adjacent channels: Fin (CAD) = Fin (nominal) - 2 px, Channel (CAD) =
+# Channel (nominal) + 2 px". So 1 px per side, compensated by US in CAD.
+# (The Prototype 1 build report 502/1 mentions ~half a pixel and a -15 um
+# contour offset applied by Incus at slicing for THAT build; the July 2026
+# guidelines supersede it and are what we design to — team call 2026-08-05.)
+LMM_OVERPOLY_PX = 1           # per side (25-35 um); CAD edit = -+2 px on a width
+LMM_OVERPOLY_IN = "cad"       # guidelines §3: compensation belongs in the CAD
 # Incus proven-cleanable coupon: 7.7 x 7.7 mm gyroid, ~200 um (6 px) channels.
 LMM_COUPON_AREA_MM2 = 7.7 * 7.7
 
@@ -214,6 +223,24 @@ _ALIASES = {
     "slm_ir": "SLM_IR",
     "slm_green": "SLM_GREEN",
 }
+
+
+LMM_WAVE_CONSTRUCTIONS = ("shear", "offset")
+
+
+def wave_construction(case: Dict[str, Any]) -> str:
+    """How the wavy fin field is built — this decides which pinch law applies.
+
+    "shear"  (default, and what the app's own rasterizer + the Proto 2 nTop
+             model build): x -> x - A*sin(2*pi*y/lambda). Every fin is the
+             same curve translated, so horizontal widths are invariant.
+    "offset" (Prototype 1 / the rev5-era nTop models): a constant-thickness
+             band swept along the curve. The fin holds t perpendicular and the
+             channel absorbs the entire cosine loss, so it pinches much harder
+             and can close outright.
+    """
+    v = str(case.get("wave_construction") or "shear").strip().lower()
+    return v if v in LMM_WAVE_CONSTRUCTIONS else "shear"
 
 
 def normalize_route(route: Optional[str]) -> str:
@@ -347,33 +374,61 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
             # nominal gap_min so a wave never re-grades an already-graded gap.
             theta = math.atan(2.0 * math.pi * A / lam)
             cos_t = math.cos(theta)
-            perp = b * cos_t
-            fin_perp = t * cos_t
-            # largest A that still holds BOTH floors at this λ:
-            # b·cosθ ≥ gap_abs and t·cosθ ≥ wall_abs
-            c_need = max(gap_abs / b, rb["wall_abs"] / t)
+            deg = math.degrees(theta)
+            build = wave_construction(case)
+            # The two constructions pinch differently (both are real — see the
+            # module docstring). SHEAR: every fin is the same curve translated,
+            # so horizontal widths are invariant and everything scales by cosθ.
+            # OFFSET: a constant-thickness band swept along the curve, so the
+            # fin keeps t perpendicular and the CHANNEL absorbs the whole
+            # cosine loss — far more aggressive, and it can close completely.
+            perp_shear, perp_offset = b * cos_t, (t + b) * cos_t - t
+            if build == "offset":
+                perp, fin_perp, other = perp_offset, t, perp_shear
+            else:
+                perp, fin_perp, other = perp_shear, t * cos_t, perp_offset
+            c_need = (max(gap_abs / b, rb["wall_abs"] / t) if build == "shear"
+                      else (gap_abs + t) / (t + b))
             A_budget = (lam * math.tan(math.acos(c_need)) / (2.0 * math.pi)
                         if c_need < 1.0 else 0.0)
+            formula = (f"b·cos{deg:.0f}°" if build == "shear"
+                       else f"(t+b)·cos{deg:.0f}° − t")
             checks.append(_check(
-                "gap_perp", "min perpendicular passage (wave slope)", perp,
+                "gap_perp", f"min perpendicular passage ({build} wave)", perp,
                 gap_abs, None,
                 PASS if perp >= gap_abs - 1e-9 else FAIL,
-                f"b·cos{math.degrees(theta):.0f}° = {perp:.3f} mm "
-                f"({_green_px(perp):.1f} px green) vs floor {gap_abs:.3f} "
-                f"({_green_px(gap_abs):.0f} px) / rec {gap_rec:.3f} "
-                f"({_green_px(gap_rec):.0f} px) — the wave's steep sections "
-                f"narrow the passage; max A ≈ {A_budget:.3f} mm at λ {lam:.2f}. "
-                "Uniform in-phase wave assumed — a graded wave pinches further "
+                f"{formula} = {perp:.3f} mm ({_green_px(perp):.1f} px green) vs "
+                f"floor {gap_abs:.3f} ({_green_px(gap_abs):.0f} px) / rec "
+                f"{gap_rec:.3f} ({_green_px(gap_rec):.0f} px); max A ≈ "
+                f"{A_budget:.3f} mm at λ {lam:.2f}. Built as {build} — the "
+                f"other construction would read {_green_px(other):.1f} px. "
+                "Uniform in-phase wave assumed; a graded one pinches further "
                 "(use the ⌖ neck scan on imported meshes)"))
             checks.append(_check(
                 "wall_perp", "fin thickness across the wave", fin_perp,
                 rb["wall_abs"], rb["wall_rec"],
                 _status(fin_perp, rb["wall_abs"], rb["wall_rec"]),
-                f"t·cos{math.degrees(theta):.0f}° = {fin_perp:.3f} mm "
-                f"({_green_px(fin_perp):.1f} px green) vs floor "
-                f"{rb['wall_abs']:.3f} / rec {rb['wall_rec']:.3f} — the slope "
-                "thins the fin as well as the channel (the slice still shows "
-                f"the full {_green_px(t):.1f} px horizontally)"))
+                (f"t·cos{deg:.0f}° = {fin_perp:.3f} mm ({_green_px(fin_perp):.1f} px "
+                 f"green) — a shear thins the fin as well as the channel (the "
+                 f"slice still shows the full {_green_px(t):.1f} px horizontally)")
+                if build == "shear" else
+                (f"t = {fin_perp:.3f} mm ({_green_px(fin_perp):.1f} px green) held "
+                 "constant by the offset sweep — the fin keeps its thickness and "
+                 "the channel pays the whole cosine loss")))
+            if build == "offset":
+                # An offset sweep has a hard failure the shear cannot reach:
+                # once (t+b)·cosθ ≤ t the neighbouring fins TOUCH and the
+                # channel is closed outright. Measured on Prototype 1: solid
+                # bands every λ/2, ~20 % of the flow length.
+                merge_deg = math.degrees(math.acos(min(1.0, t / (t + b))))
+                checks.append(_check(
+                    "wave_merge", "fins touch at max slope (offset sweep)", deg,
+                    None, merge_deg,
+                    PASS if deg < merge_deg - 1e-9 else FAIL,
+                    f"slope {deg:.0f}° vs the {merge_deg:.0f}° at which "
+                    f"(t+b)·cosθ = t and adjacent fins merge into solid — past "
+                    "that the channel is not narrow, it is CLOSED (Prototype 1 "
+                    "measures solid bands every λ/2, ≈20% of its flow length)"))
         if b:
             ar = H / b
             checks.append(_check(
@@ -480,16 +535,15 @@ def check_case(case: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
             "green-scaled, so the platform sees the ×1.197 footprint"))
         # Incus's own Chitubox profiles disagree with our shrink basis.
         sc = LMM_SC_PROFILE
-        dx = stack.get("core_width_mm", 35.0) * (LMM_SHRINK_XY / sc["x"] - 1.0)
-        dy = stack.get("core_length_mm", 28.0) * (LMM_SHRINK_XY / sc["y"] - 1.0)
         checks.append(_check(
-            "shrink_basis", "shrink basis vs Incus's slicer profile", None, None, None, INFO,
-            f"this app scales green = final × {LMM_SHRINK_XY} XY / {LMM_SHRINK_Z} Z; "
-            f"Incus's Chitubox profile '{sc['name']}' carries x{sc['x']} y{sc['y']} "
-            f"z{sc['z']} (anisotropic). If theirs governs, the sintered part lands "
-            f"{dx:+.2f} mm in X and {dy:+.2f} mm in Y — open question for Paul "
-            "(2026-08-05). Slice our meshes with shrink compensation OFF: they "
-            "are already green-scaled, and a profile with SC on would apply it twice"))
+            "shrink_basis", "shrink basis (supplier-confirmed)", None, None, None, INFO,
+            f"green = final × {LMM_SHRINK_XY} XY / {LMM_SHRINK_Z} Z — CONFIRMED twice: "
+            "guidelines §1, and Incus report 502/1 §3.1.1 on the Prototype 1 build "
+            "(\"standard shrinkage compensation factors for copper: x/y = 1.197, "
+            f"z = 1.23\"). The generic Chitubox profile '{sc['name']}' (x{sc['x']} "
+            f"y{sc['y']} z{sc['z']}) is NOT the Cu-OF basis — do not use it. Our "
+            "meshes go out already green-scaled, so slice with shrink compensation "
+            "OFF (Paul's 'noSC' profile) or it is applied twice"))
         checks.append(_check(
             "drainage", "drainage + gravity drain path", None, None, None, INFO,
             "add drainage holes at pocket low points + channel ends; orient for "

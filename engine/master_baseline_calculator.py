@@ -115,6 +115,13 @@ class GeometryCase:
     channel_count: Optional[int] = None
     wave_amplitude_mm: float = 0.0
     wavelength_mm: float = 1.0
+    # 2026-08-05 — how the wavy fin field is BUILT. Purely a manufacturability
+    # descriptor (the thermal/hydraulic path never reads it, so golden parity
+    # is untouched): "shear" = x -> x - A*sin(2*pi*y/lam), horizontal widths
+    # invariant (Proto 2, and this app's own rasterizer); "offset" = constant-
+    # thickness band swept along the curve, so the channel absorbs the whole
+    # cosine loss and can close outright (Prototype 1). Drives lmm.gap_perp.
+    wave_construction: str = "shear"
     wetted_area_multiplier: float = 1.0
     void_fraction: Optional[float] = None
     surface_area_density_m2_m3: Optional[float] = None

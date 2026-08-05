@@ -359,19 +359,29 @@ export function About({ onClose }: { onClose: () => void }) {
                   <td>"Gaps should be wider than fins" (2026-07-29) — overpolymerisation narrows the
                     printed channel ~1 px per side, so the drawn gap must dominate the pitch.</td></tr>
                 <tr><td>Wave slope — perp. passage</td><td>≥ 6 px at max slope</td><td>—</td>
-                  <td>The fin field is a <b>shear</b> of a straight array (x → x − A·sin(2πy/λ)), so
-                    horizontal widths never change but the <i>perpendicular</i> passage at the
-                    steepest section is <b>b·cosθ</b>, tanθ = 2πA/λ. The hero wave (A 0.55/λ 2.5,
-                    <b>54°</b>) squeezes a compliant 8 px gap to 4.7 px no matter how wide the
-                    nominal is. M4b/M2b carry the largest wave the floor allows (30°/20°);
+                  <td>Depends on <b>how the fin field is built</b>, and both forms occur in our own
+                    nTop models (tanθ = 2πA/λ):<br />
+                    <b>Shear</b> (x → x − A·sin(2πy/λ) — Proto 2, and this app's rasterizer): every
+                    fin is the same curve translated, horizontal widths never change, passage =
+                    <b>b·cosθ</b>. Measured 8.11 px on Proto 2 vs 8.14 predicted.<br />
+                    <b>Offset sweep</b> (constant-thickness band along the curve — Prototype 1): the
+                    fin keeps its thickness and the channel pays the whole loss, passage =
+                    <b>(t+b)·cosθ − t</b> — far harsher. On Prototype 1 that is <b>2.05 px at 55°</b>,
+                    exactly Incus's "cross section only 2 px".<br />
+                    The hero wave (A 0.55/λ 2.5, <b>54°</b>) squeezes a compliant 8 px gap to 4.7 px
+                    even as a shear. M4b/M2b carry the largest wave the floor allows (30°/20°);
                     compensation cannot fix slope, only widths. <b>Assumes a uniform, in-phase
-                    wave</b> — if the amplitude is graded across the field, adjacent fins converge
-                    and the real passage is far worse (rev6: 1.4 px against a 13.9 px nominal). Use
-                    the ▦ Pixel tab's ⌖ neck scan on any imported mesh.</td></tr>
+                    wave</b> — a graded amplitude pinches further (rev6: 1.4 px against a 13.9 px
+                    nominal). Use the ▦ Pixel tab's ⌖ neck scan on any imported mesh.</td></tr>
+                <tr><td>Wave slope — fins touch</td><td>offset sweeps only</td><td>—</td>
+                  <td>An offset sweep can <i>close</i> the channel, not just narrow it: once
+                    (t+b)·cosθ ≤ t the neighbouring fins merge into solid. Prototype 1 measures
+                    solid bands every λ/2 — about <b>20% of its flow length</b> — because its
+                    amplitude is 0.94 of a pitch (Proto 2: 0.61). A shear can never do this.</td></tr>
                 <tr><td>Wave slope — fin across the wave</td><td>≥ 3 px</td><td>≥ 4 px</td>
-                  <td>The same cosine thins the <i>fin</i>: <b>t·cosθ</b>. At 54° a 6 px fin is only
-                    3.5 px thick perpendicular, even though the slice still shows a full 6 px
-                    horizontal run.</td></tr>
+                  <td>For a shear the same cosine thins the <i>fin</i>: <b>t·cosθ</b> — at 54° a 6 px
+                    fin is only 3.5 px perpendicular though the slice shows a full 6 px run. An
+                    offset sweep holds t constant instead.</td></tr>
                 <tr><td>What Incus counts</td><td colSpan={2}>fin · gap · <b>pitch</b> (green px)</td>
                   <td>They measure horizontal pixel runs on the sliced PNG (in GIMP, with the raster
                     grid on). <b>Pitch = fin + gap and is not the gap</b> — the Proto 2 mesh went out
@@ -391,12 +401,19 @@ export function About({ onClose }: { onClose: () => void }) {
                 <tr><td>Process chain</td><td colSpan={2}>×1.197 XY / ×1.23 Z shrink · overpoly ∓2 px</td>
                   <td>The print is drawn oversized (sinter shrink) and features grow ~1 px/side during
                     exposure — fins are drawn 2 px thinner and channels 2 px wider in CAD to cancel it.
-                    The ▦ Pixel tab shows exactly this effect. <b>Open question (2026-08-05):</b> Incus's
-                    own Chitubox profile reads <code>SCx121y122z125</code> — x 1.21 / y 1.22 / z 1.25,
-                    <i>anisotropic in XY</i>. If that governs our Cu-OF, a 28 mm part lands ~0.3 mm short
-                    in X and ~0.5 mm in Y. We keep 1.197/1.23 (what the shipped Proto 2 mesh used) until
-                    Paul confirms. Either way our meshes are <b>already green-scaled</b>, so they must be
-                    sliced with shrink compensation <b>OFF</b> or it is applied twice.</td></tr>
+                    The ▦ Pixel tab shows exactly this effect. <b>Confirmed twice (2026-08-05):</b>
+                    guidelines §1 and Incus report 502/1 §3.1.1 on the Prototype 1 build both state the
+                    Cu-OF factors as <b>x/y 1.197, z 1.23</b>. The generic Chitubox profile
+                    <code>SCx121y122z125</code> is <i>not</i> the copper basis — don't use it. Our meshes
+                    go out <b>already green-scaled</b>, so they must be sliced with shrink compensation
+                    <b>OFF</b> or it is applied twice.</td></tr>
+                <tr><td>Proven cleaning window</td><td colSpan={2}>0.16 mm ✗ · 0.25 mm ✓</td>
+                  <td>Incus report 502/1 cleaned two of our own parts: the 0.25 mm design
+                    (<b>8.55 px</b> green) "appeared to be well cleaned"; the 0.16 mm design
+                    (<b>5.47 px</b>) had "residual feedstock still visible" after 20 min of heated
+                    ultrasonic plus manual air, <i>even printed separately</i>. Their advice: go back
+                    to 0.25 mm. So the 6 px floor / 8 px recommendation is bracketed by measurements
+                    on our own geometry — and <b>sinter-bonding does not relax it</b>.</td></tr>
                 <tr><td>Cleanability at size</td><td colSpan={2}>warning</td>
                   <td>Incus's proven-clean coupon is 7.7 × 7.7 mm; our core is ~17× larger — "big part,
                     small channels" traps feedstock. The Option-2 coupon matrix is the confirmation path.</td></tr>
@@ -907,6 +924,8 @@ export function About({ onClose }: { onClose: () => void }) {
               <li>Peritsch, P. (Incus GmbH). Email, 2026-07-29 — px review of the rev5 wavy + ICE fin arrays: 2 px gap cross-sections "will not be cleaned", 1–2 px fins too thin; "increase the ratio fins to gaps — gaps should be wider than fins". <span className="muted">Source of the gap_ratio rule.</span></li>
               <li>Peritsch, P. (Incus GmbH). Email + attachments, 2026-08-05 — slice of our Proto 2 mesh ("the fins are now 6 px and the gaps are 10 px … a good chance of success with this one"), the Chitubox machine configs <code>Chitubox_Evo35_config.cfgx</code> / <code>Chitubox_Pro25_confic.cfgx</code> and <code>Installation manual.txt</code>, and the instruction "for these parts please always use the HammerEvo35". <span className="muted">Archived in <code>01_Inputs_and_References/</code>. Source of the derived 35 µm pixel, the 56 × 89.6 × 150 mm build envelope, the SCx121y122z125 shrink question, and the note that exposed areas are BLACK in Incus's in-house slicer but WHITE in Chitubox.</span></li>
               <li>Vinnotek mesh measurement, 2026-08-05 — ray probe of <code>wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl</code>: 6.00 / 10.00 / 16.00 px green, A 0.3417 green, λ 86 px, 35.5° max slope, fins-only and prismatic in Z. <span className="muted">Validated the shear form of gap_perp (8.11 px measured vs 8.14 predicted) and proved the file name's "16 px gap" was the pitch.</span></li>
+              <li>Peritsch, P. (Incus GmbH). <b>Innovation Study 502/1, "Vinnotek Heatsink – cleanability and sinterbonding"</b>, 14.01.2026 — the Prototype 1 build report. <span className="muted">Design 1 (0.25 mm) "well cleaned"; design 2 (0.16 mm, sinterbonded) "not all channels could be fully cleaned" — recommends returning to 0.25 mm. Confirms shrink x/y 1.197 / z 1.23 for copper, Hammer Lab35 at 35 µm, 55 vol% Cu in Binder CP82, H₂ sinter to ~95% relative density. Source of the empirical 6–8 px cleaning bracket and the answer to "does sinter-bonding relax the floor?" (no).</span></li>
+              <li>Vinnotek mesh measurement, 2026-08-05 — ray probe of the Prototype 1 green file <code>sw01.02_0.25mm_no base.stl</code> (4.04 M triangles): envelope 23.393 × 22.564 × 5.046 final, ⊥ pitch 14.02 px preserved, A 0.471 / λ 3.20 final. <span className="muted">Proved the OFFSET construction (fin_x·cosθ constant at 7.8 px across 0–50°) and found solid bands every λ/2 closing ~20% of the flow length.</span></li>
               <li>LPBF thin-wall &amp; channel design limits: vendor design guides (EOS CuCrZr, MakerVerse L-PBF guide) + thin-wall fabrication-limit studies (e.g. Int. J. Adv. Manuf. Technol. 2020, <Doi id="10.1007/s00170-020-05827-4" />). <span className="muted">Basis of the SLM_IR rulebook (literature grade; Nikon SLM Solutions DfM review pending).</span></li>
               <li>Green-laser pure-Cu LPBF capability: Physical and geometrical properties of pure-Cu green-laser samples, <i>Materials</i> 14(13), 3642 (2021), <Doi id="10.3390/ma14133642" />; high-precision LPBF processing of pure copper, <i>Additive Manufacturing</i> (2021), <a className="doi" href="https://www.sciencedirect.com/science/article/abs/pii/S2214860421005704" target="_blank" rel="noopener noreferrer">sciencedirect: S2214860421005704</a>. <span className="muted">Basis of the SLM_GREEN rulebook.</span></li>
             </ol>

@@ -313,9 +313,27 @@ M_PRESET_CASES = [
     # passages on the OPEN-TOP fins-only part — does the sinter-weld route
     # relax the enclosed-channel 6 px cleaning floor? (Ask Paul; the rev5
     # rejections were judged on the same bitmaps.)
+    # 2026-08-05 CORRECTED against Incus report 502/1 + a ray probe of the
+    # actual green mesh. This row is the report's "Heatsink design 2" — the
+    # SINTERBONDED part, feature size 0.16 mm, NOT 0.25/0.25 as recorded.
+    #   design (final):  fin t 0.25 / channel b 0.16  -> perpendicular pitch 0.41
+    #   mesh (green):    t_perp 7.80 px vs 8.55 nominal, b_perp 6.22 vs 5.47
+    #                    -> drawn with the guidelines' -+0.75 px overpoly comp,
+    #                       perpendicular pitch 14.02 px preserved exactly.
+    #   construction:    OFFSET sweep — fin_x*cos(theta) is constant at 7.8 px
+    #                    across every slope bin (0-50 deg), so the CHANNEL pays
+    #                    the whole cosine loss. Hence gap_perp = (t+b)cos - t,
+    #                    = 1.8 px at its slope: Paul's "only 2 px" exactly.
+    #   measured wave:   A 0.471 / lambda 3.20 final (was recorded 0.719/2.581).
+    # Incus VERDICT on this exact part (report 502/1 §2, §3.1.1): "not all
+    # channels could be fully cleaned"; residual feedstock after 20 min
+    # ultrasonic + manual air; "increasing the minimum channel to 0.25 mm ...
+    # is expected to significantly improve cleanability". So the FAIL verdict
+    # is now supplier-CONFIRMED, not just predicted.
     {"design_id": "proto1_reference", "family": "wavy_fin", "process_route": "LMM",
-     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.25, "fin_height_mm": 5.0,
-     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.719, "wavelength_mm": 2.581,
+     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16, "fin_height_mm": 5.0,
+     "wave_construction": "offset",
+     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.471, "wavelength_mm": 3.20,
      # FIXED reference: the part physically exists — score it on its own
      # as-sent envelope (mesh-measured, green ÷ shrink) + the rig's flow,
      # never on the active project's die/core. Fin field final ≈ 23.4 mm

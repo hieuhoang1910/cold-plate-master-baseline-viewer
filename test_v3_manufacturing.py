@@ -239,6 +239,53 @@ def main() -> int:
           and "33.5" in p2r["build_envelope"]["message"])
     check("shrink_basis flags the 1.197 vs SCx121y122z125 delta",
           "SCx121y122z125" in p2r["shrink_basis"]["message"])
+    # --- 2026-08-05b: construction-aware wave pinch + Incus report 502/1 -----
+    # Proto 1 is report 502/1's "Heatsink design 2": fin 0.25 / channel 0.16,
+    # built as an OFFSET sweep (mesh-measured: fin_x*cos is constant at 7.8 px
+    # across 0-50 deg). Incus cleaned it and reported "not all channels could
+    # be fully cleaned" -> our FAIL is now supplier-confirmed.
+    p1 = by_id["proto1_reference"]
+    p1r = {c["rule"]: c for c in p1["manufacturability"]["checks"]}
+    p1case = next(c for c in server.M_PRESET_CASES if c["design_id"] == "proto1_reference")
+    check("Proto1 = report 502/1 design 2 (t 0.25 / b 0.16, offset sweep)",
+          abs(p1case["fin_thickness_mm"] - 0.25) < 1e-9
+          and abs(p1case["channel_gap_mm"] - 0.16) < 1e-9
+          and p1case["wave_construction"] == "offset")
+    check("Proto1 gap_min FAILs at 5.5 px (Incus: not fully cleanable)",
+          p1r["gap_min"]["status"] == "FAIL")
+    check("Proto1 uses the OFFSET pinch law",
+          "offset" in p1r["gap_perp"]["label"] or "offset" in p1r["gap_perp"]["message"])
+    # (t+b)cos - t at its slope = 1.7 px green -- Paul's "only 2 px" on this part
+    check("Proto1 gap_perp ~ 1.7 px green (Peritsch: 'only 2 px')",
+          abs(p1r["gap_perp"]["value"] * manufacturing.LMM_SHRINK_XY
+              / manufacturing.LMM_PIXEL_MM - 1.75) < 0.25,
+          str(p1r["gap_perp"]["value"]))
+    check("offset sweep holds the fin thickness (wall_perp = t)",
+          abs(p1r["wall_perp"]["value"] - 0.25) < 1e-9)
+    check("offset sweep gets a wave_merge check", "wave_merge" in p1r)
+    # the SAME dims read as a shear would be far more optimistic -> the
+    # construction flag has to actually change the verdict, not just the text
+    shear_case = {"family": "wavy_fin", "process_route": "LMM",
+                  "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16,
+                  "fin_height_mm": 5.0, "wave_amplitude_mm": 0.471,
+                  "wavelength_mm": 3.20, "wave_construction": "shear"}
+    st_ = {"core_width_mm": 23.4, "core_length_mm": 22.6, "core_height_mm": 5.0,
+           "base_thickness_mm": 1.87}
+    sh = {c["rule"]: c for c in manufacturing.check_case(shear_case, st_)["checks"]}
+    off = {c["rule"]: c for c in manufacturing.check_case(
+        {**shear_case, "wave_construction": "offset"}, st_)["checks"]}
+    check("shear reads a wider passage than offset on identical dims",
+          sh["gap_perp"]["value"] > off["gap_perp"]["value"] + 1e-6,
+          f"shear {sh['gap_perp']['value']:.4f} vs offset {off['gap_perp']['value']:.4f}")
+    check("default construction is shear (app's own rasterizer)",
+          manufacturing.wave_construction({}) == "shear"
+          and manufacturing.wave_construction({"wave_construction": "OFFSET"}) == "offset")
+    # guidelines §3 governs overpoly (team call 2026-08-05), not report 502/1
+    check("overpoly stays on the guidelines: 1 px/side, compensated in CAD",
+          manufacturing.LMM_OVERPOLY_PX == 1 and manufacturing.LMM_OVERPOLY_IN == "cad")
+    check("shrink basis confirmed, not an open question",
+          "CONFIRMED" in p1r["shrink_basis"]["message"])
+
     # a part too big for the platform must FAIL, not pass silently
     big = manufacturing.check_case(
         {"family": "wavy_fin", "process_route": "LMM", "fin_thickness_mm": 0.2,

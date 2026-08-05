@@ -359,6 +359,10 @@ export interface DesignState {
   side_margin_mm: number
   wave_amplitude_mm: number
   wavelength_mm: number
+  /** how the wavy fin field is built — 'shear' (default, what this app's
+   *  rasterizer and the Proto 2 nTop model do) or 'offset' (constant-thickness
+   *  band swept along the curve, as Prototype 1). Manufacturability only. */
+  wave_construction?: 'shear' | 'offset'
   // gyroid / TPMS
   unit_cell_mm: number
   wall_thickness_mm: number
