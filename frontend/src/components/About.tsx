@@ -510,6 +510,21 @@ export function About({ onClose }: { onClose: () => void }) {
               them is the price of manufacturability, stated in mK/W and kelvin. Every swept point is
               clickable: a heatmap cell or a Pareto point loads its values into the sliders, so you can
               hand-tune from <i>any</i> corner of the landscape, not just the optimum.</p>
+            <Plain>
+              <b>Performance ⊥ manufacturability (team rule, 2026-08-05).</b> The two are evaluated in
+              strictly separate stages. <b>Stage 1 — performance, exact from geometry:</b> every number on
+              the Surface &amp; thermal card (SA/V, areas, R_jc, ΔP…) is pure geometry from the design dims
+              as entered — no sintering shrink, no overpoly, no manufacturing derating, ever. <b>Stage 2 —
+              manufacturability as its own gate:</b> green px, ×1.197/×1.23, ∓2 px overpoly all live only
+              in the mfg card, the ▦ Pixel checks and the ⇄ CAD converter. <b>Stage 3 —</b> the geometry
+              adjusted to pass the rulebook is <i>re-scored as plain geometry</i>; ★ vs ☆ is exactly that
+              price. Corollary: Magics/nTop print files are <b>green</b> — convert them (÷1.197 XY, ÷1.23 Z)
+              only when reconciling meshes, never inside a performance figure. In practice: the
+              <b> design sliders are the single source of truth for performance</b> (SA, volume, every KPI
+              derives from them exactly); the manufacturability layer is for <b>pixel viewing</b>; and the
+              ⇄ CAD flow is a manufacturability tool only — once you're converting CAD↔slider, performance
+              is already locked and out of scope.
+            </Plain>
           </section>
 
           <section>

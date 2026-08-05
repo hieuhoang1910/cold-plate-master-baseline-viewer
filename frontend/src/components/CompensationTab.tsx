@@ -74,6 +74,9 @@ export function CompensationTab({ design, sourceLabel, onLoadCad }: {
         draw</b> (overpoly pre-compensation: fin −2 px, channel +2 px) → the exposure grows
         it back to the <b>prints</b> column. Compensation preserves the nominal — it cannot
         upgrade a gap below the {chAbs} px cleaning floor; only the design values can.
+        <br /><b>Scope (team rule 2026-08-05):</b> this tab is a <b>manufacturability tool
+        only</b> — px viewing and the print recipe. Performance was already locked on the
+        design sliders (exact geometry, no shrink); nothing here feeds back into it.
       </p>
 
       <table className="gc-tbl" style={{ fontSize: '1.05em' }}>

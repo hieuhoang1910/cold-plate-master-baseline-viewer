@@ -126,7 +126,16 @@ export function KpiPanel({ r, gates }: { r: BaselineResult; gates: Gates }) {
       </div>
 
       <div className="card">
-        <h2>Surface & thermal</h2>
+        <h2>Surface & thermal
+          <span className="muted" style={{ fontSize: 11, fontWeight: 400, marginLeft: 8 }}
+            title={'Every number on this card is exact geometry from the design dims as entered '
+              + '(t, b, H, A, λ, core W×L×H) — SA/V = wetted area ÷ core envelope (W × L × fin H). '
+              + 'NO sintering shrink is applied to any performance number; the ×1.197/×1.23 scale '
+              + 'exists only in the manufacturing layer (px checks, ⇄ CAD). If you are comparing '
+              + 'against a print-scaled (green) mesh in Magics/nTop, convert that file once — '
+              + 'or type its dims into the sliders to score that geometry exactly.'}>
+            exact from design dims · no shrink ⓘ</span>
+        </h2>
         {r.areas && (
           <div className="areas-strip" title="Structure-only surface area (fin faces / pin laterals / TPMS sheet — no channel floor). The core is fully flooded, so this is the coolant-washed area. ×N = amplification over the die footprint.">
             <div className="areas-main">

@@ -21,6 +21,15 @@ exe): More info → Run anyway.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
+- **Team doctrine (2026-08-05, standing):** **performance ⊥ manufacturability.**
+  Performance numbers (SA/V, R_jc, ΔP, areas…) are exact geometry from the
+  design dims as entered — no shrink, no overpoly, no mfg derating, ever. The
+  manufacturing layer (green px, ×1.197/×1.23, ⇄ CAD) is a separate gate
+  applied afterwards; the manufacturable geometry is then **re-scored as plain
+  geometry** and compared to the unconstrained optimum (the optimizer's ★ vs ☆
+  delta). Magics/nTop print files are green — convert them only when
+  reconciling meshes, never inside performance math. Stated on the Surface &
+  thermal card ("exact from design dims · no shrink ⓘ"); spec §2026-08-05d.
 - **Status (2026-08-05c):** the Magics-size basis question settled — the
   Materialise Magics part dimensions (28.002 × 27.010 × 6.207 mm) are the
   **green** state: the mesh's perpendicular pitch 0.4907 ÷ 1.197 =

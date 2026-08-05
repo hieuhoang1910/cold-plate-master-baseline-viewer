@@ -2651,3 +2651,40 @@ mesh we have measured now fits on-slider:
 
 (Proto 1's λ 3.20 and t 0.25, Proto 2's b 0.292, the hero's A 0.55 — all now
 inside range with room to explore beyond.)
+
+## 2026-08-05d — DOCTRINE: performance ⊥ manufacturability (team rule, Hieu)
+
+Stated during the Proto 1 SA/V review and now binding on every future feature
+and report — **the two stages never mix**:
+
+1. **Performance first, exact from geometry.** Every thermal/hydraulic number
+   (SA/V, areas, R_jc, ΔP, UA, η…) is computed from the design dimensions
+   exactly as entered — **no sintering shrink, no overpoly, no manufacturing
+   derating anywhere in performance math**. This has always been true of the
+   solver; it is now explicit on the Surface & thermal card ("exact from
+   design dims · no shrink ⓘ" with the full contract in the tooltip).
+2. **Manufacturability second, as its own gate.** Green px, ×1.197/×1.23,
+   overpoly ∓2 px, the DfAM rulebook — all of it lives exclusively in the
+   manufacturing layer (mfg card, ⇄ CAD converter, ▦ Pixel checks) and never
+   leaks into stage 1.
+3. **Then re-score the manufacturable version.** After the geometry is
+   adjusted to pass the rulebook, it is re-evaluated as plain geometry and
+   compared to the stage-1 optimum — the optimizer's ★ (compliant) vs ☆
+   (gates-only) delta is exactly this "price of manufacturability".
+
+Corollary for mesh comparisons: Magics/nTop print files are **green**; their
+readouts convert to design/final space by ÷1.197 XY / ÷1.23 Z — but that
+conversion belongs to mesh reconciliation and the manu layer only, never
+inside a performance figure. (This section exists because mixing those bases
+cost three rounds of confusion on Proto 1's fin-field size, 2026-08-05.)
+
+**Refinement (same day, Hieu):**
+
+- The design **sliders are the single source of truth for performance** — SA,
+  volume, and every KPI derive from slider geometry exactly, nothing else.
+- The manufacturability layer exists **"only for the pixel viewing"** — the
+  ▦ Pixel raster, the px rulebook, the green-CAD chain.
+- The **⇄ CAD (CAD↔slider) flow is a manufacturability-only tool**: *"when I
+  do the CAD to slider, I don't care about the performance anymore, I care
+  about manufacturability."* UI and reports must never present performance
+  as the point of that flow.
