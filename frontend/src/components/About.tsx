@@ -576,7 +576,11 @@ export function About({ onClose }: { onClose: () => void }) {
             <section>
             <p className="note">
               This mirrors the right-hand panel top to bottom. Green limit bars show how much of a gate's budget the
-              design uses; they turn red past the gate.
+              design uses; they turn red past the gate. <b>Since 2026-08-05 every value on the KPI cards is
+              click-to-explain:</b> click a number and a box opens with <i>what</i> it is, <i>why</i> it matters and
+              the <i>calculation</i> — the solver's formula with the live numbers substituted (e.g. SA/V raw shows
+              wetted mm² ÷ V_core = W × L × H). The tables below are the full reference; the click gives you the
+              audit in place.
             </p>
 
             <h4 className="kpi-h">Card 1 — Junction-to-coolant</h4>

@@ -2698,3 +2698,22 @@ computes it, e.g. `V_core = 23.4 × 22.6 × 5.0 mm = 2,644 mm³ · SA/V raw =
 never shrink-scaled. Engine: `BaselineResult` gains `core_width/length/
 height_mm` echo fields (pure pass-through; parity 5/5). The About Card-3
 glossary documents the formula.
+
+### 2026-08-05f — click-to-explain KPIs (user request: "clean by default, math on demand")
+
+The KPI cards were carrying too much always-visible annotation. New contract:
+**clean values by default; click any value to open one detail box per card**
+with three lines — *What* (definition), *Why it matters*, *Calculation* (the
+solver's actual formula with the LIVE numbers substituted, e.g. `wetted
+14,271 mm² ÷ V_core (23.4 × 22.6 × 5.0 = 2,644 mm³) = 5,397 m²/m³`).
+
+- Coverage: the R_jc hero + gate bar + junction temperature (card 1); ΔP,
+  pump, velocity, Re, D_h, open fraction (card 2); A_fin/A_eff/A_flow strip,
+  SA/V raw & eff, η_f, η_o, UA, coverage, ΔT@450/575, Cu mass, material $
+  (card 3). One box open per card; clicking again closes.
+- The always-visible `V_core = …` line from 2026-08-05e is REPLACED — that
+  calculation now lives inside SA/V raw's explanation (this is the pattern:
+  derivations belong behind the click, not on the card face).
+- Implementation: `Metric` gains `id/open/onToggle` + a shared `Expl` box and
+  `MetricInfo {what, why, how}` dictionaries built per render from the live
+  result; dotted-underline hover cue, `m-expl` styling. No engine changes.

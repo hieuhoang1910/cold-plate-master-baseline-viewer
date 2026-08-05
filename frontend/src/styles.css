@@ -157,6 +157,20 @@ header .api-bad { color: var(--fail); font-size: 14px; }
 .ds-row { margin-bottom: 11px; }
 .ds-top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
 .ds-val { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 14px; }
+
+/* 2026-08-05 — click-to-explain KPIs: clean values by default, one click opens
+   What / Why / Calculation with live numbers (KpiPanel Expl) */
+.m-click { cursor: pointer; }
+.m-click .m-val, .m-click .val, .m-click b { text-decoration: underline dotted transparent; text-underline-offset: 3px; transition: text-decoration-color .15s; }
+.m-click:hover .m-val, .m-click:hover .val, .m-click:hover b { text-decoration-color: var(--accent, #4da3ff); }
+.metric.m-open, .areas-main.m-open { outline: 1px solid var(--accent, #4da3ff); outline-offset: 2px; border-radius: 4px; }
+.m-expl {
+  margin-top: 9px; padding: 9px 11px; border-left: 3px solid var(--accent, #4da3ff);
+  background: var(--bg2, rgba(77,163,255,0.06)); border-radius: 0 6px 6px 0;
+  font-size: 12.5px; line-height: 1.55; display: grid; gap: 5px;
+}
+.m-expl .m-how { font-family: var(--mono); font-size: 12px; opacity: .95; overflow-wrap: anywhere; }
+.m-hint { font-size: 10.5px; font-weight: 400; margin-left: 8px; letter-spacing: .02em; }
 /* 2026-08-05 — editable slider value: type exact numbers finer than the drag step */
 .ds-num {
   width: 72px; background: transparent; border: 1px solid transparent; border-radius: 4px;
