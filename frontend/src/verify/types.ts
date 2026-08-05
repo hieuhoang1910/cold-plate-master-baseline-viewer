@@ -108,6 +108,22 @@ export interface SliceMetric {
 }
 
 export interface MeasureInfo {
+  /** V5.1 — measured on the file AS IMPORTED (file units and stage, before the
+   *  unit fix and stage de-scale): the numbers Magics / Materialise report for
+   *  this same STL. envelopeVol is bbox X×Y×Z — the team sheet's "V" column —
+   *  and saPerEnvVol is the sheet's "SA/V". Everything else in MeasureInfo is
+   *  in the FINAL frame. */
+  fileFrame: {
+    size: [number, number, number]
+    envelopeVol_mm3: number
+    area_mm2: number
+    /** material volume — null unless watertight */
+    volume_mm3: number | null
+    /** SA ÷ envelope volume, 1/mm — the sheet's SA/V */
+    saPerEnvVol_perMm: number
+    /** SA ÷ material volume, 1/mm — null unless watertight */
+    saPerMatVol_perMm: number | null
+  }
   volume_mm3: number | null
   /** total surface area of the mesh */
   area_mm2: number

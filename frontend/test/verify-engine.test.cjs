@@ -12,7 +12,7 @@ const path = require('path')
 fs.writeFileSync(path.join(__dirname, '../.verify-build/package.json'), '{"type":"commonjs"}')
 const { buildStl } = require('../.verify-build/stl.js')
 const { parseBinaryStl } = require('../.verify-build/verify/stlParse.js')
-const { bbox, indexMesh, openEdgeCount, signedVolume, surfaceAreas, transformPositions } = require('../.verify-build/verify/geometry.js')
+const { bbox, fileFrameMeasures, indexMesh, openEdgeCount, signedVolume, surfaceAreas, transformPositions } = require('../.verify-build/verify/geometry.js')
 const { partField, signedDistance, sampleSurface } = require('../.verify-build/verify/field.js')
 const { buildSliceIndex, sliceSegments, rasterizeSegments, interiorRuns, percentile } = require('../.verify-build/verify/slice.js')
 const { detectHints, stageRefGeom } = require('../.verify-build/verify/stages.js')
@@ -270,6 +270,57 @@ console.log('--- E: point-map field check ---')
   const r3 = comparePointMap(sampledCsv(g, true), g, 'final', pitch)
   check('E inverted sign convention auto-handled', r3.flipped === true && r3.verdict === 'PASS',
     `flipped ${r3.flipped}, verdict ${r3.verdict}`)
+}
+
+// ------------------------------------------------------------------ F
+// V5.1 file-frame measurements — the Magics/Materialise cross-check block.
+// The sheet's "SA" is total area, its "V" is the ENVELOPE (bbox) volume and
+// its "SA/V" is area over envelope volume; material volume is a different
+// number (Magics "Volume"). All measured BEFORE the stage transform.
+console.log('--- F: file-frame measurements (Magics cross-check) ---')
+{
+  const g = finGeom(0.55)
+  const { buffer } = buildStl(g, 'draft')
+  const parsed = parseBinaryStl(buffer)
+  const ff = fileFrameMeasures(parsed.positions)
+  const areas = surfaceAreas(parsed.positions, -Infinity)
+  const bb = bbox(parsed.positions)
+  const env = (bb[3] - bb[0]) * (bb[4] - bb[1]) * (bb[5] - bb[2])
+  check('F area == total triangle area', Math.abs(ff.area_mm2 - areas.total) < 1e-6 * areas.total,
+    `${ff.area_mm2.toFixed(1)} mm2`)
+  check('F envelope == bbox product', Math.abs(ff.envelopeVol_mm3 - env) < 1e-9 * env,
+    `${ff.envelopeVol_mm3.toFixed(1)} mm3`)
+  check('F volume == |signed volume|',
+    Math.abs(ff.volume_mm3 - Math.abs(signedVolume(parsed.positions))) < 1e-9,
+    `${ff.volume_mm3.toFixed(1)} mm3`)
+
+  // green-scaled copy: the file-frame block must report the SCALED numbers
+  // (what Magics shows for a green file), never de-scaled ones
+  const pos2 = parsed.positions.slice()
+  transformPositions(pos2, 1.197, 1.197, 1.23, 0, 0, 0, false)
+  const ff2 = fileFrameMeasures(pos2)
+  const det = 1.197 * 1.197 * 1.23
+  check('F green copy: volume x det(S)', Math.abs(ff2.volume_mm3 / (ff.volume_mm3 * det) - 1) < 1e-4,
+    `${ff2.volume_mm3.toFixed(1)} vs ${(ff.volume_mm3 * det).toFixed(1)}`)
+  check('F green copy: envelope x det(S)', Math.abs(ff2.envelopeVol_mm3 / (ff.envelopeVol_mm3 * det) - 1) < 1e-4)
+
+  // acceptance anchor: the real M2.2 print mesh when the project tree is
+  // present. Materialise-measured: SA 37 040 mm2; sheet V 7 607.14 mm3
+  // (= 33.516 x 33.516 x 6.772 envelope); SA/V 4.869. Material volume
+  // 3 332.5 mm3 (watertight, engine-measured).
+  const m22 = path.join(__dirname, '../../..', '04_Analysis_Outputs/ntop/Proto2 meshes/M2.2.stl')
+  if (fs.existsSync(m22)) {
+    const buf = fs.readFileSync(m22)
+    const p = parseBinaryStl(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+    const f = fileFrameMeasures(p.positions)
+    check('F M2.2 SA matches Materialise 37 040', Math.abs(f.area_mm2 - 37040) < 40, `${f.area_mm2.toFixed(1)} mm2`)
+    check('F M2.2 envelope matches sheet V 7 607.1', Math.abs(f.envelopeVol_mm3 - 7607.14) < 8, `${f.envelopeVol_mm3.toFixed(2)} mm3`)
+    check('F M2.2 SA/V(envelope) matches sheet 4.869',
+      Math.abs(f.area_mm2 / f.envelopeVol_mm3 - 4.869) < 0.01, (f.area_mm2 / f.envelopeVol_mm3).toFixed(4))
+    check('F M2.2 material volume stable 3 332.5', Math.abs(f.volume_mm3 - 3332.5) < 5, `${f.volume_mm3.toFixed(1)} mm3`)
+  } else {
+    console.log('INFO  F M2.2.stl not present — real-mesh anchor skipped')
+  }
 }
 
 console.log(failures === 0 ? '\nALL ENGINE CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)

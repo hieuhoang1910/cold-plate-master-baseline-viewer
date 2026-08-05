@@ -525,6 +525,17 @@ export function About({ onClose }: { onClose: () => void }) {
               ⇄ CAD flow is a manufacturability tool only — once you're converting CAD↔slider, performance
               is already locked and out of scope.
             </Plain>
+            <Plain>
+              <b>Cross-checking Magics / Materialise (2026-08-05).</b> The ✓ Verify tab's first results
+              card, <i>Mesh measurements — file frame</i>, reports the imported STL exactly as Magics
+              sees it: bbox size, total surface area (= the Experiment-Lattices sheet's SA), material
+              volume (Magics "Volume"), <b>envelope volume</b> (bbox X×Y×Z — the sheet's "V" column,
+              which is <i>not</i> material volume), and SA/V on both denominators (the sheet's SA/V is
+              the envelope one). No de-scale is applied there — a green file reads in green mm, matching
+              Magics digit for digit (M2.2: SA 37 040 mm², envelope 7 607 mm³, SA/V 4.869). The
+              solver-input audit below it keeps converting to final dims, because that is what the KPIs
+              consume — two frames, each labelled, never mixed.
+            </Plain>
           </section>
 
           <section>

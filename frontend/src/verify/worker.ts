@@ -6,7 +6,7 @@
 
 import type { ViewerGeom } from '../viewerGeom'
 import { looksAscii, parseBinaryStl } from './stlParse'
-import { bbox, indexMesh, openEdgeCount, signedVolume, surfaceAreas, transformPositions } from './geometry'
+import { bbox, fileFrameMeasures, indexMesh, openEdgeCount, signedVolume, surfaceAreas, transformPositions } from './geometry'
 import { partField, sampleSurface, signedDistance } from './field'
 import { buildSliceIndex, interiorPerimeter, interiorRuns, percentile, rasterizeSegments, sliceSegments } from './slice'
 import { stageRefGeom, stageScale, detectHints } from './stages'
@@ -56,6 +56,12 @@ function run(msg: RunMsg): void {
   }
   const { positions, triangles } = parseBinaryStl(msg.buffer)
   progress('parsing STL', 1)
+
+  // ---- 1b. measure the file AS IMPORTED --------------------------------
+  // Before the in-place transform below: these are the numbers Magics /
+  // Materialise reports for this same STL (the Experiment-Lattices sheet
+  // cross-check). The transform would scale them out of the file frame.
+  const ff = fileFrameMeasures(positions)
 
   // ---- 2. align to the contract frame ----------------------------------
   const bboxRaw = bbox(positions)
@@ -236,6 +242,14 @@ function run(msg: RunMsg): void {
     : null
 
   const measures: MeasureInfo = {
+    fileFrame: {
+      size: ff.size,
+      envelopeVol_mm3: ff.envelopeVol_mm3,
+      area_mm2: ff.area_mm2,
+      volume_mm3: watertight ? ff.volume_mm3 : null,
+      saPerEnvVol_perMm: ff.envelopeVol_mm3 > 1e-9 ? ff.area_mm2 / ff.envelopeVol_mm3 : 0,
+      saPerMatVol_perMm: watertight && ff.volume_mm3 > 1e-9 ? ff.area_mm2 / ff.volume_mm3 : null,
+    },
     volume_mm3: volume,
     area_mm2: areas.total,
     structArea_mm2: areas.struct,

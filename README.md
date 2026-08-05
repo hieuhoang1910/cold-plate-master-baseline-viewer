@@ -148,7 +148,14 @@ CAD-for-print) compares against the right stage of the green→CAD chain —
 wrong stage, wrong units, 90° rotations and wrong-project footprints are
 detected and explained in words, never silently fixed; a **fins-only mode**
 ("file has no base slab", auto-suggested) handles core-only exports like the
-Proto2 workflow, where the base is a separate mechanical part. The pixel view
+Proto2 workflow, where the base is a separate mechanical part. A **"Mesh
+measurements — file frame"** card (2026-08-05) reports the STL exactly as
+imported — bbox size, total surface area, material volume, envelope (bbox)
+volume and SA/V on both denominators — i.e. the same numbers Magics /
+Materialise shows for the file, so the team's Experiment-Lattices sheet can be
+cross-checked digit for digit (the sheet's "V" is the *envelope* volume, not
+material volume; its SA/V is SA ÷ envelope V). The solver-input audit below it
+stays stage-corrected to final dims — two frames, both labelled. The pixel view
 can show the **imported STL's own layers** on the DLP grid, not just the
 diff. Every number carries an ⓘ with what it is, how it was measured, the
 bound + source, and what to do if it fails. **V4.4 — point-map field check

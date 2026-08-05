@@ -132,6 +132,35 @@ export function signedVolume(positions: Float32Array): number {
   return vol / 6
 }
 
+/** Measurements in the FILE frame — the triangle soup exactly as imported,
+ *  before any unit fix or stage de-scale. These are the numbers Magics /
+ *  Materialise "Part information" reports for the same STL, so they cross-check
+ *  the team's Experiment-Lattices sheet directly: the sheet's "SA" is the total
+ *  area, its "V" is the ENVELOPE (bbox X×Y×Z) volume — not material volume —
+ *  and its "SA/V" is area over envelope volume. */
+export interface FileFrameMeasures {
+  /** bbox extents, file units */
+  size: [number, number, number]
+  /** bbox X×Y×Z — the sheet's "V" */
+  envelopeVol_mm3: number
+  /** total triangle area — Magics "Surface", the sheet's "SA" */
+  area_mm2: number
+  /** material volume, |signed tetrahedron sum| — Magics "Volume"; only
+   *  meaningful when the mesh is watertight (caller gates on that) */
+  volume_mm3: number
+}
+
+export function fileFrameMeasures(positions: Float32Array): FileFrameMeasures {
+  const bb = bbox(positions)
+  const size: [number, number, number] = [bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]]
+  return {
+    size,
+    envelopeVol_mm3: size[0] * size[1] * size[2],
+    area_mm2: surfaceAreas(positions, -Infinity).total,
+    volume_mm3: Math.abs(signedVolume(positions)),
+  }
+}
+
 /** Total area + structure-only area (triangle centroid above `zBase`). */
 export function surfaceAreas(positions: Float32Array, zBase: number): { total: number; struct: number } {
   let total = 0, struct = 0

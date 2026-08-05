@@ -1370,6 +1370,17 @@ dimensions:
 | porosity over core band | slice solid-fraction integral | `void_fraction` (TPMS: §3.6 ρ* check) |
 | min wall / min channel | per-slice run scan (same method as PixelPreview) | active DfAM rulebook |
 
+**File-frame block (2026-08-05g).** The audit numbers above are stage-corrected
+to FINAL dimensions — correct for judging the solver, wrong for cross-checking
+Magics. A separate "Mesh measurements — file frame" card therefore reports the
+mesh AS IMPORTED (before any unit/stage transform): bbox size, total surface
+area (Magics "Surface" = the team sheet's SA), material volume (Magics
+"Volume"), envelope volume (bbox X×Y×Z = the sheet's "V" — NOT material
+volume), and SA/V on both denominators (the sheet's SA/V is the envelope one).
+Measured in the worker before `transformPositions` mutates the soup
+(`fileFrameMeasures` in `verify/geometry.ts`; anchored on M2.2.stl in test F:
+SA 37 040.8 mm², envelope 7 607.4 mm³, SA/V 4.869, material 3 332.5 mm³).
+
 **Outputs:**
 
 1. **Measured-vs-nominal table** in the Verify tab (KPI-panel styling):
@@ -2717,3 +2728,37 @@ solver's actual formula with the LIVE numbers substituted, e.g. `wetted
 - Implementation: `Metric` gains `id/open/onToggle` + a shared `Expl` box and
   `MetricInfo {what, why, how}` dictionaries built per render from the live
   result; dotted-underline hover cue, `m-expl` styling. No engine changes.
+
+### 2026-08-05g — Verify: file-frame mesh measurements (Magics cross-check) (BUILT)
+
+**Problem (Hieu):** the Verify tab's "structure area" and "solid volume" never
+matched what Materialise reports for the same STL — the team fills the
+Experiment-Lattices sheet from Magics and could not reconcile the two.
+
+**Root cause — not a math bug, a frame/definition gap.** Diagnosis against
+`04_Analysis_Outputs/ntop/Proto2 meshes/M2.2.stl` (Materialise-measured:
+SA 37 040, V 7 607.138, SA/V 4.869):
+
+1. The engine's raw total area is **37 040.8 mm² — exact match**; but the tab
+   only showed *structure-only* area (triangles above the base top), *after*
+   the green→final de-scale. Nothing on screen equalled 37 040.
+2. The sheet's "V" is the **ENVELOPE volume** — bbox X×Y×Z = 33.516 ×
+   33.516 × 6.772 = 7 607.14 mm³, exactly — not material volume. (M2.2.stl
+   is the green mesh: 33.516 = 28 × 1.197.) The tab's "solid volume" is the
+   signed-tetra *material* volume in the final frame (3 332.5 mm³ raw →
+   ~1 891 mm³ de-scaled) — a different quantity in a different frame, shown
+   with no reference. Hence "off somehow".
+3. The sheet's SA/V = SA ÷ envelope V (37 040 / 7 607.1 = 4.869) — again not
+   the solver's `raw_SA_V` (structure area over core-band volume).
+
+**Fix.** New always-on card **"Mesh measurements — file frame"** (between File
+and Solver-input audit): bbox size · surface area SA · material volume ·
+envelope volume · SA/V (envelope) · SA/V (material), all measured on the soup
+BEFORE the stage transform (`fileFrameMeasures`, `verify/geometry.ts`) — i.e.
+the numbers Magics shows for the same file, with ⓘ popovers stating which
+sheet row each one feeds. The green-stage caption says the numbers are
+green-frame mm by design (doctrine §2026-08-05d: the file frame is GREEN; the
+de-scale belongs to reconciliation, and the solver audit below keeps doing it).
+Material volume still gates on watertightness. Engine test F anchors the
+invariants (area = Σ triangle areas; envelope = bbox product; green copy
+scales by det S) and pins M2.2.stl when the project tree is present.

@@ -495,6 +495,61 @@ function VerifyResults({
           </div>
 
           <div className="v-card">
+            <h3>Mesh measurements — file frame</h3>
+            <p className="v-plain muted">
+              Measured on the STL <b>exactly as imported</b> — no unit fix, no stage de-scale.
+              These are the numbers Magics / Materialise report for this same file, so they
+              cross-check the Experiment-Lattices sheet directly.
+              {stage !== 'final' && ' (This file is declared ' + STAGE_META[stage].label.toLowerCase()
+                + '-stage, so these are green-frame mm — as Magics shows them.)'}
+            </p>
+            <div className="v-kv"><span>size (bbox)</span>
+              <b className="mono">{fmt(r.measures.fileFrame.size[0], 3)} × {fmt(r.measures.fileFrame.size[1], 3)} × {fmt(r.measures.fileFrame.size[2], 3)} mm</b>
+              <Info what="Bounding-box extents of the file as imported — Magics 'Dimensions' Delta."
+                how="Min/max of every vertex coordinate, file units."
+                bound="Magics reports the same three numbers for this file."
+                action="A mismatch here means you opened a different file than the one measured in Materialise." />
+            </div>
+            <div className="v-kv"><span>surface area SA</span>
+              <b>{fmtInt(r.measures.fileFrame.area_mm2)} mm²</b>
+              <Info what="Total triangle area of the mesh — Magics 'Surface', the sheet's SA row."
+                how="Sum of all triangle areas, file units (no de-scale, no base exclusion)."
+                bound="The Materialise-measured SA for the same file (e.g. M2.2: 37 040 mm²) — agreement to ~0.1 % expected."
+                action="If this differs from Materialise, the file was re-meshed or cut differently — re-export and re-measure." />
+            </div>
+            <div className="v-kv"><span>material volume</span>
+              <b>{r.measures.fileFrame.volume_mm3 != null ? `${fmtInt(r.measures.fileFrame.volume_mm3)} mm³` : 'needs watertight mesh'}</b>
+              <Info what="Volume of the solid material — Magics 'Volume' in Part information."
+                how="|Signed tetrahedron sum| over the watertight mesh, file units."
+                bound="Magics' Volume for the same file. NOT the sheet's V column — that is the envelope volume below."
+                action="Grossly off with a passing deviation check = doubled or missing shells; run the reverse check / layer scan." />
+            </div>
+            <div className="v-kv"><span>envelope volume (bbox)</span>
+              <b>{fmtInt(r.measures.fileFrame.envelopeVol_mm3)} mm³</b>
+              <Info what="Bounding-box volume X×Y×Z — the sheet's 'V' row (core envelope), the denominator of its SA/V."
+                how="Product of the three bbox extents."
+                bound="The sheet's V (e.g. M2.2: 7 607.1 mm³ = 33.516 × 33.516 × 6.772)."
+                action="Differs from the sheet → the cut box (side trim) was different; re-cut the fins field the same way." />
+            </div>
+            <div className="v-kv"><span>SA / V (envelope)</span>
+              <b>{fmt(r.measures.fileFrame.saPerEnvVol_perMm, 3)} mm⁻¹</b>
+              <Info what="Surface area over ENVELOPE volume — exactly the sheet's SA/V figure of merit."
+                how="SA ÷ (bbox X×Y×Z), file units."
+                bound="The sheet's SA/V (e.g. M2.2: 4.869). Compare candidates on this number."
+                action="Use this — not the solver's m²/m³ row below — when filling the Experiment-Lattices sheet." />
+            </div>
+            {r.measures.fileFrame.saPerMatVol_perMm != null && (
+              <div className="v-kv"><span>SA / V (material)</span>
+                <b>{fmt(r.measures.fileFrame.saPerMatVol_perMm, 3)} mm⁻¹</b>
+                <Info what="Surface area over MATERIAL volume — how much exchange surface each mm³ of copper buys."
+                  how="SA ÷ material volume, file units."
+                  bound="Informational — no sheet column; higher = thinner structure for the same surface."
+                  action="Use to compare material efficiency between candidates; no gate." />
+              </div>
+            )}
+          </div>
+
+          <div className="v-card">
             <h3>Solver-input audit
               <span className={`v-trust ${worstDelta <= 0.02 ? 'ok' : worstDelta <= 0.1 ? 'warn' : 'bad'}`}>
                 {worstDelta <= 0.02
