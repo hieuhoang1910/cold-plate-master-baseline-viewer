@@ -2601,34 +2601,35 @@ dims, Proto 1 dims/law/1.7 px, offset holds `wall_perp = t`, `wave_merge`
 present, overpoly stays on the guidelines, shrink confirmed). All Python suites
 green, golden parity 5/5.
 
-## 2026-08-05c — Prototype 1 on its own block; sliders get exact-entry + wider ranges (BUILT)
+## 2026-08-05c — the Magics-size basis question (row added, then removed); sliders get exact-entry + wider ranges (BUILT)
 
-**The coverage question resolved (user + Magics).** The `proto1_reference`
-FAIL:coverage chip prompted a check: the fin field really is 23.4 × 22.6 mm
-final — confirmed three independent ways (our ray probe, the report 502/1
-photos by proportion against the 33.9 mm base, and Hieu's Materialise Magics
-part dimensions: **28.002 × 27.010 × 6.207 mm green, bbox identical to the
-probe to the µm, 4 039 320 triangles**). The chip was correct but answers a
-GB202 question about a part that was never sized for the GB202: the physical
-part **thickens two sides beyond the fin field** (as all our designs do), so
-the fair self-referenced row scores the block against itself.
+**The coverage question, walked all the way down.** The `proto1_reference`
+FAIL:coverage chip prompted a check of the fin-field size. Three sources
+agree to the µm on the *numbers*: our ray probe, Hieu's Materialise Magics
+part dimensions (**28.002 × 27.010 × 6.207 mm, 4 039 320 triangles**), and
+the report 502/1 photos by proportion. The open question was the **basis** —
+are the Magics numbers the sintered part or the green (pre-shrink) file? A
+pinned row `proto1_own_block` briefly carried them as final mm (first cut
+÷1.197, rev 2 as-is per instruction). **Same day, removed** — team decision
+after the basis evidence was laid out:
 
-- **NEW pinned row `proto1_own_block`** — die = core = the whole block with
-  the dimensions **exactly as sized in Materialise Magics: 28.002 × 27.010 ×
-  6.207 mm** (user instruction 2026-08-05, rev 2: taken as-is, no shrink
-  conversion — the first cut of this row divided by ×1.197/×1.23 and was
-  corrected). 1.87 mm sinter base, rig flow. **Coverage exactly 1.000, KPI
-  PASS.** No GB202 anywhere in the row.
-- The three Prototype rows now form a clean triptych: `proto1_reference`
-  ("this part on the GB202" — coverage 0.71, FAIL:coverage),
-  `proto1_own_block` ("this part on its own Magics-sized footprint" —
-  coverage 1.00, **R_jc 22.57 mK/W**), `proto2_as_sent` (28 × 28 fins-only,
-  30.63). Manufacturability is identical across both Proto 1 rows (FAIL,
-  supplier-confirmed) — the reference die never changes printability.
-  *Basis note, one caliper settles it:* the mesh bbox numerically equals
-  these dims; if they are green state the sintered part measures 23.4 × 22.6
-  (÷1.197), if the part measures 28 × 27 they are final. The row carries the
-  team's Magics numbers by instruction.
+- **The Magics numbers are GREEN.** The decisive check: the mesh's
+  perpendicular fin pitch is 0.4907 mm, and 0.4907 ÷ 1.197 = **0.4100 mm =
+  t 0.25 + b 0.16 exactly** — the design pitch. A sintered-basis reading
+  (pitch 0.49) matches no design number. Corroborated by the ∓0.75 px
+  overpoly compensation visible in the mesh (only closes in green units),
+  by report 502/1's ×1.197/×1.23 copper factors, and by Proto 2's mesh
+  being 33.516 = 28.000 × 1.197 (a round *final* number scaled up).
+  Magics sizes the file that goes to the printer, so its readout is green
+  by construction.
+- Therefore the sintered fin field is **23.39 × 22.56 × 5.05 mm** —
+  `proto1_reference` (which pins exactly that, GB202 die, coverage 0.71)
+  is the correct and only Prototype 1 anchor. A row carrying green mm in
+  the solver's final-mm fields would have modeled a part ~20 % larger than
+  the one that exists. Suite now guards the removal, the ÷1.197 identity on
+  the reference core, and the pitch proof.
+- Caliper confirmation available any time: the physical fins should measure
+  ~23.4 mm across, the base ~33.9 mm.
 
 **Design sliders: exact entry + wider ranges (user request).** The slider
 value readout is now an **editable number field** — click, type any value at

@@ -21,14 +21,16 @@ exe): More info → Run anyway.
 - **Full design spec:** [`MASTER_BASELINE_VIEWER_SPEC.md`](MASTER_BASELINE_VIEWER_SPEC.md) (V2 = §18+; V3 = §32–37; V4 = §38–45; V5 = §46–54)
 - **Rebuilding the geometry in nTop:** [`NTOP_REPLICATION.md`](NTOP_REPLICATION.md) — the exact implicit-body equations (fins, pins, all 8 TPMS types, wall/iso mapping, cell-grading law) plus the recommended nTop workflow and verification targets.
 - **References:** [`REFERENCES.md`](REFERENCES.md) (mirrored in the About tab)
-- **Status (2026-08-05c):** new pinned row **`proto1_own_block`** — Prototype 1
-  scored against **its own block footprint**, dimensions **exactly as sized in
-  Materialise Magics: 28.002 × 27.010 × 6.207 mm** (taken as-is per team
-  instruction, no shrink conversion; the mesh bbox matches these numbers to
-  the µm), die = core → **coverage exactly 1.00**, no GB202 in the row. Reads
-  22.57 mK/W on this basis vs 29.45 on the GB202 basis. The design **sliders**
-  now take **typed exact values** (click the number; finer than the drag step)
-  and got wider ranges + 1 µm steps on widths.
+- **Status (2026-08-05c):** the Magics-size basis question settled — the
+  Materialise Magics part dimensions (28.002 × 27.010 × 6.207 mm) are the
+  **green** state: the mesh's perpendicular pitch 0.4907 ÷ 1.197 =
+  **0.4100 = t 0.25 + b 0.16 exactly**, so the sintered fin field is
+  23.39 × 22.56 × 5.05 mm and **`proto1_reference` is the only Prototype 1
+  anchor** (a short-lived `proto1_own_block` row carrying the Magics numbers
+  as final mm was removed the same day; the suite guards the removal and the
+  pitch proof). The design **sliders** now take **typed exact values** (click
+  the number; finer than the drag step) and got wider ranges + 1 µm steps on
+  widths.
 - **Status (2026-08-05b):** **Incus Innovation Study 502/1** (the Prototype 1
   build report) is now in the rulebook and closes three questions: the shrink
   basis is **confirmed** at x/y 1.197 / z 1.23 ("standard factors for copper" —

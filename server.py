@@ -353,36 +353,14 @@ M_PRESET_CASES = [
               "Q for Paul: does open-top sinter-weld printing relax the 6 px "
               "floor? Its print success says maybe; rev5's rejection says the "
               "bar moved."},
-    # 2026-08-05 — Prototype 1 on its OWN block footprint (user request, rev 2:
-    # the dimensions are taken EXACTLY as sized in Materialise Magics —
-    # 28.002 x 27.010 x 6.207 mm, Hieu's screenshot; NO shrink conversion,
-    # per instruction "the die coverage dimension is from the image I sent").
-    # The part always thickens two sides beyond the fin field (all our designs
-    # get that treatment), so the self-referenced row sets die = core = the
-    # whole block -> coverage 1.000 EXACT, no GB202 in the picture. Same
-    # recipe as proto1_reference (t 0.25 / b 0.16, offset wave, 1.87 sinter
-    # base, rig flow); mfg verdict identical (FAIL, supplier-confirmed) —
-    # footprint does not change printability. NB the mesh numerically equals
-    # these dims; whether they are green or sintered state is settled by a
-    # caliper on the physical part (x1.197 would sinter to 23.4 x 22.6).
-    {"design_id": "proto1_own_block", "family": "wavy_fin", "process_route": "LMM",
-     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16,
-     "fin_height_mm": 6.207,
-     "wave_construction": "offset",
-     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.471, "wavelength_mm": 3.20,
-     "pinned_stack": {"die_width_mm": 28.002, "die_length_mm": 27.010,
-                      "core_width_mm": 28.002, "core_length_mm": 27.010,
-                      "core_height_mm": 6.207,
-                      "base_thickness_mm": 1.87,
-                      "k_solid_W_mK": 340.0, "tim_areal_Kcm2_W": 0.05},
-     "pinned_operating": {"flow_lpm": 2.65},
-     "notes": "Prototype 1 on its own block (2026-08-05): dimensions EXACTLY as "
-              "sized in Materialise Magics — 28.002 × 27.010 × 6.207 mm, no "
-              "conversion — with die = core = the block, so coverage is exactly "
-              "1.00 and no GB202 enters the row. The part thickens two sides "
-              "beyond the fin field (all designs do), so this is the fair "
-              "self-referenced score. Same recipe and same supplier-confirmed "
-              "mfg FAIL as proto1_reference; only the reference die differs."},
+    # 2026-08-05 — a `proto1_own_block` row (die = core = the Magics block
+    # dimensions) existed here for a few hours and was REMOVED the same day:
+    # the Magics numbers (28.002 x 27.010 x 6.207) are the GREEN state, not
+    # sintered — settled by the mesh's perpendicular pitch, 0.4907 mm, which
+    # is EXACTLY (t 0.25 + b 0.16) x 1.197 = 0.4100 x 1.197. A row carrying
+    # green mm in the solver's final-mm fields would model a part ~20 % larger
+    # than the one that exists. proto1_reference above (fin field 23.4 x 22.6
+    # final = the Magics bbox / 1.197) is the correct anchor.
     # 2026-08-05 — Prototype 2 AS SENT to Incus, ray-probed straight off
     # "wavy 28x28mm scaled 6pix fin 16pix gap 0.34mm amp.stl" (green file,
     # ÷1.197 XY / ÷1.23 Z here). Fins-only + central rib, prismatic in Z (no

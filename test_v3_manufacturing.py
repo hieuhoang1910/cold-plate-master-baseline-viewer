@@ -286,23 +286,21 @@ def main() -> int:
     check("shrink basis confirmed, not an open question",
           "CONFIRMED" in p1r["shrink_basis"]["message"])
 
-    # --- 2026-08-05c: Prototype 1 on its OWN block footprint ------------------
-    # Dimensions EXACTLY as sized in Materialise Magics (28.002 x 27.010 x
-    # 6.207 mm — Hieu's screenshot, taken as-is per instruction, no shrink
-    # conversion). die = core = the block -> coverage exactly 1.0, no GB202.
-    p1b = by_id["proto1_own_block"]
-    p1bc = next(c for c in server.M_PRESET_CASES if c["design_id"] == "proto1_own_block")
-    check("proto1_own_block: dims are the Magics numbers AS-IS (28.002 x 27.010 x 6.207)",
-          p1bc["pinned_stack"]["core_width_mm"] == 28.002
-          and p1bc["pinned_stack"]["core_length_mm"] == 27.010
-          and p1bc["pinned_stack"]["die_width_mm"] == 28.002
-          and p1bc["fin_height_mm"] == 6.207)
-    check("proto1_own_block: coverage EXACTLY 1.0 (die = own block)",
-          abs(p1b["coverage"] - 1.0) < 1e-9, str(p1b["coverage"]))
-    check("proto1_own_block: kpi passes (no coverage penalty), mfg still FAIL",
-          p1b["kpi_status"] == "PASS"
-          and p1b["manufacturability"]["verdict"] == "FAIL"
-          and p1b.get("pinned") is True)
+    # --- 2026-08-05c: the Magics-size basis question, settled -----------------
+    # A proto1_own_block row briefly carried the Materialise Magics dimensions
+    # (28.002 x 27.010) as final mm. Removed: those numbers are GREEN — the
+    # mesh's perpendicular pitch 0.4907 = (0.25 + 0.16) x 1.197 EXACTLY, so
+    # the sintered fin field is the Magics bbox / 1.197 = 23.4 x 22.6, which
+    # is what proto1_reference pins. Guard both facts:
+    check("proto1_own_block removed (Magics dims are green, not final)",
+          "proto1_own_block" not in by_id)
+    p1s = next(c for c in server.M_PRESET_CASES
+               if c["design_id"] == "proto1_reference")["pinned_stack"]
+    check("proto1_reference core = Magics bbox / 1.197 (23.4 x 22.6 final)",
+          abs(p1s["core_width_mm"] - 28.002 / manufacturing.LMM_SHRINK_XY) < 0.01
+          and abs(p1s["core_length_mm"] - 27.010 / manufacturing.LMM_SHRINK_XY) < 0.06)
+    check("basis proof: mesh perp pitch 0.4907 green / 1.197 == t + b == 0.41",
+          abs(0.4907 / manufacturing.LMM_SHRINK_XY - (0.25 + 0.16)) < 5e-4)
 
     # a part too big for the platform must FAIL, not pass silently
     big = manufacturing.check_case(
