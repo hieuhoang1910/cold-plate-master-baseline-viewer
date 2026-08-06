@@ -2729,6 +2729,22 @@ solver's actual formula with the LIVE numbers substituted, e.g. `wetted
   `MetricInfo {what, why, how}` dictionaries built per render from the live
   result; dotted-underline hover cue, `m-expl` styling. No engine changes.
 
+### 2026-08-06a — Side-margin slider + typed values below the rulebook floor (BUILT)
+
+Two small controls asked for while reconciling proto1 against the Workflow
+App (Hieu): **(1) Side margin** gets its own slider (0–3 mm) in the fin
+family section — it existed on DesignState (presets used it: 0.9 default,
+proto1 comparisons need 0) but had no UI, so candidate margins could only
+change via presets. **(2) Typed values may go below the enforcement floor**:
+`Slider` gains `hardMin` (0.05 mm physical floor), applied to fin t and gap
+b — the DRAG still respects the project's enforcement clamp (§35F
+unchanged), but clicking the number and typing an exact value now accepts
+as-built dimensions like proto1's 0.16 mm gap (below the LMM 6 px marginal
+floor of 0.175) — the verdict annotates instead of blocking, which is
+§35F's explore-mode philosophy applied to exact data entry. Alternative
+that always existed: Design Studio → rulebook enforcement → "Explore /
+audit" unclamps the drag too.
+
 ### 2026-08-05g — Verify: file-frame mesh measurements (Magics cross-check) (BUILT)
 
 **Problem (Hieu):** the Verify tab's "structure area" and "solid volume" never

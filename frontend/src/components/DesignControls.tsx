@@ -6,7 +6,7 @@ import type { Basis, DesignState, MfgInfo } from '../types'
 import { GreenCad } from './GreenCad'
 
 function Slider({
-  label, unit, min, max, step, value, digits, onChange, tiers, green,
+  label, unit, min, max, step, value, digits, onChange, tiers, green, hardMin,
 }: {
   label: string
   unit: string
@@ -22,17 +22,23 @@ function Slider({
    *  the printer and the ⇄ CAD tab speak green; showing both kills the
    *  unit-space confusion (final = green ÷ shrink) */
   green?: string
+  /** 2026-08-06 — physical floor for the TYPED input, below the enforcement
+   *  clamp. The drag respects the rulebook floor; typing an exact value may
+   *  go down to hardMin so as-built parts (proto1: gap 0.16 < the 0.175
+   *  marginal floor) can be entered — verdicts annotate, never block. */
+  hardMin?: number
 }) {
   const posPct = (v: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100))
   // 2026-08-05 — the value is directly editable: type any number at full
   // precision (finer than the drag step), Enter/blur commits, clamped to the
-  // slider range. The draft holds keystrokes so typing "0.2924" doesn't
-  // commit "0" on the way through.
+  // slider range (typed values may go below the mfg floor, see hardMin). The
+  // draft holds keystrokes so typing "0.2924" doesn't commit "0" on the way.
   const [draft, setDraft] = useState<string | null>(null)
+  const typedMin = hardMin ?? min
   const commit = () => {
     if (draft !== null) {
       const v = parseFloat(draft)
-      if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v)))
+      if (Number.isFinite(v)) onChange(Math.min(max, Math.max(typedMin, v)))
     }
     setDraft(null)
   }
@@ -41,12 +47,12 @@ function Slider({
       <div className="ds-top">
         <span>{label}</span>
         <span className="ds-val">
-          <input className="ds-num" type="number" step="any" min={min} max={max}
+          <input className="ds-num" type="number" step="any" min={typedMin} max={max}
             value={draft ?? fmt(value, digits)}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            title={`type an exact value (${fmt(min, digits)}–${fmt(max, digits)}); finer than the drag step`} />
+            title={`type an exact value (${fmt(typedMin, digits)}–${fmt(max, digits)}); finer than the drag step${hardMin != null && hardMin < min ? ' — typed values may go below the rulebook floor (as-built parts); the verdict annotates' : ''}`} />
           <span className="muted"> {unit}</span>
           {green && <span className="muted" title="green-state size on the printer grid (final × shrink); the ⇄ CAD tab's mm are green — sliders are final (sintered)"> · {green}</span>}</span>
       </div>
@@ -213,15 +219,17 @@ export function DesignControls({
               t 0.25 / λ 3.20, Proto 2 b 0.292, hero A 0.55). */}
           <Slider label="Fin thickness t" unit="mm" min={fl.t} max={0.6} step={0.001} digits={3}
             value={design.fin_thickness_mm} onChange={(v) => onPatch({ fin_thickness_mm: v })}
-            tiers={{ abs: rule.wallAbs, rec: rule.wallRec }}
+            tiers={{ abs: rule.wallAbs, rec: rule.wallRec }} hardMin={0.05}
             green={isLmm ? `${fmt(design.fin_thickness_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
           <Slider label="Channel gap b" unit="mm" min={fl.b} max={0.8} step={0.001} digits={3}
             value={design.channel_gap_mm} onChange={(v) => onPatch({ channel_gap_mm: v })}
-            tiers={{ abs: rule.gapAbs, rec: rule.gapRec }}
+            tiers={{ abs: rule.gapAbs, rec: rule.gapRec }} hardMin={0.05}
             green={isLmm ? `${fmt(design.channel_gap_mm * LMM_PROC.shrinkXY / LMM_PROC.pixelMm, 1)} px` : undefined} />
           <Slider label="Fin height H" unit="mm" min={0.5} max={8.0} step={0.01} digits={2}
             value={design.fin_height_mm} onChange={(v) => onPatch({ fin_height_mm: v })}
             green={isLmm ? `${fmt(design.fin_height_mm * LMM_PROC.shrinkZ / LMM_PROC.layerMm, 1)} ly` : undefined} />
+          <Slider label="Side margin" unit="mm" min={0} max={3.0} step={0.05} digits={2}
+            value={design.side_margin_mm} onChange={(v) => onPatch({ side_margin_mm: v })} />
           {!isStraight && (
             <>
               <Slider label="Wave amplitude A" unit="mm" min={0} max={1.5} step={0.005} digits={3}
