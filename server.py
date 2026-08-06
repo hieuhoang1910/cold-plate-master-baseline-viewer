@@ -330,33 +330,45 @@ M_PRESET_CASES = [
     # ultrasonic + manual air; "increasing the minimum channel to 0.25 mm ...
     # is expected to significantly improve cleanability". So the FAIL verdict
     # is now supplier-CONFIRMED, not just predicted.
+    # CORRECTED 2026-08-06 (Hieu's team + report 502/1 §3.1.1 "Scaling"): the
+    # sw01.02 mesh was sent AS DESIGNED — "we never scaled and sent to INCUS;
+    # INCUS scaled it afterward themselves" (Incus applies x/y 1.197, z 1.23).
+    # So the Magics dimensions 28.002 × 27.010 × 6.207 ARE the design frame,
+    # the sintered part returns to them, and the previous ÷1.197 chain
+    # (23.4 × 22.6 × H 5.0, base 1.87) modelled a part ~17 % smaller than the
+    # one that exists. Benchmark convention (Hieu 2026-08-06): series base
+    # 0.7 (fin field vs fin field), AD102 die 24×27, active core = the
+    # auto wall-cut of the design mesh (25.335 × 27.010, walls excluded →
+    # side_margin 0). Scores 19.84 mK/W / 3.43 kPa — the Workflow App's
+    # beat-target; the rig measurement supersedes.
     {"design_id": "proto1_reference", "family": "wavy_fin", "process_route": "LMM",
-     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16, "fin_height_mm": 5.0,
+     "fin_thickness_mm": 0.25, "channel_gap_mm": 0.16, "fin_height_mm": 6.2,
      "wave_construction": "offset",
-     "side_margin_mm": 0.9, "wave_amplitude_mm": 0.471, "wavelength_mm": 3.20,
-     # FIXED reference: the part physically exists — score it on its own
-     # as-sent envelope (mesh-measured, green ÷ shrink) + the rig's flow,
-     # never on the active project's die/core. Fin field final ≈ 23.4 mm
-     # transverse × 22.6 mm flow, H 5.0, sinter base 2.3 green -> 1.87 final;
-     # die/TIM pinned to the GB202 basis it was introduced under so the row
-     # reads identically in every project.
-     "pinned_stack": {"die_width_mm": 24.0, "die_length_mm": 31.0,
-                      "core_width_mm": 23.4, "core_length_mm": 22.6,
-                      "core_height_mm": 5.0, "base_thickness_mm": 1.87,
+     "side_margin_mm": 0.0, "wave_amplitude_mm": 0.471, "wavelength_mm": 3.20,
+     "pinned_stack": {"die_width_mm": 24.0, "die_length_mm": 27.0,
+                      "core_width_mm": 25.335, "core_length_mm": 27.010,
+                      "core_height_mm": 6.2, "base_thickness_mm": 0.7,
                       "k_solid_W_mK": 340.0, "tim_areal_Kcm2_W": 0.05},
      "pinned_operating": {"flow_lpm": 2.65},
      "notes": "Prototype 1 (SW01.02 sinter-weld) — the 2026-05 tested baseline; "
-              "fins printed separately by Incus + base bonded in sinter. PINNED "
-              "to its as-sent envelope (23.4×22.6 core, its own base + rig flow) "
-              "— project settings never rescale this row. Best paper R_jc, but "
-              "perp passage ≈ 0 px at its 60° wave — FAILs the slope rule. Open "
-              "Q for Paul: does open-top sinter-weld printing relax the 6 px "
-              "floor? Its print success says maybe; rev5's rejection says the "
-              "bar moved."},
+              "fins printed separately by Incus + base bonded in sinter. "
+              "CORRECTED 2026-08-06: sent AS DESIGNED (Incus applies the shrink "
+              "compensation, 502/1 §Scaling) — design fin field 28.0×27.0×6.2, "
+              "active core 25.335×27.010 (wall cut). Benchmark convention: "
+              "series base 0.7, AD102 die 24×27 → 19.84 mK/W. Strongest paper "
+              "R_jc in the catalog but FAILs cleanability (0.16 mm channels, "
+              "supplier-confirmed) — the proto2 series must beat it while "
+              "passing the rules it fails."},
     # 2026-08-05 — a `proto1_own_block` row (die = core = the Magics block
-    # dimensions) existed here for a few hours and was REMOVED the same day:
-    # the Magics numbers (28.002 x 27.010 x 6.207) are the GREEN state, not
-    # sintered — settled by the mesh's perpendicular pitch, 0.4907 mm, which
+    # dimensions) existed here for a few hours and was REMOVED the same day.
+    # 2026-08-06 REVERSAL of that day's basis argument: the team confirmed the
+    # mesh was sent at DESIGN size (Incus scales; 502/1 §Scaling) — the
+    # 28.002 × 27.010 × 6.207 Magics dims are design/final after all, and the
+    # "perpendicular pitch 0.4907 = 0.41 × 1.197" reading was an artifact of
+    # the OFFSET construction (x-pitch = (t+b)/cosθ ≈ 0.545; a perpendicular
+    # probe at a mid-slope angle lands near 0.49). proto1_reference above now
+    # carries the corrected basis; the old comment below is kept for history:
+    # (superseded) the Magics numbers were argued GREEN via the pitch 0.4907, which
     # is EXACTLY (t 0.25 + b 0.16) x 1.197 = 0.4100 x 1.197. A row carrying
     # green mm in the solver's final-mm fields would model a part ~20 % larger
     # than the one that exists. proto1_reference above (fin field 23.4 x 22.6

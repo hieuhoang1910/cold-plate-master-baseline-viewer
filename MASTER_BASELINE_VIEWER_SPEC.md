@@ -2729,6 +2729,25 @@ solver's actual formula with the LIVE numbers substituted, e.g. `wetted
   `MetricInfo {what, why, how}` dictionaries built per render from the live
   result; dotted-underline hover cue, `m-expl` styling. No engine changes.
 
+### 2026-08-06b — Prototype 1 basis CORRECTED: sent AS DESIGNED (BUILT)
+
+The 2026-08-05 conclusion that the sw01.02 Magics dimensions were green is
+REVERSED on two grounds: (1) Hieu's team — "we never scaled and sent to
+INCUS; INCUS scaled it afterward themselves"; (2) report 502/1 §3.1.1
+"Scaling" states Incus printed with the standard shrinkage compensation
+factors, i.e. Incus-side scaling. The 0.4907 "perpendicular pitch" reading
+that anchored the green argument was an artifact of the OFFSET wave
+construction (x-pitch = (t+b)/cos θ ≈ 0.545 for A 0.471/λ 3.20 — a probe at
+a mid-slope angle lands near 0.49). Consequences, all applied:
+`proto1_reference` now pins the design basis — fin field 28.0×27.0×6.2,
+active core 25.335×27.010 (wall cut, side margin 0), series base 0.7
+(benchmark convention, Hieu 2026-08-06), AD102 die 24×27 → **≈19.8 mK/W /
+3.4 kPa**, matching the Workflow App's canonical benchmark. Tests updated:
+the "M4b beats Proto1" claim inverts (corrected Proto1 is the strongest
+paper design and still FAILs cleanability — the proto2 bar is "beat 19.8
+while passing the rules"); About basis note rewritten. proto2-era meshes
+("scaled only" files) remain team-scaled green — unchanged.
+
 ### 2026-08-06a — Side-margin slider + typed values below the rulebook floor (BUILT)
 
 Two small controls asked for while reconciling proto1 against the Workflow

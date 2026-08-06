@@ -10,6 +10,7 @@ Run:  python 07_WebApp/test_v3_manufacturing.py     (exit 0 = all pass)
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -76,13 +77,18 @@ def main() -> int:
     # that is the neck scan's job, not this rule's.
     check("Proto1 -> FAIL (60° wave, perp 4.2 px < 6 px floor)",
           by_id["proto1_reference"]["manufacturability"]["verdict"] == "FAIL")
-    # PINNED part-level comparison: the as-built Proto 1 (own 23.4×22.6 core,
-    # 1.87 mm sinter base, rig flow) scores WORSE than M4b against the same
-    # die — the recipe-on-equal-core comparison (Proto1 recipe 16.97 < M4b)
-    # lives in the spec; the catalog row is the physical part.
+    # PINNED part-level comparison — REVERSED 2026-08-06 with the corrected
+    # basis (sent AS DESIGNED: fin field 28.0×27.0×6.2, active core
+    # 25.335×27.010, series base 0.7, AD102 die): the as-built Proto 1 now
+    # scores ~19.8 mK/W, BETTER than every rule-passing preset. That is the
+    # honest benchmark: proto2 candidates must beat it while passing the
+    # cleanability rules it fails.
     check("Proto1 row is pinned", by_id["proto1_reference"].get("pinned") is True)
-    check("M4b beats the as-built Proto1 part",
-          by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"] < by_id["proto1_reference"]["R_jc_K_W"])
+    check("corrected Proto1 beats M4b on paper (it FAILs cleanability)",
+          by_id["proto1_reference"]["R_jc_K_W"] < by_id["v6_lmm_M4b_wavesafe"]["R_jc_K_W"])
+    check("corrected Proto1 ~ 19.8 mK/W (Workflow-App canonical)",
+          abs(by_id["proto1_reference"]["R_jc_K_W"] * 1000 - 19.84) < 0.35,
+          f"{by_id['proto1_reference']['R_jc_K_W'] * 1000:.2f}")
     # the pin's contract: switching projects must not rescale the part
     alt = dict(server.GB202_PROJECT)
     alt = {**alt, "id": "pin-test", "builtin": False,
@@ -286,21 +292,23 @@ def main() -> int:
     check("shrink basis confirmed, not an open question",
           "CONFIRMED" in p1r["shrink_basis"]["message"])
 
-    # --- 2026-08-05c: the Magics-size basis question, settled -----------------
-    # A proto1_own_block row briefly carried the Materialise Magics dimensions
-    # (28.002 x 27.010) as final mm. Removed: those numbers are GREEN — the
-    # mesh's perpendicular pitch 0.4907 = (0.25 + 0.16) x 1.197 EXACTLY, so
-    # the sintered fin field is the Magics bbox / 1.197 = 23.4 x 22.6, which
-    # is what proto1_reference pins. Guard both facts:
-    check("proto1_own_block removed (Magics dims are green, not final)",
+    # --- 2026-08-06: the Magics-size basis, settled the OTHER way -------------
+    # 2026-08-05 argued the Magics dims (28.002 x 27.010 x 6.207) were GREEN
+    # via a 0.4907 pitch reading. REVERSED 2026-08-06: the team confirmed the
+    # mesh was sent AT DESIGN SIZE and Incus applies the shrink compensation
+    # (report 502/1 §3.1.1 "Scaling"). The 0.4907 reading was an artifact of
+    # the OFFSET construction (x-pitch = (t+b)/cos(theta) ~ 0.545, not t+b).
+    # proto1_reference pins the corrected basis: fin field 28.0 x 27.0 x 6.2
+    # design, active core = the wall cut 25.335 x 27.010, series base 0.7.
+    check("proto1_own_block stays removed (superseded by proto1_reference)",
           "proto1_own_block" not in by_id)
     p1s = next(c for c in server.M_PRESET_CASES
                if c["design_id"] == "proto1_reference")["pinned_stack"]
-    check("proto1_reference core = Magics bbox / 1.197 (23.4 x 22.6 final)",
-          abs(p1s["core_width_mm"] - 28.002 / manufacturing.LMM_SHRINK_XY) < 0.01
-          and abs(p1s["core_length_mm"] - 27.010 / manufacturing.LMM_SHRINK_XY) < 0.06)
-    check("basis proof: mesh perp pitch 0.4907 green / 1.197 == t + b == 0.41",
-          abs(0.4907 / manufacturing.LMM_SHRINK_XY - (0.25 + 0.16)) < 5e-4)
+    check("proto1_reference core = design-mesh wall cut (25.335 x 27.010)",
+          abs(p1s["core_width_mm"] - 25.335) < 0.01
+          and abs(p1s["core_length_mm"] - 27.010) < 0.01)
+    check("corrected basis: offset x-pitch (t+b)/cos(theta) ~ 0.545 on the mesh",
+          abs((0.25 + 0.16) / math.cos(math.atan(2 * math.pi * 0.471 / 3.20)) - 0.558) < 0.01)
 
     # a part too big for the platform must FAIL, not pass silently
     big = manufacturing.check_case(
